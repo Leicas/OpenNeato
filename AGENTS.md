@@ -13,8 +13,7 @@ Built with PlatformIO + Arduino framework on espressif32 platform.
 
 **Standalone system** — no Home Assistant, no cloud, no external dependencies.
 The ESP32-C3 serves a SPA (single-page application) that communicates with the
-firmware through a simple API (REST or GraphQL, TBD). Everything runs on the
-device itself.
+firmware through REST API and WebSocket. Everything runs on the device itself.
 
 ## Project Vision
 
@@ -27,7 +26,8 @@ device itself.
 - SPA shell served from SPIFFS (1920KB partition)
 - Build pipeline: compile frontend assets, gzip, upload to SPIFFS
 - Basic layout and navigation structure
-- API design (REST or GraphQL) for firmware <-> browser communication
+- REST API for commands and one-off reads
+- Already have ESPAsyncWebServer, just register route handlers and return JSON
 - WebSocket for real-time data push (sensor updates, state changes)
 - Responsive design for mobile and desktop browsers
 
