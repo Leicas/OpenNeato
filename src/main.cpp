@@ -2,11 +2,13 @@
 #include "config.h"
 #include "wifi_manager.h"
 #include "ota_handler.h"
+#include "web_server.h"
 
 // Global objects
 AsyncWebServer server(80);
 WiFiMgr wifiManager;
 OTAHandler otaHandler(server);
+WebServer webServer(server);
 
 void setup() {
     Serial.begin(115200);
@@ -62,6 +64,8 @@ void setup() {
 
     // Initialize OTA only if WiFi is connected
     if (wifiManager.isConnected()) {
+        LOG("BOOT", "Initializing web server...");
+        webServer.begin();
         LOG("BOOT", "Initializing OTA...");
         otaHandler.begin();
     } else {

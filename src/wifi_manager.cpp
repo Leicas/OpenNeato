@@ -254,12 +254,18 @@ void WiFiMgr::resetCredentials() {
 }
 
 bool WiFiMgr::connectToWiFi(const String &ssid, const String &password) {
-    WiFi.mode(WIFI_STA);
+    // Clean disconnect before attempting new connection
+    WiFi.disconnect(true);
+    delay(100);
+
     WiFi.setHostname(HOSTNAME);
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false); // Disable modem sleep — keeps radio always on
     WiFi.begin(ssid.c_str(), password.c_str());
 
+    // Wait up to 30 seconds (60 attempts x 500ms)
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    while (WiFi.status() != WL_CONNECTED && attempts < 60) {
         delay(500);
         attempts++;
     }

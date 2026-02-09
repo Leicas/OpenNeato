@@ -17,14 +17,14 @@ firmware through REST API and WebSocket. Everything runs on the device itself.
 
 ## Project Vision
 
-### Phase 1: Foundation (current)
+### Phase 1: Foundation (complete)
 - WiFi provisioning via serial menu
 - OTA firmware updates via web UI
 - Basic infrastructure (async web server, NVS config storage)
 
-### Phase 2: Web UI foundation
-- SPA shell served from SPIFFS (1920KB partition)
-- Build pipeline: compile frontend assets, gzip, upload to SPIFFS
+### Phase 2: Web UI foundation (current)
+- SPA shell embedded in firmware binary (PROGMEM) — done (stub)
+- Build pipeline: compile frontend assets, gzip, generate C header, compile into firmware — done
 - Basic layout and navigation structure
 - REST API for commands and one-off reads
 - Already have ESPAsyncWebServer, just register route handlers and return JSON
@@ -52,7 +52,7 @@ firmware through REST API and WebSocket. Everything runs on the device itself.
 - ESP32 app rollback: new firmware must call `esp_ota_mark_app_valid_cancel_rollback()`
   after reaching a "successfully booted" checkpoint, otherwise the bootloader
   automatically rolls back to the previous partition on next reboot
-- Dual OTA partition layout already in place (app0/app1, 1920KB each)
+- Dual OTA partition layout already in place (app0/app1, 1856KB each)
 
 ### Phase 6: On-device analytics and diagnostics
 - Comprehensive data collection without serial debug (robot is mobile)
@@ -65,7 +65,7 @@ firmware through REST API and WebSocket. Everything runs on the device itself.
   - Cleaning sessions: start/stop times, duration, type, errors
   - OTA events: check/download/flash attempts, versions, outcomes
 - Compressed storage using ESP32 ROM miniz (deflate), rotating log files
-- Store in SPIFFS (128KB partition) with automatic rotation (drop oldest)
+- Store in SPIFFS (256KB partition) with automatic rotation (drop oldest)
 - API endpoint to browse, filter, and download logs from the web UI
 - Critical for LIDAR/mapping development: replay scan data without live robot
 
@@ -253,6 +253,23 @@ D8/D9/D10 NOT supported (different board, password-locked serial).
 - No known serial command to return to dock
 - Commands cannot have leading spaces
 
+## Frontend Stack
+
+- **Framework**: Preact (~4 KB gzipped) — React-compatible API, minimal footprint for
+  constrained firmware budget
+- **Build tool**: Vite — tree-shaking, minification, gzip-ready output
+- **Language**: TypeScript with JSX (TSX)
+- **Pipeline**: `npm run build` → minified bundle → gzip → generate C header with
+  embedded byte arrays → firmware compiles with assets baked in
+- **Serving**: ESPAsyncWebServer serves embedded assets from PROGMEM with gzip
+  Content-Encoding headers
+- **OTA strategy**: Frontend assets are bundled into the firmware binary, so a single
+  firmware OTA update covers both code and UI — no version mismatch possible, no
+  separate SPIFFS upload needed
+- **Size budget**: 1856 KB per OTA slot is shared between firmware and embedded assets;
+  keeping the frontend small is still important (Preact helps here)
+- **SPIFFS freed**: With frontend in firmware, the full SPIFFS partition is available
+  for analytics logs and diagnostics (Phase 6)
 ## Architecture
 
 Flat `src/` directory with header/source pairs. No subdirectories, no test framework.
@@ -264,7 +281,19 @@ src/
   serial_menu.h/cpp    # Generic interactive serial menu system
   wifi_manager.h/cpp   # WiFi config, credential storage, network scanning
   ota_handler.h/cpp    # ElegantOTA wrapper over async web server
-partition.csv          # Custom partition table (dual OTA slots, 1920KB each)
+  web_server.h/cpp     # Serves embedded frontend assets from PROGMEM
+  web_assets.h         # Auto-generated — gzipped frontend as byte arrays
+frontend/
+  package.json         # Preact + Vite build config
+  tsconfig.json        # TypeScript configuration
+  vite.config.ts       # Vite build settings (deterministic output filenames)
+  index.html           # SPA entry point
+  src/
+    main.tsx           # Preact render entry
+    app.tsx            # Root component
+scripts/
+  embed_frontend.js   # Gzips frontend dist, generates src/web_assets.h
+partition.csv          # Custom partition table (dual OTA slots, 1856KB each)
 platformio.ini         # Build environments, dependencies, OTA upload command
 ```
 
@@ -398,5 +427,5 @@ direct `Serial` calls outside of `serial_menu.cpp` are:
 - **Board**: ESP32-C3-DevKitM-1 (RISC-V single core, 160MHz, 320KB RAM, 4MB flash)
 - **USB**: Native USB CDC (not UART bridge) — `ARDUINO_USB_MODE=1`, `ARDUINO_USB_CDC_ON_BOOT=1`
 - **Reset button**: GPIO9 (BOOT button), active LOW with internal pull-up, hold 5s to reset credentials
-- **Flash layout**: Dual OTA slots (1920KB each), 128KB SPIFFS, 20KB NVS
+- **Flash layout**: Dual OTA slots (1856KB each), 256KB SPIFFS, 20KB NVS
 - **WiFi credentials**: Stored in NVS via `Preferences` library under namespace `"wifi"`

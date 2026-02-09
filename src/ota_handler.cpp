@@ -5,11 +5,6 @@ OTAHandler::OTAHandler(AsyncWebServer &server)
 }
 
 void OTAHandler::begin() {
-    // Setup root redirect
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->redirect("/update");
-    });
-
     ElegantOTA.begin(&server);
 
     // OTA start callback
