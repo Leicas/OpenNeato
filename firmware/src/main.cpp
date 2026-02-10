@@ -3,12 +3,14 @@
 #include "wifi_manager.h"
 #include "ota_handler.h"
 #include "web_server.h"
+#include "neato_serial.h"
 
 // Global objects
 AsyncWebServer server(80);
 WiFiMgr wifiManager;
 OTAHandler otaHandler(server);
 WebServer webServer(server);
+NeatoSerial neatoSerial;
 
 void setup() {
     Serial.begin(115200);
@@ -57,6 +59,10 @@ void setup() {
             LOG("BOOT", "Reset cancelled - button released too early");
         }
     }
+
+    // Initialize Neato UART
+    LOG("BOOT", "Initializing Neato serial...");
+    neatoSerial.begin();
 
     // Initialize WiFi with provisioning
     LOG("BOOT", "Initializing WiFi...");
@@ -127,6 +133,6 @@ void loop() {
         }
     }
 
-    // Add your application logic here
-    delay(100);
+    // Pump Neato serial command queue
+    neatoSerial.loop();
 }
