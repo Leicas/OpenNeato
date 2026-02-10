@@ -6,12 +6,12 @@
 
 class WebServer {
 public:
-    WebServer(AsyncWebServer &server);
+    WebServer(AsyncWebServer& server);
 
     void begin();
 
 private:
-    AsyncWebServer &server;
+    AsyncWebServer& server;
 };
 
 #endif // WEB_SERVER_H

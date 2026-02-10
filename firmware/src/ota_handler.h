@@ -7,7 +7,7 @@
 
 class OTAHandler {
 public:
-    OTAHandler(AsyncWebServer &server);
+    OTAHandler(AsyncWebServer& server);
 
     void begin();
 
@@ -16,7 +16,7 @@ public:
     bool isInProgress() const { return otaInProgress; }
 
 private:
-    AsyncWebServer &server;
+    AsyncWebServer& server;
     bool otaInProgress = false;
 };
 

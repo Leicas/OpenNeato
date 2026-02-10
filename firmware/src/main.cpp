@@ -37,7 +37,7 @@ void setup() {
 
         while (digitalRead(RESET_BUTTON_PIN) == LOW) {
             unsigned long elapsed = millis() - pressStart;
-            int currentCountdown = 5 - (elapsed / 1000);
+            int currentCountdown = 5 - static_cast<int>(elapsed / 1000);
 
             if (currentCountdown != countdown) {
                 countdown = currentCountdown;

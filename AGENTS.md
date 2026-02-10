@@ -319,12 +319,19 @@ pio run -e OTA -t upload
 
 # Clean build artifacts
 pio run -e Debug --target clean
+
+# Static analysis (clang-tidy)
+pio check -e Debug
+
+# Format code (clang-format)
+clang-format -i firmware/src/*.cpp firmware/src/*.h
 ```
 
 **Monitor baud rate**: 115200
 
-There are no tests or linting tools configured. Verify changes by building
-successfully with `pio run -e Debug`.
+Verify changes by building successfully with `pio run -e Debug` and running
+`pio check -e Debug` with zero defects. Code style is enforced by
+`.clang-format` at the project root.
 
 ## Dependencies (all pinned)
 

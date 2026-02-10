@@ -9,7 +9,7 @@
 
 // Timing intervals (milliseconds)
 #define WIFI_RECONNECT_INTERVAL 5000
-#define RESET_BUTTON_HOLD_TIME 5000  // Hold for 5 seconds to reset
+#define RESET_BUTTON_HOLD_TIME 5000 // Hold for 5 seconds to reset
 
 // Logging
 #define ENABLE_LOGGING

@@ -1,8 +1,6 @@
 #include "ota_handler.h"
 
-OTAHandler::OTAHandler(AsyncWebServer &server)
-    : server(server) {
-}
+OTAHandler::OTAHandler(AsyncWebServer& server) : server(server) {}
 
 void OTAHandler::begin() {
     ElegantOTA.begin(&server);
@@ -24,8 +22,8 @@ void OTAHandler::begin() {
 
         const unsigned long now = millis();
         if (now - lastUpdate >= 1000) {
-            const auto progress = static_cast<uint8_t>(
-                static_cast<float>(bytesReceived) * 100.0f / static_cast<float>(totalSize));
+            const auto progress =
+                    static_cast<uint8_t>(static_cast<float>(bytesReceived) * 100.0f / static_cast<float>(totalSize));
             LOG("OTA", "Progress: %u%% (%zu/%zu bytes)", progress, bytesReceived, totalSize);
 
             lastUpdate = now;
@@ -34,11 +32,7 @@ void OTAHandler::begin() {
 
     // OTA end callback
     ElegantOTA.onEnd([this](const bool success) {
-        if (success) {
-            LOG("OTA", "Update successful!");
-        } else {
-            LOG("OTA", "Update failed!");
-        }
+        LOG("OTA", "Update %s!", success ? "successful" : "failed");
         // Note: otaInProgress flag stays true until reboot
     });
 

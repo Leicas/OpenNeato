@@ -16,7 +16,7 @@ public:
 
     void handleSerialInput();
 
-    bool isConnected();
+    bool isConnected() const;
 
     void reset();
 
@@ -29,11 +29,11 @@ private:
     String selectedSSID = "";
     int scannedNetworkCount = 0;
 
-    bool connectToWiFi(const String &ssid, const String &password);
+    static bool connectToWiFi(const String& ssid, const String& password);
 
-    void saveCredentials(const String &ssid, const String &password);
+    void saveCredentials(const String& ssid, const String& password);
 
-    bool loadCredentials(String &ssid, String &password);
+    bool loadCredentials(String& ssid, String& password);
 
     // Menu actions
     void scanNetworks();

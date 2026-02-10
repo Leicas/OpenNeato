@@ -1,9 +1,8 @@
 #include "serial_menu.h"
 
-SerialMenu::SerialMenu(const String &title) : title(title) {
-}
+SerialMenu::SerialMenu(const String& title) : title(title) {}
 
-void SerialMenu::addItem(const String &label, const String &description, std::function<void()> action) {
+void SerialMenu::addItem(const String& label, const String& description, std::function<void()> action) {
     items.push_back({label, description, action});
 }
 
@@ -93,8 +92,8 @@ void SerialMenu::handleTextInput(char c) {
             Serial.println();
 
             if (inputMode == CONFIRMATION) {
-                bool confirmed = (inputBuffer == "YES" || inputBuffer == "yes" || inputBuffer == "Y" || inputBuffer ==
-                                  "y");
+                bool confirmed =
+                        inputBuffer == "YES" || inputBuffer == "yes" || inputBuffer == "Y" || inputBuffer == "y";
                 String temp = inputBuffer;
                 inputBuffer = "";
                 inputMode = MENU_SELECTION;
@@ -121,16 +120,12 @@ void SerialMenu::handleTextInput(char c) {
     } else if (c >= 32 && c <= 126) {
         inputBuffer += c;
 
-        // Echo character (hide password)
-        if (isPasswordMode) {
-            Serial.write('*');
-        } else {
-            Serial.write(c);
-        }
+        // Echo character (hide password with asterisks)
+        Serial.write(isPasswordMode ? '*' : c);
     }
 }
 
-void SerialMenu::promptText(const String &prompt, std::function<void(String)> callback) {
+void SerialMenu::promptText(const String& prompt, std::function<void(String)> callback) {
     // Flush any leftover characters in serial buffer
     while (Serial.available()) {
         Serial.read();
@@ -138,7 +133,8 @@ void SerialMenu::promptText(const String &prompt, std::function<void(String)> ca
 
     Serial.println();
     Serial.print(prompt);
-    if (!prompt.endsWith(": ")) Serial.print(": ");
+    if (!prompt.endsWith(": "))
+        Serial.print(": ");
 
     inputMode = TEXT_INPUT;
     isPasswordMode = false;
@@ -146,7 +142,7 @@ void SerialMenu::promptText(const String &prompt, std::function<void(String)> ca
     inputBuffer = "";
 }
 
-void SerialMenu::promptPassword(const String &prompt, std::function<void(String)> callback) {
+void SerialMenu::promptPassword(const String& prompt, std::function<void(String)> callback) {
     // Flush any leftover characters in serial buffer
     while (Serial.available()) {
         Serial.read();
@@ -154,7 +150,8 @@ void SerialMenu::promptPassword(const String &prompt, std::function<void(String)
 
     Serial.println();
     Serial.print(prompt);
-    if (!prompt.endsWith(": ")) Serial.print(": ");
+    if (!prompt.endsWith(": "))
+        Serial.print(": ");
 
     inputMode = PASSWORD_INPUT;
     isPasswordMode = true;
@@ -162,7 +159,7 @@ void SerialMenu::promptPassword(const String &prompt, std::function<void(String)
     inputBuffer = "";
 }
 
-void SerialMenu::promptConfirmation(const String &prompt, std::function<void(bool)> callback) {
+void SerialMenu::promptConfirmation(const String& prompt, std::function<void(bool)> callback) {
     // Flush any leftover characters in serial buffer
     while (Serial.available()) {
         Serial.read();
@@ -170,7 +167,8 @@ void SerialMenu::promptConfirmation(const String &prompt, std::function<void(boo
 
     Serial.println();
     Serial.print(prompt);
-    if (!prompt.endsWith("? ")) Serial.print("? ");
+    if (!prompt.endsWith("? "))
+        Serial.print("? ");
     Serial.print("(YES/no): ");
 
     inputMode = CONFIRMATION;
@@ -179,19 +177,19 @@ void SerialMenu::promptConfirmation(const String &prompt, std::function<void(boo
     inputBuffer = "";
 }
 
-void SerialMenu::printStatus(const String &message) {
+void SerialMenu::printStatus(const String& message) {
     Serial.println("\n" + message);
 }
 
-void SerialMenu::printError(const String &message) {
+void SerialMenu::printError(const String& message) {
     Serial.println("\n✗ " + message);
 }
 
-void SerialMenu::printSuccess(const String &message) {
+void SerialMenu::printSuccess(const String& message) {
     Serial.println("\n✓ " + message);
 }
 
-void SerialMenu::printSection(const String &title) {
+void SerialMenu::printSection(const String& title) {
     Serial.println();
     Serial.println(title);
     Serial.println("----------------------------------------");
@@ -201,7 +199,7 @@ void SerialMenu::printSeparator() {
     Serial.println("----------------------------------------");
 }
 
-void SerialMenu::printKeyValue(const String &key, const String &value) {
+void SerialMenu::printKeyValue(const String& key, const String& value) {
     Serial.print(key);
     Serial.print(": ");
     Serial.println(value);

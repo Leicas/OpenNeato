@@ -1,7 +1,6 @@
 #include "wifi_manager.h"
 
-WiFiMgr::WiFiMgr() : menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {
-}
+WiFiMgr::WiFiMgr() : menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
 
 void WiFiMgr::begin() {
     LOG("WIFI", "Starting WiFi setup...");
@@ -30,22 +29,15 @@ void WiFiMgr::begin() {
 }
 
 void WiFiMgr::showMenu() {
-    if (!inConfigMode) return;
+    if (!inConfigMode)
+        return;
 
     // Build menu items
     menu.clearItems();
-    menu.addItem("Scan WiFi networks", "Scan and select from available networks", [this]() {
-        scanNetworks();
-    });
-    menu.addItem("Enter SSID manually", "Type network name manually", [this]() {
-        manualSSID();
-    });
-    menu.addItem("Show current status", "Display WiFi connection status", [this]() {
-        showStatus();
-    });
-    menu.addItem("Reset credentials", "Erase saved WiFi credentials", [this]() {
-        resetCredentials();
-    });
+    menu.addItem("Scan WiFi networks", "Scan and select from available networks", [this]() { scanNetworks(); });
+    menu.addItem("Enter SSID manually", "Type network name manually", [this]() { manualSSID(); });
+    menu.addItem("Show current status", "Display WiFi connection status", [this]() { showStatus(); });
+    menu.addItem("Reset credentials", "Erase saved WiFi credentials", [this]() { resetCredentials(); });
 
     menu.show();
 }
@@ -116,19 +108,26 @@ void WiFiMgr::scanNetworks() {
     for (int i = 0; i < scannedNetworkCount && i < 20; ++i) {
         String encryption = "";
         switch (WiFi.encryptionType(i)) {
-            case WIFI_AUTH_OPEN: encryption = "Open";
+            case WIFI_AUTH_OPEN:
+                encryption = "Open";
                 break;
-            case WIFI_AUTH_WEP: encryption = "WEP";
+            case WIFI_AUTH_WEP:
+                encryption = "WEP";
                 break;
-            case WIFI_AUTH_WPA_PSK: encryption = "WPA";
+            case WIFI_AUTH_WPA_PSK:
+                encryption = "WPA";
                 break;
-            case WIFI_AUTH_WPA2_PSK: encryption = "WPA2";
+            case WIFI_AUTH_WPA2_PSK:
+                encryption = "WPA2";
                 break;
-            case WIFI_AUTH_WPA_WPA2_PSK: encryption = "WPA/WPA2";
+            case WIFI_AUTH_WPA_WPA2_PSK:
+                encryption = "WPA/WPA2";
                 break;
-            case WIFI_AUTH_WPA2_ENTERPRISE: encryption = "WPA2-E";
+            case WIFI_AUTH_WPA2_ENTERPRISE:
+                encryption = "WPA2-E";
                 break;
-            default: encryption = "Unknown";
+            default:
+                encryption = "Unknown";
                 break;
         }
 
@@ -140,9 +139,7 @@ void WiFiMgr::scanNetworks() {
 
         // Capture index for lambda
         int index = i;
-        networkMenu.addItem(label, "", [this, index]() {
-            handleNetworkSelection(index);
-        });
+        networkMenu.addItem(label, "", [this, index]() { handleNetworkSelection(index); });
     }
 
     // Add "Back" option
@@ -253,7 +250,7 @@ void WiFiMgr::resetCredentials() {
     });
 }
 
-bool WiFiMgr::connectToWiFi(const String &ssid, const String &password) {
+bool WiFiMgr::connectToWiFi(const String& ssid, const String& password) {
     // Clean disconnect before attempting new connection
     WiFi.disconnect(true);
     delay(100);
@@ -273,13 +270,13 @@ bool WiFiMgr::connectToWiFi(const String &ssid, const String &password) {
     return WiFi.status() == WL_CONNECTED;
 }
 
-void WiFiMgr::saveCredentials(const String &ssid, const String &password) {
+void WiFiMgr::saveCredentials(const String& ssid, const String& password) {
     preferences.putString("ssid", ssid);
     preferences.putString("password", password);
     LOG("WIFI", "Credentials saved");
 }
 
-bool WiFiMgr::loadCredentials(String &ssid, String &password) {
+bool WiFiMgr::loadCredentials(String& ssid, String& password) {
     // Check if credentials exist before trying to load them
     if (!preferences.isKey("ssid")) {
         ssid = "";
@@ -292,7 +289,7 @@ bool WiFiMgr::loadCredentials(String &ssid, String &password) {
     return ssid.length() > 0;
 }
 
-bool WiFiMgr::isConnected() {
+bool WiFiMgr::isConnected() const {
     return WiFi.status() == WL_CONNECTED;
 }
 
