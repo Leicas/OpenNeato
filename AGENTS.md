@@ -13,7 +13,7 @@ Built with PlatformIO + Arduino framework on espressif32 platform.
 
 **Standalone system** — no Home Assistant, no cloud, no external dependencies.
 The ESP32-C3 serves a SPA (single-page application) that communicates with the
-firmware through REST API and WebSocket. Everything runs on the device itself.
+firmware through REST API. Everything runs on the device itself.
 
 ## Project Vision
 
@@ -22,17 +22,18 @@ firmware through REST API and WebSocket. Everything runs on the device itself.
 - OTA firmware updates via web UI
 - Basic infrastructure (async web server, NVS config storage)
 
-### Phase 2: API layer and sensor integration (current)
+### Phase 2: API layer and sensor integration (complete)
 - UART serial bridge to Neato Botvac
 - Serial command queue (no overlapping commands, inter-command delay)
 - REST API endpoints for commands and one-off reads
-- Already have ESPAsyncWebServer, just register route handlers and return JSON
-- WebSocket for real-time data push (sensor updates, state changes)
 - Sensor reading endpoints: GetVersion, GetCharger, GetAnalogSensors,
-  GetDigitalSensors, GetMotors, GetState, GetErr
-- Polling loop for periodic sensor data (GetErr + GetState every 2s,
-  GetCharger every 2min)
-- Testable without UI — curl, Postman, or WebSocket client
+  GetDigitalSensors, GetMotors, GetState, GetErr, GetAccel, GetButtons,
+  GetLDSScan
+- Action endpoints: Clean House/Spot/Stop, PlaySound
+- Client-side polling — no server-side polling loop or WebSocket needed since
+  the robot has no push mechanism; the frontend polls REST endpoints on its
+  own interval, avoiding firmware overhead when no client is connected
+- Testable without UI — curl or Postman against REST endpoints
 
 ### Phase 3: On-device analytics and diagnostics
 - Comprehensive data collection without serial debug (robot is mobile)

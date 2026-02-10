@@ -6,9 +6,9 @@
 #include "config.h"
 #include "serial_menu.h"
 
-class WiFiMgr {
+class WiFiManager {
 public:
-    WiFiMgr();
+    WiFiManager();
 
     void begin();
 
@@ -37,13 +37,9 @@ private:
 
     // Menu actions
     void scanNetworks();
-
     void manualSSID();
-
     void showStatus();
-
     void resetCredentials();
-
     void handleNetworkSelection(int index);
 };
 

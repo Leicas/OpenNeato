@@ -1,5 +1,4 @@
 #include "neato_commands.h"
-#include "serial_menu.h"
 #include "config.h"
 
 // -- Command string lookup ---------------------------------------------------
@@ -86,16 +85,6 @@ String fieldsToJson(const std::vector<Field>& fields) {
     }
     json += "}";
     return json;
-}
-
-void fieldsToMenu(SerialMenu& menu, const std::vector<Field>& fields) {
-    for (size_t i = 0; i < fields.size(); i++) {
-        if (fields[i].type == FIELD_BOOL) {
-            menu.printKeyValue(fields[i].key, fields[i].value == "true" ? "Yes" : "No");
-        } else {
-            menu.printKeyValue(fields[i].key, fields[i].value);
-        }
-    }
 }
 
 // -- CSV parsing helpers -----------------------------------------------------
@@ -294,11 +283,6 @@ String LdsScanData::toJson() const {
     }
     json += "]}";
     return json;
-}
-
-void LdsScanData::toMenu(SerialMenu& menu) const {
-    menu.printKeyValue("Rotation speed", String(rotationSpeed, 2) + " Hz");
-    menu.printKeyValue("Valid points", String(validPoints) + "/360");
 }
 
 // -- Response parsers --------------------------------------------------------

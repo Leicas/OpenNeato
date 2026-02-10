@@ -1,8 +1,8 @@
 #include "wifi_manager.h"
 
-WiFiMgr::WiFiMgr() : menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
+WiFiManager::WiFiManager() : menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
 
-void WiFiMgr::begin() {
+void WiFiManager::begin() {
     LOG("WIFI", "Starting WiFi setup...");
 
     // Initialize preferences
@@ -28,7 +28,7 @@ void WiFiMgr::begin() {
     inConfigMode = true;
 }
 
-void WiFiMgr::showMenu() {
+void WiFiManager::showMenu() {
     if (!inConfigMode)
         return;
 
@@ -42,7 +42,7 @@ void WiFiMgr::showMenu() {
     menu.show();
 }
 
-void WiFiMgr::handleSerialInput() {
+void WiFiManager::handleSerialInput() {
     if (!Serial.available()) {
         return;
     }
@@ -64,7 +64,7 @@ void WiFiMgr::handleSerialInput() {
         char c = Serial.read();
 
         if (c == 'm' || c == 'M') {
-            menu.printStatus(""); // Print newline
+            menu.printStatus("");
             inConfigMode = true;
             showMenu();
         } else if (c == 's' || c == 'S') {
@@ -87,12 +87,12 @@ void WiFiMgr::handleSerialInput() {
             menu.printKeyValue("[m]", "Configuration menu");
             menu.printKeyValue("[s]", "WiFi status");
             menu.printSeparator();
-            menu.printStatus(""); // Print newline
+            menu.printStatus("");
         }
     }
 }
 
-void WiFiMgr::scanNetworks() {
+void WiFiManager::scanNetworks() {
     menu.printStatus("Scanning WiFi networks...");
     scannedNetworkCount = WiFi.scanNetworks();
 
@@ -151,7 +151,7 @@ void WiFiMgr::scanNetworks() {
     networkMenu.show();
 }
 
-void WiFiMgr::handleNetworkSelection(int index) {
+void WiFiManager::handleNetworkSelection(int index) {
     if (index < 0 || index >= scannedNetworkCount) {
         networkMenu.printError("Invalid selection!");
         menu.show();
@@ -194,7 +194,7 @@ void WiFiMgr::handleNetworkSelection(int index) {
     }
 }
 
-void WiFiMgr::manualSSID() {
+void WiFiManager::manualSSID() {
     menu.promptText("Enter SSID", [this](String ssid) {
         selectedSSID = ssid;
         menu.printStatus("SSID: " + selectedSSID);
@@ -215,7 +215,7 @@ void WiFiMgr::manualSSID() {
     });
 }
 
-void WiFiMgr::showStatus() {
+void WiFiManager::showStatus() {
     menu.printSection("WiFi Status");
 
     menu.printKeyValue("Connected", isConnected() ? "Yes" : "No");
@@ -238,7 +238,7 @@ void WiFiMgr::showStatus() {
     menu.show();
 }
 
-void WiFiMgr::resetCredentials() {
+void WiFiManager::resetCredentials() {
     menu.promptConfirmation("Reset WiFi credentials", [this](bool confirmed) {
         if (confirmed) {
             menu.printStatus("Resetting credentials...");
@@ -250,7 +250,7 @@ void WiFiMgr::resetCredentials() {
     });
 }
 
-bool WiFiMgr::connectToWiFi(const String& ssid, const String& password) {
+bool WiFiManager::connectToWiFi(const String& ssid, const String& password) {
     // Clean disconnect before attempting new connection
     WiFi.disconnect(true);
     delay(100);
@@ -270,13 +270,13 @@ bool WiFiMgr::connectToWiFi(const String& ssid, const String& password) {
     return WiFi.status() == WL_CONNECTED;
 }
 
-void WiFiMgr::saveCredentials(const String& ssid, const String& password) {
+void WiFiManager::saveCredentials(const String& ssid, const String& password) {
     preferences.putString("ssid", ssid);
     preferences.putString("password", password);
     LOG("WIFI", "Credentials saved");
 }
 
-bool WiFiMgr::loadCredentials(String& ssid, String& password) {
+bool WiFiManager::loadCredentials(String& ssid, String& password) {
     // Check if credentials exist before trying to load them
     if (!preferences.isKey("ssid")) {
         ssid = "";
@@ -289,11 +289,11 @@ bool WiFiMgr::loadCredentials(String& ssid, String& password) {
     return ssid.length() > 0;
 }
 
-bool WiFiMgr::isConnected() const {
+bool WiFiManager::isConnected() const {
     return WiFi.status() == WL_CONNECTED;
 }
 
-void WiFiMgr::reset() {
+void WiFiManager::reset() {
     LOG("WIFI", "Resetting WiFi credentials...");
     preferences.clear();
     WiFi.disconnect(true, true);

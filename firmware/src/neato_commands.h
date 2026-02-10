@@ -4,9 +4,6 @@
 #include <Arduino.h>
 #include <vector>
 
-// Forward declaration to avoid circular include
-class SerialMenu;
-
 // -- Field system for generic serialization ----------------------------------
 
 enum FieldType { FIELD_INT, FIELD_FLOAT, FIELD_BOOL, FIELD_STRING };
@@ -17,9 +14,8 @@ struct Field {
     FieldType type;
 };
 
-// Generic serializers — work with any struct that implements toFields()
+// Generic serializer — works with any struct that implements toFields()
 String fieldsToJson(const std::vector<Field>& fields);
-void fieldsToMenu(SerialMenu& menu, const std::vector<Field>& fields);
 
 // -- Command enum ------------------------------------------------------------
 
@@ -216,9 +212,8 @@ struct LdsScanData {
     float rotationSpeed = 0.0f;
     int validPoints = 0;
 
-    // Custom serializers (array data doesn't map to flat fields)
+    // Custom serializer (array data doesn't map to flat fields)
     String toJson() const;
-    void toMenu(SerialMenu& menu) const;
 };
 
 // -- Response parsers --------------------------------------------------------

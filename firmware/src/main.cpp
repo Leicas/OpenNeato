@@ -7,10 +7,10 @@
 
 // Global objects
 AsyncWebServer server(80);
-WiFiMgr wifiManager;
-OTAHandler otaHandler(server);
-WebServer webServer(server);
 NeatoSerial neatoSerial;
+WiFiManager wifiManager;
+OTAHandler otaHandler(server);
+WebServer webServer(server, neatoSerial);
 
 void setup() {
     Serial.begin(115200);
