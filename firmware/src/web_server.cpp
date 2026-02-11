@@ -1,6 +1,8 @@
 #include "web_server.h"
 #include "web_assets.h"
 #include "neato_serial.h"
+#include "data_logger.h"
+#include <SPIFFS.h>
 
 // Default serializer for structs with toFields()
 template<typename T>
@@ -8,7 +10,26 @@ static std::function<String(const T&)> jsonFields() {
     return [](const T& data) { return fieldsToJson(data.toFields()); };
 }
 
-WebServer::WebServer(AsyncWebServer& server, NeatoSerial& neato) : server(server), neato(neato) {}
+WebServer::WebServer(AsyncWebServer& server, NeatoSerial& neato, DataLogger& logger) :
+    server(server), neato(neato), logger(logger) {}
+
+void WebServer::loggedRoute(const char *path, WebRequestMethodComposite httpMethod, SyncHandler handler) {
+    server.on(path, httpMethod, [this, handler](AsyncWebServerRequest *request) {
+        unsigned long startMs = millis();
+        int status = handler(request);
+        logger.logRequest(request->method(), request->url().c_str(), status, millis() - startMs);
+    });
+}
+
+void WebServer::loggedBodyRoute(const char *path, WebRequestMethodComposite httpMethod, BodyHandler handler) {
+    server.on(
+            path, httpMethod, [](AsyncWebServerRequest *request) { /* handled in body callback */ }, nullptr,
+            [this, handler](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t, size_t) {
+                unsigned long startMs = millis();
+                int status = handler(request, data, len);
+                logger.logRequest(request->method(), request->url().c_str(), status, millis() - startMs);
+            });
+}
 
 void WebServer::sendGzipAsset(AsyncWebServerRequest *request, const uint8_t *data, size_t len,
                               const char *contentType) {
@@ -26,14 +47,28 @@ void WebServer::sendOk(AsyncWebServerRequest *request) {
 }
 
 void WebServer::registerActionRoute(const char *path, bool (NeatoSerial::*method)(std::function<void(bool)>)) {
-    server.on(path, HTTP_POST, [this, method](AsyncWebServerRequest *request) {
-        if (!(neato.*method)([request](bool ok) {
-                if (!ok) {
-                    sendError(request, 504, "timeout");
-                    return;
+    registerActionRoute(path, [this, method](AsyncWebServerRequest *, std::function<void(bool)> cb) {
+        return (neato.*method)(cb);
+    });
+}
+
+void WebServer::registerActionRoute(const char *path, ActionDispatch dispatch) {
+    server.on(path, HTTP_POST, [this, path, dispatch](AsyncWebServerRequest *request) {
+        unsigned long startMs = millis();
+        auto weak = request->pause();
+        if (!dispatch(request, [this, weak, path, startMs](bool ok) {
+                if (auto request = weak.lock()) {
+                    unsigned long elapsed = millis() - startMs;
+                    if (!ok) {
+                        logger.logRequest(HTTP_POST, path, 504, elapsed);
+                        sendError(request.get(), 504, "timeout");
+                        return;
+                    }
+                    logger.logRequest(HTTP_POST, path, 200, elapsed);
+                    sendOk(request.get());
                 }
-                sendOk(request);
             })) {
+            logger.logRequest(HTTP_POST, path, 503, 0);
             sendError(request, 503, "queue full");
         }
     });
@@ -51,6 +86,8 @@ void WebServer::begin() {
     });
 
     registerApiRoutes();
+    registerLogRoutes();
+    registerSystemRoutes();
 
     LOG("WEB", "Frontend and API routes registered");
 }
@@ -79,19 +116,143 @@ void WebServer::registerApiRoutes() {
     registerActionRoute("/api/clean/spot", &NeatoSerial::cleanSpot);
     registerActionRoute("/api/clean/stop", &NeatoSerial::cleanStop);
 
-    // Sound requires a parameter, handled inline
-    server.on("/api/sound", HTTP_POST, [this](AsyncWebServerRequest *request) {
+    // Sound requires a query parameter, dispatched via lambda overload
+    registerActionRoute("/api/sound", [this](AsyncWebServerRequest *request, std::function<void(bool)> cb) {
         int id = request->getParam("id")->value().toInt();
-        if (!neato.playSound(static_cast<SoundId>(id), [request](bool ok) {
-                if (!ok) {
-                    sendError(request, 504, "timeout");
-                    return;
-                }
-                sendOk(request);
-            })) {
-            sendError(request, 503, "queue full");
-        }
+        return neato.playSound(static_cast<SoundId>(id), cb);
     });
 
     LOG("WEB", "API routes registered");
+}
+
+// -- Log file endpoints ------------------------------------------------------
+
+static String logListJson(const std::vector<LogFileInfo>& files) {
+    String json = "[";
+    for (size_t i = 0; i < files.size(); i++) {
+        if (i > 0)
+            json += ",";
+        json += R"({"name":")" + files[i].name + R"(","size":)" + String(files[i].size) + R"(,"compressed":)" +
+                (files[i].compressed ? "true" : "false") + "}";
+    }
+    json += "]";
+    return json;
+}
+
+void WebServer::registerLogRoutes() {
+    // GET /api/logs[/filename] — list logs or download a specific file
+    // A single BackwardCompatible handler matches both "/api/logs" and "/api/logs/..."
+    loggedRoute("/api/logs", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
+        String filename = request->url().substring(String("/api/logs/").length());
+
+        if (filename.isEmpty()) {
+            request->send(200, "application/json", logListJson(logger.listLogs()));
+            return 200;
+        }
+
+        // Resolve SPIFFS path
+        String path = (filename == "current.jsonl") ? LOG_CURRENT_FILE : String(LOG_DIR) + "/" + filename;
+
+        if (!SPIFFS.exists(path)) {
+            sendError(request, 404, "log not found");
+            return 404;
+        }
+
+        // Check if decompression is requested via query param
+        bool shouldDecompress = request->hasParam("decompress") && filename.endsWith(".hs");
+
+        if (shouldDecompress) {
+            String decompressed;
+            bool ok = logger.decompressLog(filename, [&decompressed](const uint8_t *data, size_t len) {
+                decompressed.concat(reinterpret_cast<const char *>(data), len);
+            });
+
+            if (!ok) {
+                sendError(request, 500, "decompression failed");
+                return 500;
+            }
+
+            request->send(200, "application/x-ndjson", decompressed);
+        } else {
+            String contentType = filename.endsWith(".hs") ? "application/octet-stream" : "application/x-ndjson";
+            AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, contentType, true /* download */);
+            request->send(response);
+        }
+        return 200;
+    });
+
+    // DELETE /api/logs[/filename] — delete all logs or a specific file
+    loggedRoute("/api/logs", HTTP_DELETE, [this](AsyncWebServerRequest *request) -> int {
+        String filename = request->url().substring(String("/api/logs/").length());
+
+        if (filename.isEmpty()) {
+            logger.deleteAllLogs();
+            sendOk(request);
+            return 200;
+        }
+
+        if (logger.deleteLog(filename)) {
+            sendOk(request);
+            return 200;
+        }
+
+        sendError(request, 404, "log not found");
+        return 404;
+    });
+
+    LOG("WEB", "Log routes registered");
+}
+
+// -- System health and timezone endpoints ------------------------------------
+
+void WebServer::registerSystemRoutes() {
+    // GET /api/system — live system health (heap, uptime, RSSI, SPIFFS, NTP)
+    loggedRoute("/api/system", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
+        request->send(200, "application/json", logger.systemHealthJson());
+        return 200;
+    });
+
+    // GET /api/timezone — current POSIX TZ string
+    loggedRoute("/api/timezone", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
+        request->send(200, "application/json", R"({"tz":")" + logger.getTimezone() + R"("})");
+        return 200;
+    });
+
+    // PUT /api/timezone — set POSIX TZ string (body: {"tz":"..."})
+    loggedBodyRoute("/api/timezone", HTTP_PUT,
+                    [this](AsyncWebServerRequest *request, uint8_t *data, size_t len) -> int {
+                        String body = String(reinterpret_cast<const char *>(data), len);
+
+                        // Simple JSON parse: find "tz":"..." value
+                        int tzStart = body.indexOf(R"("tz")");
+                        if (tzStart < 0) {
+                            sendError(request, 400, "missing tz field");
+                            return 400;
+                        }
+                        int colonIdx = body.indexOf(':', tzStart);
+                        int openQuote = body.indexOf('"', colonIdx + 1);
+                        int closeQuote = body.indexOf('"', openQuote + 1);
+                        if (openQuote < 0 || closeQuote < 0) {
+                            sendError(request, 400, "invalid tz value");
+                            return 400;
+                        }
+
+                        String tz = body.substring(openQuote + 1, closeQuote);
+                        logger.setTimezone(tz);
+                        request->send(200, "application/json", R"({"tz":")" + tz + R"("})");
+                        return 200;
+                    });
+
+    // POST /api/time/sync — manually trigger robot clock sync from NTP
+    loggedRoute("/api/time/sync", HTTP_POST, [this](AsyncWebServerRequest *request) -> int {
+        if (!logger.isNtpSynced()) {
+            sendError(request, 503, "NTP not synced yet");
+            return 503;
+        }
+        logger.triggerRobotTimeSync();
+        sendOk(request);
+        return 200;
+    });
+
+    LOG("WEB", "System routes registered");
 }

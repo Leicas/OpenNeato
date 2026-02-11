@@ -27,15 +27,17 @@ void NeatoSerial::loop() {
                 if (c == NEATO_RESPONSE_TERMINATOR) {
                     unsigned long elapsed = millis() - commandSentAt;
                     LOG("NEATO", "RX: %u bytes in %lu ms", responseBuffer.length(), elapsed);
-                    completeCommand(true, responseBuffer);
+                    completeCommand(CMD_SUCCESS, responseBuffer);
                     return;
                 }
                 responseBuffer += c;
             }
             // Check timeout
             if (millis() - commandSentAt >= currentTimeout) {
-                LOG("NEATO", "Timeout: %s (%lu ms)", currentCommand.c_str(), currentTimeout);
-                completeCommand(false, "");
+                LOG("NEATO", "Timeout: %s (%lu ms, partial: %u bytes)", currentCommand.c_str(), currentTimeout,
+                    responseBuffer.length());
+                // Log partial response on timeout (useful for debugging serial issues)
+                completeCommand(CMD_TIMEOUT, responseBuffer);
             }
             break;
         }
@@ -72,6 +74,9 @@ void NeatoSerial::dequeueNext() {
     if (queue.empty())
         return;
 
+    // Capture queue depth before dequeue (for logging)
+    queueDepthAtStart = static_cast<int>(queue.size());
+
     CommandEntry entry = queue.front();
     queue.erase(queue.begin());
 
@@ -90,16 +95,28 @@ void NeatoSerial::sendCurrentCommand() {
     state = QUEUE_WAITING_RESPONSE;
 }
 
-void NeatoSerial::completeCommand(bool success, const String& response) {
+void NeatoSerial::completeCommand(CommandStatus status, const String& response) {
+    unsigned long elapsed = millis() - commandSentAt;
+    String cmd = currentCommand;
     auto cb = currentCallback;
+    int qDepth = queueDepthAtStart;
+    size_t respBytes = response.length();
+
     currentCommand = "";
     currentCallback = nullptr;
     responseBuffer = "";
+    queueDepthAtStart = 0;
 
     // Start inter-command delay before next command
     delayStartedAt = millis();
     state = QUEUE_INTER_DELAY;
 
+    // Fire logger hook before user callback with enhanced metadata
+    if (loggerCallback)
+        loggerCallback(cmd, status, elapsed, response, qDepth, respBytes);
+
+    // User callback still gets simple bool for backward compatibility
+    bool success = (status == CMD_SUCCESS);
     if (cb)
         cb(success, response);
 }

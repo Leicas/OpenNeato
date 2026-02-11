@@ -1,12 +1,10 @@
-# Generated from CLion Inspection settings
-# Disabled checks that produce false positives without Arduino/ESP-IDF headers:
-# - cppcoreguidelines-pro-type-member-init: can't see String/vector default ctors
-# - modernize-use-equals-default: flags constructors with member initializer lists
-# - readability-make-member-function-const: can't see non-const calls through Arduino types
-# - readability-convert-member-functions-to-static: can't see member access through Arduino types
+# clang-tidy configuration for ESP32/Arduino development
+# Optimized to minimize false positives with Arduino String, Preferences, SPIFFS, etc.
 ---
-HeaderFilterRegex: 'firmware/src/(?!web_assets).*'
 Checks: '-*,
+# ============================================================================
+# BUG DETECTION (High Priority)
+# ============================================================================
 bugprone-argument-comment,
 bugprone-assert-side-effect,
 bugprone-bad-signal-to-kill-thread,
@@ -57,6 +55,9 @@ bugprone-unused-raii,
 bugprone-unused-return-value,
 bugprone-use-after-move,
 bugprone-virtual-near-miss,
+# ============================================================================
+# SECURITY (CERT Guidelines)
+# ============================================================================
 cert-dcl21-cpp,
 cert-dcl58-cpp,
 cert-err34-c,
@@ -66,21 +67,37 @@ cert-flp30-c,
 cert-msc50-cpp,
 cert-msc51-cpp,
 cert-str34-c,
+# ============================================================================
+# C++ CORE GUIDELINES (Selective - avoid member-init false positives)
+# ============================================================================
 cppcoreguidelines-interfaces-global-init,
 cppcoreguidelines-narrowing-conversions,
--cppcoreguidelines-pro-type-member-init,
 cppcoreguidelines-pro-type-static-cast-downcast,
 cppcoreguidelines-slicing,
+# DISABLED: cppcoreguidelines-pro-type-member-init
+# Reason: Arduino String/Preferences/etc have default constructors, triggers false positives
+# ============================================================================
+# GOOGLE STYLE (Minimal)
+# ============================================================================
 google-default-arguments,
 google-runtime-operator,
+# ============================================================================
+# HICPP (High Integrity C++)
+# ============================================================================
 hicpp-exception-baseclass,
 hicpp-multiway-paths-covered,
+# ============================================================================
+# MISC (Miscellaneous)
+# ============================================================================
 misc-misplaced-const,
 misc-new-delete-overloads,
 misc-non-copyable-objects,
 misc-throw-by-value-catch-by-reference,
 misc-unconventional-assign-operator,
 misc-uniqueptr-reset-release,
+# ============================================================================
+# MODERNIZE (C++11/14/17 - avoid equals-default for member initializers)
+# ============================================================================
 modernize-avoid-bind,
 modernize-concat-nested-namespaces,
 modernize-deprecated-headers,
@@ -100,7 +117,6 @@ modernize-unary-static-assert,
 modernize-use-auto,
 modernize-use-bool-literals,
 modernize-use-emplace,
--modernize-use-equals-default,
 modernize-use-equals-delete,
 modernize-use-nodiscard,
 modernize-use-noexcept,
@@ -108,9 +124,20 @@ modernize-use-nullptr,
 modernize-use-override,
 modernize-use-transparent-functors,
 modernize-use-uncaught-exceptions,
+# DISABLED: modernize-use-equals-default
+# Reason: Conflicts with member initializer lists in constructors
+# ============================================================================
+# MPI (Message Passing Interface)
+# ============================================================================
 mpi-buffer-deref,
 mpi-type-mismatch,
+# ============================================================================
+# OPENMP
+# ============================================================================
 openmp-use-default-none,
+# ============================================================================
+# PERFORMANCE (High Priority)
+# ============================================================================
 performance-faster-string-find,
 performance-for-range-copy,
 performance-implicit-conversion-in-loop,
@@ -125,15 +152,19 @@ performance-trivially-destructible,
 performance-type-promotion-in-math-fn,
 performance-unnecessary-copy-initialization,
 performance-unnecessary-value-param,
+# ============================================================================
+# PORTABILITY
+# ============================================================================
 portability-simd-intrinsics,
+# ============================================================================
+# READABILITY (Selective - avoid false positives with Arduino globals)
+# ============================================================================
 readability-avoid-const-params-in-decls,
 readability-const-return-type,
 readability-container-size-empty,
--readability-convert-member-functions-to-static,
 readability-delete-null-pointer,
 readability-deleted-default,
 readability-inconsistent-declaration-parameter-name,
--readability-make-member-function-const,
 readability-misleading-indentation,
 readability-misplaced-array-index,
 readability-non-const-parameter,
@@ -148,4 +179,25 @@ readability-static-accessed-through-instance,
 readability-static-definition-in-anonymous-namespace,
 readability-string-compare,
 readability-uniqueptr-delete-release,
-readability-use-anyofallof'
+readability-use-anyofallof,
+# DISABLED: readability-convert-member-functions-to-static
+# DISABLED: readability-make-member-function-const
+# Reason: Cannot detect Arduino globals (WiFi, SPIFFS, Serial) or framework state mutations
+# Use NOLINTNEXTLINE when legitimately needed
+'
+CheckOptions:
+  # Allow shorter names for loop counters and iterators
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: '1'
+  # ESP32 often uses abbreviated names
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: '1'
+  # Performance: flag copies > 64 bytes
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: 'String'
+  # Don't warn about String copies (Arduino convention)
+  - key: performance-for-range-copy.AllowedTypes
+    value: 'String'
+
+HeaderFilterRegex: 'firmware/src/.*'
+WarningsAsErrors: ''

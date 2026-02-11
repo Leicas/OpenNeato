@@ -1,6 +1,11 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// Firmware version — passed via build flag (-DFIRMWARE_VERSION=...), fallback for local builds
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "0.0.0-dev"
+#endif
+
 // WiFi Configuration
 #define HOSTNAME "Neato"
 
@@ -19,9 +24,31 @@
 #define NEATO_QUEUE_MAX_SIZE 16
 #define NEATO_RESPONSE_TERMINATOR 0x1A // Ctrl-Z
 
+// Command completion status (for enhanced logging)
+enum CommandStatus {
+    CMD_SUCCESS, // Command succeeded, response received OK
+    CMD_TIMEOUT, // No complete response within timeout (may have partial data)
+    CMD_PARSE_FAILED, // Got response but parse failed (not used yet)
+    CMD_SERIAL_ERROR // UART error or other serial issue (not used yet)
+};
+
 // Timing intervals (milliseconds)
 #define WIFI_RECONNECT_INTERVAL 5000
 #define RESET_BUTTON_HOLD_TIME 5000 // Hold for 5 seconds to reset
+
+// Data logger (Phase 3)
+#define LOG_MAX_FILE_SIZE 32768 // 32 KB per file before rotation
+#define LOG_MAX_SPIFFS_PERCENT 85 // Delete oldest logs when SPIFFS usage exceeds this %
+#define LOG_DIR "/log"
+#define LOG_CURRENT_FILE "/log/current.jsonl"
+
+// NTP / time sync
+#define NTP_SERVER_1 "pool.ntp.org"
+#define NTP_SERVER_2 "time.nist.gov"
+#define NTP_DEFAULT_TZ "UTC0" // POSIX TZ string, stored in NVS
+#define NTP_NVS_NAMESPACE "time"
+#define NTP_NVS_TZ_KEY "tz"
+#define ROBOT_TIME_SYNC_INTERVAL_MS 14400000 // Push NTP to robot every 4 hours
 
 // Logging
 #define ENABLE_LOGGING

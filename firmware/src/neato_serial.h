@@ -50,6 +50,12 @@ public:
     bool sendRaw(const String& command, std::function<void(bool, const String&)> callback,
                  unsigned long timeoutMs = NEATO_CMD_TIMEOUT_MS);
 
+    // -- Logger hook ---------------------------------------------------------
+
+    // Callback: (command, status, elapsed_ms, raw_response, queue_depth_before, response_bytes)
+    using LoggerCallback = std::function<void(const String&, CommandStatus, unsigned long, const String&, int, size_t)>;
+    void setLogger(LoggerCallback logger) { loggerCallback = logger; }
+
     // -- Status --------------------------------------------------------------
 
     bool isBusy() const { return state != QUEUE_IDLE || !queue.empty(); }
@@ -60,6 +66,9 @@ private:
     std::vector<CommandEntry> queue;
     QueueState state = QUEUE_IDLE;
 
+    // Logger hook
+    LoggerCallback loggerCallback;
+
     // Current command in flight
     String currentCommand;
     String responseBuffer;
@@ -67,6 +76,7 @@ private:
     unsigned long currentTimeout = 0;
     unsigned long commandSentAt = 0;
     unsigned long delayStartedAt = 0;
+    int queueDepthAtStart = 0; // Queue depth when current command started
 
     // Enqueue a raw command with callback
     bool enqueue(const String& command, unsigned long timeoutMs, std::function<void(bool, const String&)> callback);
@@ -76,7 +86,7 @@ private:
 
     void dequeueNext();
     void sendCurrentCommand();
-    void completeCommand(bool success, const String& response);
+    void completeCommand(CommandStatus status, const String& response);
 };
 
 #endif // NEATO_SERIAL_H

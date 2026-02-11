@@ -1,16 +1,20 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <esp_ota_ops.h>
 #include "config.h"
 #include "wifi_manager.h"
-#include "ota_handler.h"
+#include "firmware_manager.h"
 #include "web_server.h"
 #include "neato_serial.h"
+#include "data_logger.h"
 
 // Global objects
 AsyncWebServer server(80);
 NeatoSerial neatoSerial;
 WiFiManager wifiManager;
-OTAHandler otaHandler(server);
-WebServer webServer(server, neatoSerial);
+FirmwareManager firmwareManager(server);
+DataLogger dataLogger(neatoSerial);
+WebServer webServer(server, neatoSerial, dataLogger);
 
 void setup() {
     Serial.begin(115200);
@@ -68,16 +72,46 @@ void setup() {
     LOG("BOOT", "Initializing WiFi...");
     wifiManager.begin();
 
-    // Initialize OTA only if WiFi is connected
+    // Initialize web server and OTA only if WiFi is connected
     if (wifiManager.isConnected()) {
         LOG("BOOT", "Initializing web server...");
         webServer.begin();
-        LOG("BOOT", "Initializing OTA...");
-        otaHandler.begin();
+        LOG("BOOT", "Initializing firmware updater...");
+        firmwareManager.begin();
+        LOG("BOOT", "Starting HTTP server...");
+        server.begin();
+
+        // Mark firmware as valid — cancels auto-rollback on next reboot
+        esp_ota_mark_app_valid_cancel_rollback();
+        LOG("BOOT", "Firmware marked valid");
     } else {
-        LOG("BOOT", "Skipping OTA (no WiFi connection)");
+        LOG("BOOT", "Skipping web server (no WiFi connection)");
         LOG("BOOT", "Configure WiFi through serial menu");
     }
+
+    // Initialize data logger (SPIFFS, NTP, serial command hook)
+    LOG("BOOT", "Initializing data logger...");
+    dataLogger.begin();
+
+    // Wire firmware update events to data logger
+    firmwareManager.setLogger([](const String& event, const String& payload) { dataLogger.logOta(event, payload); });
+
+    // Wire WiFi events to data logger
+    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+        switch (event) {
+            case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+                dataLogger.logWifi("connected", "");
+                break;
+            case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+                dataLogger.logWifi("disconnected", "\"reason\":" + String(info.wifi_sta_disconnected.reason));
+                break;
+            case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+                dataLogger.logWifi("got_ip", "\"ip\":\"" + WiFi.localIP().toString() + "\"");
+                break;
+            default:
+                break;
+        }
+    });
 
     LOG("BOOT", "========================================");
     LOG("BOOT", "System initialization complete");
@@ -123,16 +157,19 @@ void loop() {
 
     // Note: Serial commands are now handled by wifiManager.handleSerialInput()
 
-    // OTA handling (only if connected)
+    // Firmware update handling (only if connected)
     if (wifiManager.isConnected()) {
-        otaHandler.loop();
+        firmwareManager.loop();
 
-        // Skip other operations during OTA
-        if (otaHandler.isInProgress()) {
+        // Skip other operations during firmware update
+        if (firmwareManager.isInProgress()) {
             return;
         }
     }
 
     // Pump Neato serial command queue
     neatoSerial.loop();
+
+    // Data logger housekeeping (NTP detection, robot time sync)
+    dataLogger.loop();
 }

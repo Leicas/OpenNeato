@@ -35,21 +35,48 @@ firmware through REST API. Everything runs on the device itself.
   own interval, avoiding firmware overhead when no client is connected
 - Testable without UI — curl or Postman against REST endpoints
 
-### Phase 3: On-device analytics and diagnostics
+### Phase 3: On-device analytics and diagnostics (complete)
 - Comprehensive data collection without serial debug (robot is mobile)
 - Enables embedding the board inside the robot for all subsequent development
 - Structured log entries: system events, sensor readings, errors, commands
+- Log entry types: `boot`, `command`, `request`, `error`, `ntp`, `wifi`, `ota`
 - Data categories:
-  - System health: free heap, uptime, restart reason, WiFi RSSI
-  - Serial comms: commands sent, responses, timeouts, parse errors
-  - Sensor snapshots: periodic GetAnalogSensors, GetDigitalSensors, GetMotors
-  - LIDAR scans: full GetLDSScan captures for offline map debugging
-  - Cleaning sessions: start/stop times, duration, type, errors
-  - OTA events: check/download/flash attempts, versions, outcomes
-- Compressed storage using ESP32 ROM miniz (deflate), rotating log files
-- Store in SPIFFS (256KB partition) with automatic rotation (drop oldest)
-- API endpoint to browse, filter, and download logs from the web UI
+  - System health: free heap, uptime, restart reason, WiFi RSSI (live via API)
+  - Serial comms: every command logged with response, timing, detailed status
+  - Sensor snapshots: captured via command log when frontend polls endpoints
+  - LIDAR scans: full GetLDSScan captured in command log for offline replay
+  - OTA events: start/progress/end logged via LogCallback hook
+  - WiFi events: connect/disconnect/got_ip via WiFi.onEvent() in main.cpp
+  - HTTP requests: method, path, status, duration on all sensor/action routes
+- **Command logging format** (v1.3.0+):
+  - `status`: enum value (`ok`, `timeout`, `parse_failed`, `serial_error`)
+  - `q`: queue depth at command start (helps diagnose queue bottlenecks)
+  - `bytes`: response byte count (0 on timeout/error)
+  - `ms`: execution time in milliseconds
+  - `resp`: full response text (truncated on timeout)
+- Time strategy: NTP primary, robot clock fallback (GetTime), millis() last resort
+- Timezone: POSIX TZ string in NVS, configurable via REST API
+- NTP-to-robot clock sync: automatic on NTP acquisition, periodic (4h), manual via API
+- Compressed storage using heatshrink (window=10, lookahead=5, static alloc, ~2KB stack)
+- JSON-lines in SPIFFS (256KB partition, ~200KB cap), 32KB rotation threshold
+- Active log uncompressed, rotated files heatshrink-compressed (.jsonl.hs), oldest auto-deleted
+- Decompression support: web API supports `?decompress=true` for reading compressed logs
+- REST API: list/download/delete logs, live system health, timezone config, time sync
 - Critical for LIDAR/mapping development: replay scan data without live robot
+
+### Phase 3.5: Firmware management (complete)
+- Replaced ElegantOTA with custom FirmwareManager using ESP32 Update.h directly
+- Single-endpoint firmware upload: `POST /api/firmware/update?hash=<md5>`
+- MD5 hash validation on upload, chunked multipart receive
+- Firmware version exposed via `GET /api/firmware/version`
+- Version injected at build time via `FIRMWARE_VERSION` env var
+  (`FIRMWARE_VERSION=1.0.0 pio run -e Debug`), falls back to `0.0.0-dev`
+- Safe boot checkpoint: `esp_ota_mark_app_valid_cancel_rollback()` called after
+  WiFi connects and web server starts — firmware only marked valid when healthy
+- Auto-rollback ready: dual OTA partition layout (app0/app1, 1856KB each),
+  enable `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` in sdkconfig to activate
+- Zero third-party OTA dependencies — one less library to maintain
+- PlatformIO OTA upload via curl: `pio run -e OTA -t upload`
 
 ### Phase 4: Web UI
 - SPA shell embedded in firmware binary (PROGMEM) — done (stub)
@@ -66,21 +93,55 @@ firmware through REST API. Everything runs on the device itself.
 - SetMotor, SetLED commands
 - TestMode enable/disable for direct motor control
 
-### Phase 6: Safe OTA with auto-rollback
-- Check GitHub Releases for newer firmware versions
-- Web UI notification when an update is available
-- One-click download and install from the browser
-- Strict checksum validation before flashing (SHA-256 or MD5)
-- ESP32 app rollback: new firmware must call `esp_ota_mark_app_valid_cancel_rollback()`
-  after reaching a "successfully booted" checkpoint, otherwise the bootloader
-  automatically rolls back to the previous partition on next reboot
-- Dual OTA partition layout already in place (app0/app1, 1856KB each)
+### Phase 6: OTA update via GitHub Releases
+- Background update checker on ESP32: periodic HTTP GET to GitHub Releases API
+  to compare latest release tag against current `FIRMWARE_VERSION`
+- Configurable check interval stored in NVS (default: every 24h)
+- Settings API: `GET/PUT /api/firmware/settings` for check interval,
+  enable/disable auto-check, GitHub repo URL
+- When update available: push notification via ntfy.sh with direct link to
+  the device's firmware update page (e.g. `http://neato.home/#/firmware`)
+- Web UI firmware page: shows current version, available version, changelog,
+  one-click update button
+- Update flow entirely browser-side:
+  1. Browser fetches GitHub Releases API (HTTPS handled by browser)
+  2. Browser downloads `.bin` asset from the release
+  3. Browser uploads to `POST /api/firmware/update?hash=<md5>`
+  4. Device reboots, auto-rollback protects against bad firmware
+- ESP32 never makes outbound HTTPS connections to GitHub — the background
+  checker uses the GitHub API over HTTPS only for version comparison (small
+  JSON response); the heavy binary download happens in the browser
 
 ### Phase 7: LIDAR and mapping
 - Read LIDAR distance data via GetLDSScan
 - Render real-time 2D maps in the web UI
 - Store and display historical maps
 - Explore new areas by combining manual drive with live LIDAR feedback
+
+### Phase 8: Push notifications via ntfy.sh
+- Lightweight push notifications using [ntfy.sh](https://ntfy.sh) — self-hostable,
+  no app account required, works on Android/iOS/desktop via simple HTTP PUT/POST
+- ESP32 publishes notifications by POSTing to a configurable ntfy topic URL
+- Notification triggers:
+  - Cleaning started / completed / stopped with error
+  - Battery low (configurable threshold)
+  - Robot error or alert (GetErr non-200 codes)
+  - Stuck or pickup detected (wheel extended, bumper stuck)
+  - Returning to base due to low battery
+  - Charging started / completed
+  - OTA update available / applied / failed
+  - Device boot / unexpected restart
+- User-configurable settings stored in NVS:
+  - ntfy server URL (default: `https://ntfy.sh`, supports self-hosted instances)
+  - Topic name
+  - Enable/disable per notification category
+  - Priority levels per category (min, low, default, high, urgent)
+- Web UI settings page for notification configuration and test button
+- Event detection piggybacks on existing sensor polling (GetErr, GetState,
+  GetCharger); no additional robot polling needed
+- Fire-and-forget HTTP POST to ntfy — no persistent connection or retry queue
+- Optional: ntfy features like tags/emojis, click URLs (link back to device web UI),
+  and action buttons
 
 ### Neato Serial Protocol
 - **Baud rate**: 115200
@@ -495,45 +556,136 @@ Laser_RPM,52428 Charger_MaxPWM,65536 Charger_PWM,-858993460 Charger_mAH,52428
 - **Size budget**: 1856 KB per OTA slot is shared between firmware and embedded assets;
   keeping the frontend small is still important (Preact helps here)
 - **SPIFFS freed**: With frontend in firmware, the full SPIFFS partition is available
-  for analytics logs and diagnostics (Phase 6)
+  for analytics logs and diagnostics (Phase 3)
 ## Architecture
 
 Two top-level directories: `firmware/` for ESP32 code, `frontend/` for the web UI.
 `platformio.ini` stays at the root so CLion/PlatformIO can load the project directly.
 
+**Important**: Keep this section up to date whenever files are added, removed, or
+renamed — especially after completing a phase or making a commit that changes project
+structure. This avoids redundant codebase exploration and keeps agents productive.
+
 ```
+.clang-format              # Code formatting rules (K&R braces, 4-space indent, 120 cols)
+.clang-tidy                # Static analysis config for pio check
+.gitignore                 # Ignores .pio/, node_modules/, dist/, .cache/, etc.
 platformio.ini             # PIO config (src_dir = firmware/src)
+scripts/
+  inject_version.py        # Pre-build script: injects FIRMWARE_VERSION env var into build flags
 firmware/
   src/
-    config.h               # Global defines, macros, LOG macro, pin/timing constants
-    main.cpp               # setup()/loop() entry point, global objects
-    serial_menu.h/cpp      # Generic interactive serial menu system
-    wifi_manager.h/cpp     # WiFi config, credential storage, network scanning
-    ota_handler.h/cpp      # ElegantOTA wrapper over async web server
-    web_server.h/cpp       # Serves embedded frontend assets from PROGMEM
+    config.h               # Global defines, macros, LOG macro, pin/timing constants,
+                           #   data logger settings (file sizes, NTP servers, TZ),
+                           #   CommandStatus enum (ok/timeout/parse_failed/serial_error)
+    main.cpp               # setup()/loop() entry point, global objects, WiFi event
+                           #   handlers -> dataLogger.logWifi(), OTA hook wiring
+    serial_menu.h/cpp      # Generic interactive serial menu system (state machine,
+                           #   formatting helpers: printStatus, printError, etc.)
+    wifi_manager.h/cpp     # WiFi config, credential storage, network scanning,
+                           #   serial quick commands ([m]enu, [s]tatus)
+    firmware_manager.h/cpp # Firmware update using ESP32 Update.h directly,
+                           #   registers POST /api/firmware/update route,
+                           #   GET /api/firmware/version for update check,
+                           #   MD5 hash validation, chunked upload, auto-reboot,
+                           #   isInProgress() guard for loop(), LogCallback hook
+    web_server.h/cpp       # Serves embedded frontend assets from PROGMEM, registers
+                           #   all REST API routes (sensor GET, action POST),
+                           #   log routes (list/download/delete), system routes
+                           #   (health, timezone, time sync). Request logging on
+                           #   all sensor/action routes via DataLogger.
+                           #   Template helpers: registerSensorRoute<T>(),
+                           #   registerActionRoute(), sendGzipAsset(), sendError()
     web_assets.h           # Auto-generated — gzipped frontend as byte arrays
-    neato_commands.h/cpp   # Command enum, response structs, CSV parsers,
-                           #   Field/toFields() system, generic JSON + menu serializers
-    neato_serial.h/cpp     # UART command queue, state machine, typed convenience
-                           #   methods (getCharger, cleanHouse, etc.)
-  partition.csv            # Custom partition table (dual OTA slots, 1856KB each)
+                           #   (INDEX_HTML_GZ, APP_JS_GZ with _LEN and _CONTENT_TYPE)
+    data_logger.h/cpp      # On-device analytics (Phase 3): SPIFFS JSON-lines logging,
+                           #   NTP time sync with robot clock fallback, heatshrink
+                           #   compression on rotation, decompression support via API,
+                           #   space enforcement, boot event logging, NeatoSerial command
+                           #   hook (logs every serial command with status/queue/bytes),
+                           #   log file management (list/read/delete), live system health
+                           #   JSON, timezone NVS storage
+    neato_commands.h/cpp   # Command enum (24 commands), response structs (VersionData,
+                           #   ChargerData, AnalogSensorData, DigitalSensorData,
+                           #   MotorData, RobotState, ErrorData, AccelData, ButtonData,
+                           #   LdsScanData), CSV parsers, Field/toFields() system,
+                           #   fieldsToJson() generic serializer, SoundId enum
+    neato_serial.h/cpp     # UART command queue state machine (IDLE -> SENDING ->
+                           #   WAITING_RESPONSE -> INTER_DELAY -> IDLE), typed
+                           #   convenience methods (getCharger, getVersion, etc.),
+                           #   action methods (cleanHouse, playSound, etc.),
+                           #   sendRaw() escape hatch, isBusy()/queueDepth() status,
+                           #   LoggerCallback hook for DataLogger integration (6-param:
+                           #   cmd, status, ms, raw, queueDepth, respBytes)
+  lib/
+    heatshrink/            # Vendored heatshrink compression library (0.4.1)
+      heatshrink_config.h  # Custom config: static alloc, w=10, la=5, 32-bit
+      heatshrink_encoder.h/c           # Standard encoder (8/16-bit)
+      heatshrink_encoder_32bit.cpp     # 32-bit optimized encoder
+      heatshrink_decoder.h/c           # Standard decoder (8/16-bit)
+      heatshrink_decoder_32bit.cpp     # 32-bit optimized decoder
+      heatshrink_common.h  # Shared definitions
+      library.json         # PIO lib manifest (srcFilter, include flags)
+      private/
+        hs_search.hpp      # Pattern search (patched for GCC 8.4)
+        hs_arch.hpp        # Architecture detection (Xtensa/RISC-V)
+  partition.csv            # Custom partition table:
+                           #   nvs 20KB, otadata 8KB, app0 1856KB, app1 1856KB,
+                           #   spiffs 256KB (used by DataLogger for log storage),
+                           #   coredump 64KB
 frontend/
   package.json             # Preact + Vite build config
+  package-lock.json        # Lockfile for reproducible builds
   tsconfig.json            # TypeScript configuration
   vite.config.ts           # Vite build settings (deterministic output filenames)
   index.html               # SPA entry point
   src/
     main.tsx               # Preact render entry
-    app.tsx                # Root component
+    app.tsx                # Root component (stub)
   scripts/
     embed_frontend.js      # Gzips frontend dist, generates firmware/src/web_assets.h
+  dist/                    # Vite build output (index.html + app.js), gitignored
 ```
+
+### Current API routes
+
+| Method | Path | Handler |
+|--------|------|---------|
+| GET | `/` | Serve index.html from PROGMEM (gzip) |
+| GET | `/app.js` | Serve app.js from PROGMEM (gzip) |
+| GET | `/api/firmware/version` | Current firmware version (from FIRMWARE_VERSION define) |
+| POST | `/api/firmware/update?hash=<md5>` | Firmware upload (multipart, optional MD5 validation) |
+| GET | `/api/version` | `NeatoSerial::getVersion` -> JSON |
+| GET | `/api/charger` | `NeatoSerial::getCharger` -> JSON |
+| GET | `/api/sensors/analog` | `NeatoSerial::getAnalogSensors` -> JSON |
+| GET | `/api/sensors/digital` | `NeatoSerial::getDigitalSensors` -> JSON |
+| GET | `/api/motors` | `NeatoSerial::getMotors` -> JSON |
+| GET | `/api/state` | `NeatoSerial::getState` -> JSON |
+| GET | `/api/error` | `NeatoSerial::getErr` -> JSON |
+| GET | `/api/accel` | `NeatoSerial::getAccel` -> JSON |
+| GET | `/api/buttons` | `NeatoSerial::getButtons` -> JSON |
+| GET | `/api/lidar` | `NeatoSerial::getLdsScan` -> JSON |
+| POST | `/api/clean/house` | `NeatoSerial::cleanHouse` |
+| POST | `/api/clean/spot` | `NeatoSerial::cleanSpot` |
+| POST | `/api/clean/stop` | `NeatoSerial::cleanStop` |
+| POST | `/api/sound?id=N` | `NeatoSerial::playSound` |
+| GET | `/api/logs` | List log files with metadata (JSON array) |
+| GET | `/api/logs/{filename}` | Download a log file (raw or compressed) |
+| DELETE | `/api/logs/{filename}` | Delete a specific log file |
+| DELETE | `/api/logs` | Delete all log files |
+| GET | `/api/system` | Live system health (heap, uptime, RSSI, SPIFFS, NTP) |
+| GET | `/api/timezone` | Current POSIX TZ string |
+| PUT | `/api/timezone` | Set POSIX TZ string (body: `{"tz":"..."}`) |
+| POST | `/api/time/sync` | Manually trigger robot clock sync from NTP |
 
 ## Build Commands
 
 ```bash
-# Build (Debug env — serial upload)
+# Build (Debug env — serial upload, dev version)
 pio run -e Debug
+
+# Build with specific firmware version
+FIRMWARE_VERSION=1.0.0 pio run -e Debug
 
 # Build and upload via USB serial
 pio run -e Debug -t upload
@@ -565,10 +717,12 @@ Verify changes by building successfully with `pio run -e Debug` and running
 
 ## Dependencies (all pinned)
 
-- `ayushsharma82/ElegantOTA @ 3.1.7`
 - `ESP32Async/AsyncTCP @ 3.4.10`
 - `ESP32Async/ESPAsyncWebServer @ 3.9.6`
-- Built-in: `Preferences @ 2.0.0`, `WiFi @ 2.0.0`
+- Vendored: `heatshrink @ 0.4.1` (from BitsForPeople/esp-heatshrink, in `firmware/lib/heatshrink/`)
+  - Static alloc, window=10, lookahead=5, 32-bit mode, patched `hs_search.hpp`
+    for GCC 8.4 compatibility (removed `constexpr` from defaulted copy assignment)
+- Built-in: `Preferences @ 2.0.0`, `WiFi @ 2.0.0`, `SPIFFS @ 2.0.0`, `Update @ 2.0.0`
 
 ## Code Style
 
