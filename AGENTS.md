@@ -17,79 +17,46 @@ firmware through REST API. Everything runs on the device itself.
 
 ## Project Vision
 
-### Phase 1: Foundation (complete)
-- WiFi provisioning via serial menu
-- OTA firmware updates via web UI
-- Basic infrastructure (async web server, NVS config storage)
+### Completed phases
+1. **Foundation** — WiFi provisioning, OTA updates, async web server, NVS config
+2. **API layer and sensor integration** — UART serial bridge, command queue, REST
+   endpoints for all sensors and actions, client-side polling
+3. **On-device analytics and diagnostics** — SPIFFS JSON-lines logging, heatshrink
+   compression, non-blocking I/O, command/request/event logging, NTP time sync
+4. **Firmware management** — Custom FirmwareManager (Update.h), MD5 validation,
+   safe boot checkpoint, dual OTA partition auto-rollback
 
-### Phase 2: API layer and sensor integration (complete)
-- UART serial bridge to Neato Botvac
-- Serial command queue (no overlapping commands, inter-command delay)
-- REST API endpoints for commands and one-off reads
-- Sensor reading endpoints: GetVersion, GetCharger, GetAnalogSensors,
-  GetDigitalSensors, GetMotors, GetState, GetErr, GetAccel, GetButtons,
-  GetLDSScan
-- Action endpoints: Clean House/Spot/Stop, PlaySound
-- Client-side polling — no server-side polling loop or WebSocket needed since
-  the robot has no push mechanism; the frontend polls REST endpoints on its
-  own interval, avoiding firmware overhead when no client is connected
-- Testable without UI — curl or Postman against REST endpoints
+Details for completed phases are documented in the Architecture, API routes, and
+reference sections below.
 
-### Phase 3: On-device analytics and diagnostics (complete)
-- Comprehensive data collection without serial debug (robot is mobile)
-- Enables embedding the board inside the robot for all subsequent development
-- Structured log entries: system events, sensor readings, errors, commands
-- Log entry types: `boot`, `command`, `request`, `error`, `ntp`, `wifi`, `ota`
-- Data categories:
-  - System health: free heap, uptime, restart reason, WiFi RSSI (live via API)
-  - Serial comms: every command logged with response, timing, detailed status
-  - Sensor snapshots: captured via command log when frontend polls endpoints
-  - LIDAR scans: full GetLDSScan captured in command log for offline replay
-  - OTA events: start/progress/end logged via LogCallback hook
-  - WiFi events: connect/disconnect/got_ip via WiFi.onEvent() in main.cpp
-  - HTTP requests: method, path, status, duration on all sensor/action routes
-- **Command logging format** (v1.3.0+):
-  - `status`: enum value (`ok`, `timeout`, `parse_failed`, `serial_error`)
-  - `q`: queue depth at command start (helps diagnose queue bottlenecks)
-  - `bytes`: response byte count (0 on timeout/error)
-  - `ms`: execution time in milliseconds
-  - `resp`: full response text (truncated on timeout)
-- Time strategy: NTP primary, robot clock fallback (GetTime), millis() last resort
-- Timezone: POSIX TZ string in NVS, configurable via REST API
-- NTP-to-robot clock sync: automatic on NTP acquisition, periodic (4h), manual via API
-- Compressed storage using heatshrink (window=10, lookahead=5, static alloc, ~2KB stack)
-- JSON-lines in SPIFFS (256KB partition, ~200KB cap), 32KB rotation threshold
-- Active log uncompressed, rotated files heatshrink-compressed (.jsonl.hs), oldest auto-deleted
-- Transparent decompression: compressed logs are automatically decompressed when served via API
-  (async chunked streaming — never blocks the web server)
-- **Non-blocking I/O**: all SPIFFS and serial operations are async/deferred so API
-  request handlers never block the event loop:
-  - Log writes buffered in memory, flushed to SPIFFS in `loop()` (1s interval or 32-line cap)
-  - Log rotation: fast rename in `flushBuffer()`, incremental heatshrink compression
-    across `loop()` iterations (one 512-byte chunk per tick)
-  - Bulk log delete: one file removed per `loop()` iteration
-  - Space enforcement: one oldest file deleted per `loop()` call
-  - Serial commands: non-blocking queue state machine with callback-based completion
-  - Sensor/action API routes: `request->pause()` + callback + `weak.lock()` pattern
-  - Compressed log download: `beginChunkedResponse` with streaming decompression
-- REST API: list/download/delete logs, live system health, timezone config, time sync
-- Critical for LIDAR/mapping development: replay scan data without live robot
+**Note for agents**: When a phase is completed, verify its details are covered in the
+Architecture/API/reference sections, then remove the full phase description from below
+and add a one-line summary to the completed list above. Do this before committing.
 
-### Phase 3.5: Firmware management (complete)
-- Replaced ElegantOTA with custom FirmwareManager using ESP32 Update.h directly
-- Single-endpoint firmware upload: `POST /api/firmware/update?hash=<md5>`
-- MD5 hash validation on upload, chunked multipart receive
-- Firmware version exposed via `GET /api/firmware/version`
-- Version injected at build time via `FIRMWARE_VERSION` env var
-  (`FIRMWARE_VERSION=1.0.0 pio run -e Debug`), falls back to `0.0.0-dev`
-- Safe boot checkpoint: `esp_ota_mark_app_valid_cancel_rollback()` called after
-  WiFi connects and web server starts — firmware only marked valid when healthy
-- Auto-rollback ready: dual OTA partition layout (app0/app1, 1856KB each),
-  enable `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` in sdkconfig to activate
-- Zero third-party OTA dependencies — one less library to maintain
-- PlatformIO OTA upload via curl: `pio run -e OTA -t upload`
+### Mock API server
+- Lightweight Node.js dev server that mimics all implemented REST endpoints
+- Enables frontend development without a physical robot or ESP32
+- Lives in `frontend/mock/` — single JS file, zero production dependencies
+- Runs alongside Vite dev server: `npm run dev` starts both (Vite plugin
+  serves `/api/*` in-process, single port)
+- Covers every route in the current API table: sensor reads, actions, logs,
+  system health, firmware version, timezone
+- Realistic responses: uses actual field names and value ranges from the Neato
+  serial protocol (see Response Formats section) with plausible random variation
+- Stateful where it matters:
+  - Battery drains slowly over time, charges when `ExtPwrPresent` is set
+  - Cleaning state transitions (idle -> cleaning -> stopped) via action endpoints
+  - Robot state and UI state reflect current activity
+  - Error state set/cleared via endpoints
+  - LIDAR returns a synthetic room outline with noise
+- Latency simulation: adds small random delays (50-200ms) to mimic serial
+  command round-trip time
+- Mock control endpoints (`/api/mock/*`) for forcing edge-case states during
+  development — battery level, dock presence, error codes, etc. These don't
+  exist on the real device; they're curl-able helpers for testing
+- No authentication, no HTTPS — matches the real device behavior
 
-### Phase 4: Web UI
+### Web UI
 - SPA shell embedded in firmware binary (PROGMEM) — done (stub)
 - Build pipeline: compile frontend assets, gzip, generate C header, compile
   into firmware — done
@@ -98,13 +65,13 @@ firmware through REST API. Everything runs on the device itself.
 - Responsive design for mobile and desktop browsers
 - Builds on stable, tested API — renders real data from day one
 
-### Phase 5: Manual control
+### Manual control
 - Drive the robot manually from the web UI (forward, back, rotate)
 - Start/stop/pause cleaning cycles
 - SetMotor, SetLED commands
 - TestMode enable/disable for direct motor control
 
-### Phase 6: OTA update via GitHub Releases
+### OTA update via GitHub Releases
 - Background update checker on ESP32: periodic HTTP GET to GitHub Releases API
   to compare latest release tag against current `FIRMWARE_VERSION`
 - Configurable check interval stored in NVS (default: every 24h)
@@ -123,13 +90,13 @@ firmware through REST API. Everything runs on the device itself.
   checker uses the GitHub API over HTTPS only for version comparison (small
   JSON response); the heavy binary download happens in the browser
 
-### Phase 7: LIDAR and mapping
+### LIDAR and mapping
 - Read LIDAR distance data via GetLDSScan
 - Render real-time 2D maps in the web UI
 - Store and display historical maps
 - Explore new areas by combining manual drive with live LIDAR feedback
 
-### Phase 8: Push notifications via ntfy.sh
+### Push notifications via ntfy.sh
 - Lightweight push notifications using [ntfy.sh](https://ntfy.sh) — self-hostable,
   no app account required, works on Android/iOS/desktop via simple HTTP PUT/POST
 - ESP32 publishes notifications by POSTing to a configurable ntfy topic URL
@@ -619,8 +586,9 @@ firmware/
                            #   routes delegate to SystemManager for health/tz/NTP.
                            #   Template helpers: registerSensorRoute<T>(),
                            #   registerActionRoute(), sendGzipAsset(), sendError()
-    web_assets.h           # Auto-generated — gzipped frontend as byte arrays
-                           #   (INDEX_HTML_GZ, APP_JS_GZ with _LEN and _CONTENT_TYPE)
+    web_assets.h           # Auto-generated — WebAsset struct + WEB_ASSETS[] registry
+                           #   of all dist/ files (gzipped PROGMEM byte arrays, paths,
+                           #   MIME types). Web server iterates registry to register routes.
     data_logger.h/cpp      # On-device analytics (Phase 3): SPIFFS JSON-lines logging,
                            #   heatshrink compression on rotation, space enforcement,
                            #   boot event logging, NeatoSerial command hook (logs every
@@ -667,13 +635,19 @@ frontend/
   package.json             # Preact + Vite build config
   package-lock.json        # Lockfile for reproducible builds
   tsconfig.json            # TypeScript configuration
-  vite.config.ts           # Vite build settings (deterministic output filenames)
+  vite.config.ts           # Vite build settings (deterministic output filenames,
+                           #   dev server: loads mock API plugin for /api/* routes)
   index.html               # SPA entry point
   src/
     main.tsx               # Preact render entry
     app.tsx                # Root component (stub)
+  mock/
+    server.js              # Mock API server (plain Node.js http, zero deps),
+                           #   stateful simulation of all REST endpoints,
+                           #   /api/mock/* control endpoints for edge-case testing
   scripts/
-    embed_frontend.js      # Gzips frontend dist, generates firmware/src/web_assets.h
+    embed_frontend.js      # Auto-discovers all dist/ files, gzips each, generates
+                           #   firmware/src/web_assets.h with WebAsset registry
   dist/                    # Vite build output (index.html + app.js), gitignored
 ```
 
@@ -681,8 +655,7 @@ frontend/
 
 | Method | Path | Handler |
 |--------|------|---------|
-| GET | `/` | Serve index.html from PROGMEM (gzip) |
-| GET | `/app.js` | Serve app.js from PROGMEM (gzip) |
+| GET | `/*` (static) | Serve any embedded frontend asset from WEB_ASSETS[] registry (gzip) |
 | GET | `/api/firmware/version` | Current firmware version (from FIRMWARE_VERSION define) |
 | POST | `/api/firmware/update?hash=<md5>` | Firmware upload (multipart, optional MD5 validation) |
 | GET | `/api/version` | `NeatoSerial::getVersion` -> JSON |

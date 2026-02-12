@@ -76,15 +76,15 @@ void WebServer::registerActionRoute(const char *path, ActionDispatch dispatch) {
 }
 
 void WebServer::begin() {
-    // Serve SPA index
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        sendGzipAsset(request, INDEX_HTML_GZ, INDEX_HTML_GZ_LEN, INDEX_HTML_CONTENT_TYPE);
-    });
+    // Register all embedded frontend assets from the auto-generated registry
+    for (size_t i = 0; i < WEB_ASSETS_COUNT; i++) {
+        const WebAsset& asset = WEB_ASSETS[i];
+        server.on(asset.path, HTTP_GET, [&asset](AsyncWebServerRequest *request) {
+            sendGzipAsset(request, asset.data, asset.length, asset.contentType);
+        });
+    }
 
-    // Serve app.js
-    server.on("/app.js", HTTP_GET, [](AsyncWebServerRequest *request) {
-        sendGzipAsset(request, APP_JS_GZ, APP_JS_GZ_LEN, APP_JS_CONTENT_TYPE);
-    });
+    LOG("WEB", "Registered %u embedded assets", WEB_ASSETS_COUNT);
 
     registerApiRoutes();
     registerLogRoutes();
