@@ -63,8 +63,10 @@ public:
 
     // -- Logger hook ---------------------------------------------------------
 
-    // Callback: (command, status, elapsed_ms, raw_response, queue_depth_before, response_bytes)
-    using LoggerCallback = std::function<void(const String&, CommandStatus, unsigned long, const String&, int, size_t)>;
+    // Callback: (command, status, elapsed_ms, raw_response, queue_depth_before, response_bytes, cache_age_ms)
+    // cache_age_ms: 0 = fresh serial fetch, >0 = served from cache (age in ms)
+    using LoggerCallback =
+            std::function<void(const String&, CommandStatus, unsigned long, const String&, int, size_t, unsigned long)>;
     void setLogger(LoggerCallback logger) { loggerCallback = logger; }
 
     // -- Status --------------------------------------------------------------

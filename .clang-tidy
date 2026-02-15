@@ -159,7 +159,8 @@ portability-simd-intrinsics,
 # ============================================================================
 # READABILITY (Selective - avoid false positives with Arduino globals)
 # ============================================================================
-readability-avoid-const-params-in-decls,
+# DISABLED: readability-avoid-const-params-in-decls
+# Reason: False positive on const-ref parameters (const std::vector<T>&) in declarations
 readability-const-return-type,
 readability-container-size-empty,
 readability-delete-null-pointer,

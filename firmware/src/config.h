@@ -14,7 +14,7 @@
 
 // Neato UART pins (ESP32-C3 hardware UART on free GPIOs)
 #define NEATO_TX_PIN 4
-#define NEATO_RX_PIN 5
+#define NEATO_RX_PIN 3
 #define NEATO_BAUD_RATE 115200
 
 // Neato command queue timing (milliseconds)
@@ -49,7 +49,7 @@ enum CommandStatus {
 
 // Data logger (Phase 3)
 #define LOG_MAX_FILE_SIZE 32768 // 32 KB per file before rotation
-#define LOG_MAX_SPIFFS_PERCENT 85 // Delete oldest logs when SPIFFS usage exceeds this %
+#define LOG_MAX_SPIFFS_PERCENT 85 // Delete the oldest logs when SPIFFS usage exceeds this %
 #define LOG_DIR "/log"
 #define LOG_CURRENT_FILE "/log/current.jsonl"
 #define LOG_FLUSH_INTERVAL_MS 1000 // Flush write buffer to SPIFFS at most once per second

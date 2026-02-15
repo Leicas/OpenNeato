@@ -21,16 +21,21 @@ class AsyncCache {
 public:
     using Callback = std::function<void(bool, const T&)>;
     using FetchFunc = std::function<void(Callback)>;
+    using HitFunc = std::function<void(unsigned long)>;
 
     // ttlMs: how long a cached value is considered fresh (milliseconds)
     // fetchFunc: the async producer — must eventually call its callback exactly once
-    AsyncCache(unsigned long ttlMs, FetchFunc fetchFunc) : ttl(ttlMs), fetcher(fetchFunc) {}
+    // hitFunc: optional callback fired on cache hits (e.g. for logging)
+    AsyncCache(unsigned long ttlMs, FetchFunc fetchFunc, HitFunc hitFunc = nullptr) :
+        ttl(ttlMs), fetcher(fetchFunc), hitFunc(hitFunc) {}
 
     // Request the value. Returns cached data instantly if fresh, otherwise
     // triggers a fetch (or piggybacks on an in-flight one).
     void get(Callback callback) {
         // Cache hit — value is fresh
         if (hasValue && (millis() - cachedAt < ttl)) {
+            if (hitFunc)
+                hitFunc(millis() - cachedAt);
             if (callback)
                 callback(true, cached);
             return;
@@ -77,6 +82,7 @@ public:
 private:
     unsigned long ttl;
     FetchFunc fetcher;
+    HitFunc hitFunc;
 
     T cached;
     unsigned long cachedAt = 0;

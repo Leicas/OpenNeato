@@ -1033,6 +1033,34 @@ body {
     line-height: 1.5;
 }
 
+.logs-entry-details {
+    margin-top: 4px;
+}
+
+.logs-entry-details summary {
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    width: fit-content;
+}
+
+.logs-entry-resp {
+    margin: 4px 0 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--card-bg);
+    font-size: 11px;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    color: var(--text-muted);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
 /* Responsive — larger phones */
 
 @media (min-width: 400px) {

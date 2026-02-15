@@ -6,15 +6,31 @@ Supported variables:
                         (fallback in config.h: "0.0.0-dev")
     NEATO_HOST        — sets OTA upload target host (required for OTA env)
 
+Set BUILD_FRONTEND=1 to run the frontend build (npm run build) before
+compiling firmware, ensuring web_assets.h is up to date.
+
 Usage:
     FIRMWARE_VERSION=1.2.3 pio run -e Debug
     NEATO_HOST=10.10.10.15 pio run -e OTA -t upload
+    BUILD_FRONTEND=1 pio run -e Debug                 # builds frontend + firmware
+    BUILD_FRONTEND=1 NEATO_HOST=10.10.10.15 pio run -e OTA -t upload
 """
 
 import os
+import subprocess
 import sys
 
 Import("env")
+
+# -- Frontend build (Full environments) ----------------------------------------
+
+if os.environ.get("BUILD_FRONTEND"):
+    frontend_dir = os.path.join(env["PROJECT_DIR"], "frontend")
+    print("Building frontend (npm run build)...")
+    result = subprocess.run(["npm", "run", "build"], cwd=frontend_dir)
+    if result.returncode != 0:
+        sys.exit("Error: Frontend build failed")
+    print("Frontend build complete")
 
 # -- FIRMWARE_VERSION ----------------------------------------------------------
 

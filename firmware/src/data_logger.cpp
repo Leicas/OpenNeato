@@ -104,7 +104,9 @@ void DataLogger::begin() {
 
     // Register serial command logger hook with enhanced parameters
     neato.setLogger([this](const String& cmd, CommandStatus status, unsigned long ms, const String& raw, int qDepth,
-                           size_t respBytes) { onCommand(cmd, status, ms, raw, qDepth, respBytes); });
+                           size_t respBytes, unsigned long cacheAgeMs) {
+        onCommand(cmd, status, ms, raw, qDepth, respBytes, cacheAgeMs);
+    });
 
     // Log boot event
     logBootEvent();
@@ -467,7 +469,7 @@ void DataLogger::logBootEvent() {
 // -- NeatoSerial logger hook -------------------------------------------------
 
 void DataLogger::onCommand(const String& cmd, CommandStatus status, unsigned long ms, const String& raw, int queueDepth,
-                           size_t respBytes) {
+                           size_t respBytes, unsigned long cacheAgeMs) {
     // Convert status enum to string for JSON
     const char *statusStr;
     switch (status) {
@@ -489,11 +491,14 @@ void DataLogger::onCommand(const String& cmd, CommandStatus status, unsigned lon
     }
 
     // Log command metadata; include raw response only when debug logging is enabled
+    // cache_age presence is implicit: 0 = fresh fetch (omitted), >0 = served from cache
     std::vector<Field> fields = {{"cmd", cmd, FIELD_STRING},
                                  {"status", statusStr, FIELD_STRING},
                                  {"ms", String(ms), FIELD_INT},
                                  {"q", String(queueDepth), FIELD_INT},
                                  {"bytes", String(respBytes), FIELD_INT}};
+    if (cacheAgeMs > 0)
+        fields.push_back({"age", String(cacheAgeMs), FIELD_INT});
     if (debugCheck && debugCheck())
         fields.push_back({"resp", raw, FIELD_STRING});
     logEvent("command", fields);

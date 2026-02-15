@@ -108,21 +108,37 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
         ? statusInfo(state.data.uiState)
         : { label: state.error ? "Error" : "...", color: state.error ? "red" : "amber", icon: "alert" };
 
-    // Pending state — disabled until backend confirms state change
+    // Pending state — disabled until backend confirms state change or timeout
     const [pending, setPending] = useState(false);
     const lastUiState = useRef<string | null>(null);
+    const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [actionErrors, actionErrorStack] = useErrorStack();
 
     if (state.data && state.data.uiState !== lastUiState.current) {
         lastUiState.current = state.data.uiState;
-        if (pending) setPending(false);
+        if (pending) {
+            setPending(false);
+            if (pendingTimer.current) {
+                clearTimeout(pendingTimer.current);
+                pendingTimer.current = null;
+            }
+        }
     }
 
     const handleAction = useCallback(
         (action: () => Promise<unknown>) => {
             setPending(true);
+            if (pendingTimer.current) clearTimeout(pendingTimer.current);
+            pendingTimer.current = setTimeout(() => {
+                setPending(false);
+                pendingTimer.current = null;
+            }, 10000);
             action().catch((e: unknown) => {
                 setPending(false);
+                if (pendingTimer.current) {
+                    clearTimeout(pendingTimer.current);
+                    pendingTimer.current = null;
+                }
                 actionErrorStack.push(e instanceof Error ? e.message : "Action failed");
             });
         },
@@ -130,6 +146,7 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
     );
     const isCleaning = state.data?.uiState?.includes("CLEANING") ?? false;
     const isSpot = state.data?.uiState?.includes("SPOT") ?? false;
+    const hasRobotError = error.data?.hasError ?? false;
     const charging = charger.data?.chargingActive ?? false;
     const docked = charger.data?.extPwrPresent ?? false;
     const pct = charger.data?.fuelPercent ?? 0;
@@ -252,7 +269,7 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                         type="button"
                         class={`action-btn primary${pending ? " pending" : ""}`}
                         onClick={() => handleAction(api.cleanHouse)}
-                        disabled={offline || isCleaning || pending}
+                        disabled={offline || isCleaning || pending || hasRobotError}
                     >
                         <Icon svg={houseSvg} />
                         House
@@ -261,7 +278,7 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                         type="button"
                         class={`action-btn${pending ? " pending" : ""}`}
                         onClick={() => handleAction(api.cleanSpot)}
-                        disabled={offline || isCleaning || pending}
+                        disabled={offline || isCleaning || pending || hasRobotError}
                     >
                         <Icon svg={spotSvg} />
                         Spot

@@ -626,7 +626,8 @@ structure. This avoids redundant codebase exploration and keeps agents productiv
 platformio.ini             # PIO config (src_dir = firmware/src)
 scripts/
   env_config.py            # Pre-build script: injects FIRMWARE_VERSION build flag,
-                           #   sets UPLOAD_PORT from NEATO_HOST env var for OTA uploads
+                           #   sets UPLOAD_PORT from NEATO_HOST env var for OTA uploads,
+                           #   BUILD_FRONTEND=1 triggers `npm run build` before compile
 firmware/
   src/
     config.h               # Global defines, macros, LOG macro, pin/timing constants,
@@ -638,6 +639,8 @@ firmware/
                            #   request deduplication and explicit invalidation. Stores
                            #   last value + timestamp, coalesces concurrent waiters
                            #   during in-flight fetch, serves cached value within TTL.
+                           #   Optional HitFunc callback (3rd constructor param) fires
+                           #   on cache hits with age in ms (used for logging).
                            #   Header-only (template). Used by NeatoSerial.
     main.cpp               # setup()/loop() entry point, global Preferences (single
                            #   "neato" NVS namespace opened once, shared by ref),
@@ -705,6 +708,8 @@ firmware/
                            #   serial responses are included in command log entries
                            #   via the "resp" field. Wired to SettingsManager.debugLog
                            #   in main.cpp.
+                           #   Cache hit logging: "age" field emitted when cacheAgeMs > 0
+                           #   (implicit — presence means cached, absence means fresh).
     json_fields.h/cpp      # Lightweight field-based JSON serialization and parsing:
                            #   Field struct, FieldType enum (INT, FLOAT, BOOL, STRING),
                            #   fieldsToJson() wraps in braces, fieldsToJsonInner()
@@ -731,8 +736,10 @@ firmware/
                            #   invalidateState()/invalidateAll() for explicit control,
                            #   time methods (getTime, setTime), no sendRaw() public API,
                            #   isBusy()/queueDepth() status,
-                           #   LoggerCallback hook for DataLogger integration (6-param:
-                           #   cmd, status, ms, raw, queueDepth, respBytes)
+                           #   LoggerCallback hook for DataLogger integration (7-param:
+                           #   cmd, status, ms, raw, queueDepth, respBytes, cacheAgeMs).
+                           #   CACHE_HIT(CMD) macro creates per-cache hit lambdas that
+                           #   fire loggerCallback with cacheAgeMs on cache hits.
   lib/
     heatshrink/            # Vendored heatshrink compression library (0.4.1)
       heatshrink_config.h  # Custom config: static alloc, w=10, la=5, 32-bit
@@ -786,11 +793,15 @@ frontend/
                            #   Two-tier error banners: fixed for robot errors,
                            #   dismissible stack for action errors. Cards show
                            #   "Error" state when polling fails.
+                           #   Pending timeout (10s) auto-clears stuck pending state.
+                           #   Robot error disables House/Spot action buttons.
       settings.tsx         # Settings view: appearance theme selector, timezone
                            #   dropdown with POSIX TZ presets, robot time display,
                            #   debug logging toggle (fetches/updates via settings API)
       logs.tsx             # Logs view: file list with size/date, detail view with
-                           #   parsed JSON-lines entries, type badges, delete actions
+                           #   parsed JSON-lines entries, type badges, delete actions.
+                           #   Collapsible raw response in command entries (debug log).
+                           #   Boot archive filenames shown as "Boot archive" date.
     assets/
       robot.svg            # Main robot illustration (30KB, vectorized 4-layer greyscale)
       icons/               # SVG icons loaded via ?raw import (alert, back, battery,
@@ -845,6 +856,7 @@ frontend/
 ```bash
 pio run -e Debug                        # Build (serial upload, dev version)
 FIRMWARE_VERSION=1.0.0 pio run -e Debug # Build with specific version
+BUILD_FRONTEND=1 pio run -e Debug       # Build frontend + firmware in one step
 pio run -e Debug -t upload              # Build and upload via USB serial
 pio run -e Debug -t upload -t monitor   # Upload and open serial monitor
 pio run -e Debug -t monitor             # Serial monitor only

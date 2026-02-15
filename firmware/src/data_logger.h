@@ -143,9 +143,10 @@ private:
     // Blocking compression (used only in begin() during boot)
     bool compressFile(const String& srcPath, const String& dstPath);
 
-    // NeatoSerial logger hook (enhanced with status, queue depth, response size)
+    // NeatoSerial logger hook (enhanced with status, queue depth, response size, cache info)
+    // cacheAgeMs: 0 = fresh serial fetch, >0 = served from cache (age in ms)
     void onCommand(const String& cmd, CommandStatus status, unsigned long ms, const String& raw, int queueDepth,
-                   size_t respBytes);
+                   size_t respBytes, unsigned long cacheAgeMs);
 };
 
 #endif // DATA_LOGGER_H

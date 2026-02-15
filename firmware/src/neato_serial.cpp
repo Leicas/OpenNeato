@@ -3,17 +3,44 @@
 
 // -- Lifecycle ---------------------------------------------------------------
 
+// Helper: create a cache hit lambda that fires loggerCallback with cached=true.
+// Captures `this` so it reads loggerCallback at call time (works before setLogger).
+#define CACHE_HIT(CMD)                                                                                                 \
+    [this](unsigned long ageMs) {                                                                                      \
+        if (loggerCallback)                                                                                            \
+            loggerCallback(commandToString(CMD), CMD_SUCCESS, 0, "", 0, 0, ageMs);                                     \
+    }
+
 NeatoSerial::NeatoSerial() :
-    versionCache(CACHE_TTL_VERSION, [this](AsyncCache<VersionData>::Callback cb) { fetchVersion(cb); }),
-    chargerCache(CACHE_TTL_CHARGER, [this](AsyncCache<ChargerData>::Callback cb) { fetchCharger(cb); }),
-    analogCache(CACHE_TTL_SENSORS, [this](AsyncCache<AnalogSensorData>::Callback cb) { fetchAnalogSensors(cb); }),
-    digitalCache(CACHE_TTL_SENSORS, [this](AsyncCache<DigitalSensorData>::Callback cb) { fetchDigitalSensors(cb); }),
-    motorCache(CACHE_TTL_SENSORS, [this](AsyncCache<MotorData>::Callback cb) { fetchMotors(cb); }),
-    stateCache(CACHE_TTL_STATE, [this](AsyncCache<RobotState>::Callback cb) { fetchState(cb); }),
-    errCache(CACHE_TTL_STATE, [this](AsyncCache<ErrorData>::Callback cb) { fetchErr(cb); }),
-    accelCache(CACHE_TTL_ACCEL, [this](AsyncCache<AccelData>::Callback cb) { fetchAccel(cb); }),
-    buttonCache(CACHE_TTL_BUTTONS, [this](AsyncCache<ButtonData>::Callback cb) { fetchButtons(cb); }),
-    ldsCache(CACHE_TTL_LDS, [this](AsyncCache<LdsScanData>::Callback cb) { fetchLdsScan(cb); }) {}
+    versionCache(
+            CACHE_TTL_VERSION, [this](AsyncCache<VersionData>::Callback cb) { fetchVersion(cb); },
+            CACHE_HIT(CMD_GET_VERSION)),
+    chargerCache(
+            CACHE_TTL_CHARGER, [this](AsyncCache<ChargerData>::Callback cb) { fetchCharger(cb); },
+            CACHE_HIT(CMD_GET_CHARGER)),
+    analogCache(
+            CACHE_TTL_SENSORS, [this](AsyncCache<AnalogSensorData>::Callback cb) { fetchAnalogSensors(cb); },
+            CACHE_HIT(CMD_GET_ANALOG_SENSORS)),
+    digitalCache(
+            CACHE_TTL_SENSORS, [this](AsyncCache<DigitalSensorData>::Callback cb) { fetchDigitalSensors(cb); },
+            CACHE_HIT(CMD_GET_DIGITAL_SENSORS)),
+    motorCache(
+            CACHE_TTL_SENSORS, [this](AsyncCache<MotorData>::Callback cb) { fetchMotors(cb); },
+            CACHE_HIT(CMD_GET_MOTORS)),
+    stateCache(
+            CACHE_TTL_STATE, [this](AsyncCache<RobotState>::Callback cb) { fetchState(cb); }, CACHE_HIT(CMD_GET_STATE)),
+    errCache(
+            CACHE_TTL_STATE, [this](AsyncCache<ErrorData>::Callback cb) { fetchErr(cb); }, CACHE_HIT(CMD_GET_ERR)),
+    accelCache(
+            CACHE_TTL_ACCEL, [this](AsyncCache<AccelData>::Callback cb) { fetchAccel(cb); }, CACHE_HIT(CMD_GET_ACCEL)),
+    buttonCache(
+            CACHE_TTL_BUTTONS, [this](AsyncCache<ButtonData>::Callback cb) { fetchButtons(cb); },
+            CACHE_HIT(CMD_GET_BUTTONS)),
+    ldsCache(
+            CACHE_TTL_LDS, [this](AsyncCache<LdsScanData>::Callback cb) { fetchLdsScan(cb); },
+            CACHE_HIT(CMD_GET_LDS_SCAN)) {}
+
+#undef CACHE_HIT
 
 void NeatoSerial::begin() {
     uart.begin(NEATO_BAUD_RATE, SERIAL_8N1, NEATO_RX_PIN, NEATO_TX_PIN);
@@ -112,7 +139,8 @@ void NeatoSerial::completeCommand(CommandStatus status, const String& response) 
     String cmd = currentCommand;
     auto cb = currentCallback;
     int qDepth = queueDepthAtStart;
-    size_t respBytes = response.length();
+    String resp = response; // Copy before clearing responseBuffer (response is a ref to it)
+    size_t respBytes = resp.length();
 
     currentCommand = "";
     currentCallback = nullptr;
@@ -125,12 +153,12 @@ void NeatoSerial::completeCommand(CommandStatus status, const String& response) 
 
     // Fire logger hook before user callback with enhanced metadata
     if (loggerCallback)
-        loggerCallback(cmd, status, elapsed, response, qDepth, respBytes);
+        loggerCallback(cmd, status, elapsed, resp, qDepth, respBytes, 0);
 
     // User callback still gets simple bool for backward compatibility
     bool success = (status == CMD_SUCCESS);
     if (cb)
-        cb(success, response);
+        cb(success, resp);
 }
 
 // -- Cached sensor query methods (public API) --------------------------------

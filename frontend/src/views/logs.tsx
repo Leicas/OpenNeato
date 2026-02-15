@@ -20,7 +20,9 @@ function formatBytes(bytes: number): string {
 
 function filenameToDate(name: string): string {
     if (name === "current.jsonl") return "Active";
-    // Filenames like "1700000000.jsonl.hs" — epoch prefix
+    // Boot leftovers: "boot_12345.jsonl.hs" — millis at boot, no real date
+    if (name.startsWith("boot_")) return "Boot archive";
+    // Normal rotation: "1700000000.jsonl.hs" — epoch prefix
     const match = name.match(/^(\d+)\./);
     if (match) {
         const epoch = parseInt(match[1], 10);
@@ -64,18 +66,29 @@ function formatTimestamp(ts: number): string {
     return `${h}:${m}:${s}`;
 }
 
-function parseLogLine(line: string): { ts: number; type: string; summary: string } | null {
+function formatResp(raw: string): string {
+    // Clean up CRLF/CR to LF, trim trailing whitespace
+    return raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+function parseLogLine(line: string): { ts: number; type: string; summary: string; resp: string | null } | null {
     try {
         const obj = JSON.parse(line);
-        const ts = obj.ts ?? 0;
-        const type = obj.type ?? "?";
-        // Build a human-readable summary from remaining fields
+        // Firmware format: { t, typ, d: {...} }
+        const ts = obj.t ?? 0;
+        const type = obj.typ ?? "?";
+        // Build a human-readable summary from the nested "d" object
+        const data = obj.d ?? {};
         const parts: string[] = [];
-        for (const [k, v] of Object.entries(obj)) {
-            if (k === "ts" || k === "type") continue;
+        let resp: string | null = null;
+        for (const [k, v] of Object.entries(data)) {
+            if (k === "resp") {
+                if (typeof v === "string" && v) resp = formatResp(v);
+                continue;
+            }
             parts.push(`${k}=${v}`);
         }
-        return { ts, type, summary: parts.join(" ") };
+        return { ts, type, summary: parts.join(" "), resp };
     } catch {
         return null;
     }
@@ -285,6 +298,12 @@ export function LogsView() {
                                                 <span class="logs-entry-time">{formatTimestamp(line.ts)}</span>
                                             </div>
                                             <div class="logs-entry-body">{line.summary}</div>
+                                            {line.resp && (
+                                                <details class="logs-entry-details">
+                                                    <summary>response</summary>
+                                                    <pre class="logs-entry-resp">{line.resp}</pre>
+                                                </details>
+                                            )}
                                         </div>
                                     );
                                 })}
