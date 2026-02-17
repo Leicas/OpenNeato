@@ -506,20 +506,40 @@ bool parseErrorData(const String& raw, ErrorData& out) {
         out.errorMessage = "";
         return true;
     }
-    // Look for error code pattern
-    out.hasError = true;
+    // Look for error/alert code lines (e.g. "200 -  (UI_ALERT_INVALID)")
+    // The response may contain multiple lines; scan for the first numeric code.
     out.errorMessage = trimmed;
-    // Try to extract numeric code if present
-    int dashPos = trimmed.indexOf(" - ");
-    if (dashPos > 0) {
-        String codeStr = trimmed.substring(0, dashPos);
-        codeStr.trim();
-        int code = codeStr.toInt();
-        if (code > 0) {
-            out.errorCode = code;
-            out.errorMessage = trimmed.substring(dashPos + 3);
-            out.errorMessage.trim();
+    out.hasError = true;
+
+    // Search all lines for a code pattern "NNN - ..."
+    int searchFrom = 0;
+    while (searchFrom < static_cast<int>(trimmed.length())) {
+        int dashPos = trimmed.indexOf(" - ", searchFrom);
+        if (dashPos < 0)
+            break;
+
+        // Walk backwards from dash to find the start of the number
+        int numStart = dashPos - 1;
+        while (numStart >= 0 && trimmed[numStart] >= '0' && trimmed[numStart] <= '9')
+            numStart--;
+        numStart++; // Move back to first digit
+
+        if (numStart < dashPos) {
+            int code = trimmed.substring(numStart, dashPos).toInt();
+            if (code > 0) {
+                out.errorCode = code;
+                // Code 200 = UI_ALERT_INVALID = no error
+                if (code == 200) {
+                    out.hasError = false;
+                    out.errorMessage = "";
+                } else {
+                    out.errorMessage = trimmed.substring(dashPos + 3);
+                    out.errorMessage.trim();
+                }
+                break;
+            }
         }
+        searchFrom = dashPos + 3;
     }
     return true;
 }

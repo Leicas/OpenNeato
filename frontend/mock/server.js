@@ -125,6 +125,7 @@ const state = {
     extPwrPresent: false,
     cleaning: false,
     spotCleaning: false,
+    paused: false,
     uiState: "UIMGR_STATE_IDLE",
     robotState: "ST_C_Idle",
     hasError: false,
@@ -230,12 +231,18 @@ const deriveStates = () => {
     if (state.testMode) {
         state.uiState = "UIMGR_STATE_TESTMODE";
         state.robotState = "ST_C_TestMode";
-    } else if (state.cleaning) {
+    } else if (state.cleaning && !state.paused) {
         state.uiState = "UIMGR_STATE_HOUSECLEANINGRUNNING";
         state.robotState = "ST_C_HouseCleaning";
-    } else if (state.spotCleaning) {
+    } else if (state.cleaning && state.paused) {
+        state.uiState = "UIMGR_STATE_HOUSECLEANINGPAUSED";
+        state.robotState = "ST_C_Standby";
+    } else if (state.spotCleaning && !state.paused) {
         state.uiState = "UIMGR_STATE_SPOTCLEANINGRUNNING";
         state.robotState = "ST_C_SpotCleaning";
+    } else if (state.spotCleaning && state.paused) {
+        state.uiState = "UIMGR_STATE_SPOTCLEANINGPAUSED";
+        state.robotState = "ST_C_Standby";
     } else {
         state.uiState = "UIMGR_STATE_IDLE";
         state.robotState = "ST_C_Idle";
@@ -380,6 +387,7 @@ const routes = {
         if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
         state.cleaning = true;
         state.spotCleaning = false;
+        state.paused = false;
         deriveStates();
         sendOk(res);
     },
@@ -388,14 +396,22 @@ const routes = {
         if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
         state.spotCleaning = true;
         state.cleaning = false;
+        state.paused = false;
         deriveStates();
         sendOk(res);
     },
 
     "POST /api/clean/stop": (_req, res) => {
         if (faults.actions) return sendError(res, "Command queue full", 503);
-        state.cleaning = false;
-        state.spotCleaning = false;
+        if ((state.cleaning || state.spotCleaning) && !state.paused) {
+            // Running -> Paused
+            state.paused = true;
+        } else {
+            // Paused -> Idle
+            state.cleaning = false;
+            state.spotCleaning = false;
+            state.paused = false;
+        }
         deriveStates();
         sendOk(res);
     },

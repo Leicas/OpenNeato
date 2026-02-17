@@ -46,6 +46,13 @@ firmware through REST API. Everything runs on the device itself.
    WiFi reliability: TX power applied before WiFi.begin() for reliable boot
    association, deferred web server start when DHCP is slow, WiFi event logging
    with RSSI/channel/BSSID diagnostics, default TX power raised to 15 dBm.
+10. **Pause/Resume/Stop UX** — Dashboard action buttons adapt to cleaning state: Idle
+   shows House/Spot enabled with Pause disabled; Running shows Pause enabled (first stop
+   goes to Paused state); Paused shows relevant resume button (play icon + "Resume" label)
+   and Stop button enabled. Single `/api/clean/stop` endpoint: first call pauses (RUNNING
+   → PAUSED), second call stops (PAUSED → IDLE). Resume reuses house/spot endpoints to
+   continue. GetErr parser fixed for code 200 (UI_ALERT_INVALID = no error). Mock server
+   updated with pause state transitions.
 
 Details for completed phases are documented in the Architecture, API routes, and
 reference sections below.
@@ -384,13 +391,13 @@ Key states: `POWERUP`, `STANDBY`, `IDLE`, `HOUSECLEANINGRUNNING`,
 `HOUSECLEANINGPAUSED`, `SPOTCLEANINGRUNNING`, `SPOTCLEANINGPAUSED`,
 `DOCKINGRUNNING`, `DOCKINGPAUSED`, `TESTMODE`, `MANUALDRIVING`
 
-### Pause Workaround
-```
-Clean Stop
-SetUIError setalert UI_ALERT_OLD_ERROR   (50ms delay)
-SetUIError clearalert UI_ALERT_OLD_ERROR
-```
-Forces UI state machine to properly recognize paused state.
+### Clean Stop Behavior
+Single `Clean Stop` command transitions:
+- RUNNING → PAUSED (first call)
+- PAUSED → IDLE (second call)
+
+UI state machine settles naturally with 50ms inter-command delay. No additional
+workarounds needed for clean transitions.
 
 ### Supported Robots
 D3, D4, D5, D6, D7 confirmed. D70-D85 likely compatible.
@@ -836,6 +843,9 @@ frontend/
                            #   "Error" state when polling fails.
                            #   Pending timeout (10s) auto-clears stuck pending state.
                            #   Robot error disables House/Spot action buttons.
+                           #   Pause/resume/stop: Idle shows Pause (disabled), Running
+                           #   shows Pause (enabled), Paused shows play icon + "Resume"
+                           #   on relevant button (House or Spot) and Stop enabled.
       settings.tsx         # Settings view: appearance theme selector, timezone
                            #   dropdown with POSIX TZ presets, robot time display,
                            #   debug logging toggle (fetches/updates via settings API)
@@ -851,12 +861,14 @@ frontend/
     assets/
       robot.svg            # Main robot illustration (30KB, vectorized 4-layer greyscale)
       icons/               # SVG icons loaded via ?raw import (alert, back, battery,
-                           #   bolt, check, clock, database, gear, house, moon,
-                           #   power, sparkle, spot, stop, sun, tag, wifi, wifi-off)
+                           #   bolt, check, clock, database, gear, house, idle, moon,
+                           #   pause, play, power, sparkle, spot, stop, sun, tag, wifi, wifi-off)
   mock/
     server.js              # Mock API server (plain Node.js http, zero deps),
                            #   SCENARIO selector for quick state switching,
                            #   stateful simulation of all REST endpoints.
+                           #   Pause state support: POST /api/clean/stop transitions
+                           #   RUNNING → PAUSED → IDLE on successive calls.
                            #   Fault injection via scenario codes (fa, fs, fl,
                            #   fp, fal, etc.) with pipe-separated combining.
                            #   Reboot simulation via mutable bootTime reset on

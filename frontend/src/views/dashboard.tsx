@@ -8,6 +8,8 @@ import databaseSvg from "../assets/icons/database.svg?raw";
 import gearSvg from "../assets/icons/gear.svg?raw";
 import houseSvg from "../assets/icons/house.svg?raw";
 import idleSvg from "../assets/icons/idle.svg?raw";
+import pauseSvg from "../assets/icons/pause.svg?raw";
+import playSvg from "../assets/icons/play.svg?raw";
 import sparkleSvg from "../assets/icons/sparkle.svg?raw";
 import spotSvg from "../assets/icons/spot.svg?raw";
 import stopSvg from "../assets/icons/stop.svg?raw";
@@ -144,7 +146,9 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
         },
         [actionErrorStack],
     );
-    const isCleaning = state.data?.uiState?.includes("CLEANING") ?? false;
+    const isRunning = state.data?.uiState?.includes("CLEANINGRUNNING") ?? false;
+    const isPaused = state.data?.uiState?.includes("CLEANINGPAUSED") ?? false;
+    const isCleaning = isRunning || isPaused;
     const isSpot = state.data?.uiState?.includes("SPOT") ?? false;
     const hasRobotError = error.data?.hasError ?? false;
     const charging = charger.data?.chargingActive ?? false;
@@ -269,19 +273,23 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                         type="button"
                         class={`action-btn primary${pending ? " pending" : ""}`}
                         onClick={() => handleAction(api.cleanHouse)}
-                        disabled={offline || isCleaning || pending || hasRobotError}
+                        disabled={
+                            offline || (isCleaning && !isPaused) || pending || hasRobotError || (isPaused && isSpot)
+                        }
                     >
-                        <Icon svg={houseSvg} />
-                        House
+                        <Icon svg={isPaused && !isSpot ? playSvg : houseSvg} />
+                        {isPaused && !isSpot ? "Resume" : "House"}
                     </button>
                     <button
                         type="button"
                         class={`action-btn${pending ? " pending" : ""}`}
                         onClick={() => handleAction(api.cleanSpot)}
-                        disabled={offline || isCleaning || pending || hasRobotError}
+                        disabled={
+                            offline || (isCleaning && !isPaused) || pending || hasRobotError || (isPaused && !isSpot)
+                        }
                     >
-                        <Icon svg={spotSvg} />
-                        Spot
+                        <Icon svg={isPaused && isSpot ? playSvg : spotSvg} />
+                        {isPaused && isSpot ? "Resume" : "Spot"}
                     </button>
                     <button
                         type="button"
@@ -289,8 +297,8 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                         onClick={() => handleAction(api.cleanStop)}
                         disabled={offline || !isCleaning || pending}
                     >
-                        <Icon svg={stopSvg} />
-                        Stop
+                        <Icon svg={isPaused ? stopSvg : pauseSvg} />
+                        {isPaused ? "Stop" : "Pause"}
                     </button>
                 </div>
             </div>
