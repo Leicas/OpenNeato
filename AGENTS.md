@@ -72,7 +72,10 @@ firmware through REST API. Everything runs on the device itself.
    (`SCHEDULE_WINDOW_MINS`), guards against duplicate triggers and robot-busy states.
    Schedule events logged to DataLogger (trigger/skipped/failed). Frontend schedule page
    (`#/schedule`) navigated from Settings > Robot. `CMD_UNSUPPORTED` status added to
-   serial state machine. Settings view refactored into submodules (`settings/` directory).
+       serial state machine. Settings view refactored into submodules (`settings/` directory).
+12. **WiFi modem sleep** — WiFi radio powers down between AP beacons (~100ms) via
+    `esp_wifi_set_ps(WIFI_PS_MIN_MODEM)`, reducing idle current from ~120mA to
+    ~15-20mA. WiFi association stays active (AP buffers frames). TX power unaffected.
 
 Details for completed phases are documented in the Architecture, API routes, and
 reference sections below.
@@ -108,8 +111,9 @@ and add a one-line summary to the completed list above. Do this before committin
 
 ### LIDAR and mapping
 - Read LIDAR distance data via GetLDSScan
-- Render real-time 2D maps in the web UI
-- Store and display historical maps
+- Build 2D occupancy maps on the ESP32 using LIDAR + odometry data
+- Store maps on SPIFFS for persistence across reboots
+- Web UI renders stored maps (browser is display-only, ESP32 does the processing)
 - Explore new areas by combining manual drive with live LIDAR feedback
 
 ### Push notifications via ntfy.sh
@@ -779,6 +783,9 @@ firmware/
                            #   connect/fail, reconnect ok/fail with RSSI/channel/
                            #   BSSID/attempt/backoff/duration), applyTxPower()
                            #   from NVS before WiFi.begin() for reliable association.
+                           #   WiFi modem sleep: esp_wifi_set_ps(WIFI_PS_MIN_MODEM)
+                           #   enabled in connectToWiFi() — radio sleeps between AP
+                           #   beacons, ~120mA → ~15-20mA idle. Association stays active.
                            #   wifiManager.setHostname() at boot from settings
     firmware_manager.h/cpp # Firmware update business logic using ESP32 Update.h,
                            #   no web server dependency — pure update lifecycle:
@@ -825,6 +832,7 @@ firmware/
                            #   HEAP_WATCHDOG_DURATION_MS (10s). Prevents unresponsive
                            #   state from memory exhaustion (e.g. socket leak after
                            #   UART desync cascade).
+
     web_server.h/cpp       # Serves embedded frontend assets from PROGMEM, registers
                            #   all REST API routes (sensor GET, action POST),
                            #   firmware routes (version, OTA upload), log routes

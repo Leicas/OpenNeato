@@ -1,4 +1,5 @@
 #include "wifi_manager.h"
+#include <esp_wifi.h>
 
 WiFiManager::WiFiManager(Preferences& prefs) :
     prefs(prefs), menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
@@ -274,7 +275,10 @@ bool WiFiManager::connectToWiFi(const String& ssid, const String& password) {
 
     WiFi.setHostname(hostname.c_str());
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false); // Disable modem sleep — keeps radio always on
+    // Enable modem sleep — radio powers down between AP beacons (~100ms),
+    // reducing idle current from ~120mA to ~15-20mA. WiFi association stays
+    // active; AP buffers frames during sleep. TX power is unaffected.
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
     applyTxPower(); // Set before WiFi.begin — improves association reliability
     WiFi.begin(ssid.c_str(), password.c_str());
