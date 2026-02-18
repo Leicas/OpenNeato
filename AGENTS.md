@@ -57,6 +57,14 @@ firmware through REST API. Everything runs on the device itself.
    (RUNNING → PAUSED), second call stops (PAUSED → IDLE). Resume reuses
    `?action=house`/`?action=spot` to continue. GetErr parser fixed for code 200 (UI_ALERT_INVALID = no error). Mock server
    updated with pause state transitions.
+   SetUIError dance: `Clean Stop` alone doesn't update the D5 UI state machine —
+   firmware enqueues `Clean Stop` + `SetUIError setalert UI_ALERT_OLD_ERROR` +
+   `SetUIError clearalert UI_ALERT_OLD_ERROR` as a 3-command sequence to force
+   the state machine into reporting `CLEANINGPAUSED`.
+   Bare `Clean` command: house start and resume both use bare `Clean` (no `House`
+   flag) to match physical button behavior — avoids "new cleaning" sounds on
+   resume. `Clean House` would explicitly start a new clean. Spot uses `Clean Spot`
+   for both start and resume.
 11. **ESP32-managed schedule** — 7-day cleaning schedule managed entirely on ESP32 (robot
    serial GetSchedule/SetSchedule NOT used — D5 4.6.0 doesn't support them). NVS storage
    with flat keys (`scheduleEnabled`, `sched{0-6}{Hour,Min,On}`, Mon=0..Sun=6). Scheduler
@@ -163,9 +171,11 @@ Robot GND -> ESP GND. The robot provides 3.3V to power the ESP.
   - Without argument: prints list of all commands
   - With command name: prints help for that specific command
 - `Clean [House|Spot|Stop]` — Cleaning control
-  - `House` (Optional) — Equivalent to pressing 'Start' button once. Starts house cleaning (default)
-  - `Spot` (Optional) — Starts a spot clean
-  - `Stop` — Stop Cleaning
+  - *(no flag)* — Equivalent to pressing 'Start' button. Starts house cleaning
+    or resumes a paused house clean without triggering "new cleaning" sounds
+  - `House` (Optional) — Explicitly starts a NEW house clean (triggers start sound)
+  - `Spot` (Optional) — Starts or resumes a spot clean
+  - `Stop` — Stop Cleaning (first call pauses, second call stops)
 - `GetVersion` — Software/hardware version info
 - `GetCharger` — Battery and charging data
 - `GetAnalogSensors [raw] [stats]` — A2D analog sensor readings
@@ -458,8 +468,14 @@ Single `Clean Stop` command transitions:
 - RUNNING → PAUSED (first call)
 - PAUSED → IDLE (second call)
 
-UI state machine settles naturally with 50ms inter-command delay. No additional
-workarounds needed for clean transitions.
+**SetUIError dance required for pause**: The D5 (firmware 4.6.0) does not
+transition its UI state machine to `CLEANINGPAUSED` after a bare `Clean Stop` —
+`GetState` keeps reporting `CLEANINGRUNNING` even though the robot physically
+stops. A `SetUIError setalert UI_ALERT_OLD_ERROR` + `SetUIError clearalert
+UI_ALERT_OLD_ERROR` sequence immediately after `Clean Stop` nudges the state
+machine into reporting the correct paused state. The firmware enqueues all three
+commands atomically (50ms inter-command delay handled by the serial queue).
+This workaround was discovered via ESPHome community integrations.
 
 ### Supported Robots
 D3, D4, D5, D6, D7 confirmed. D70-D85 likely compatible.
@@ -870,11 +886,11 @@ firmware/
                            #   fromFields()/fromJson() for deserialization. Used by
                            #   neato_commands, data_logger, system_manager, settings_manager,
                            #   web_server.
-    neato_commands.h/cpp   # Command enum (24 commands), response structs (VersionData,
+    neato_commands.h/cpp   # Command enum (27 commands), response structs (VersionData,
                            #   ChargerData, AnalogSensorData, DigitalSensorData,
                            #   MotorData, RobotState, ErrorData, AccelData, ButtonData,
                            #   LdsScanData), CSV parsers, toFields() implementations,
-                           #   SoundId enum
+                           #   SoundId enum, SetUIError setalert/clearalert commands
                            #   CMD_UNSUPPORTED status added to serial state machine.
     neato_serial.h/cpp     # UART command queue state machine (IDLE -> SENDING ->
                            #   WAITING_RESPONSE -> INTER_DELAY -> IDLE), typed

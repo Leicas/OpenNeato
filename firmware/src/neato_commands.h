@@ -23,6 +23,7 @@ enum NeatoCommand {
     CMD_GET_CAL_INFO,
     CMD_GET_LIFE_STAT_LOG,
     CMD_GET_WARRANTY,
+    CMD_CLEAN,
     CMD_CLEAN_HOUSE,
     CMD_CLEAN_SPOT,
     CMD_CLEAN_STOP,
@@ -31,7 +32,9 @@ enum NeatoCommand {
     CMD_SET_LDS_ROTATION_ON,
     CMD_SET_LDS_ROTATION_OFF,
     CMD_PLAY_SOUND,
-    CMD_SET_TIME
+    CMD_SET_TIME,
+    CMD_SET_UI_ERROR_SET_ALERT,
+    CMD_SET_UI_ERROR_CLEAR_ALERT
 };
 
 // -- Sound IDs ---------------------------------------------------------------

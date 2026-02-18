@@ -35,6 +35,8 @@ const char *commandToString(NeatoCommand cmd) {
             return "GetLifeStatLog";
         case CMD_GET_WARRANTY:
             return "GetWarranty";
+        case CMD_CLEAN:
+            return "Clean";
         case CMD_CLEAN_HOUSE:
             return "Clean House";
         case CMD_CLEAN_SPOT:
@@ -53,6 +55,10 @@ const char *commandToString(NeatoCommand cmd) {
             return "PlaySound";
         case CMD_SET_TIME:
             return "SetTime";
+        case CMD_SET_UI_ERROR_SET_ALERT:
+            return "SetUIError setalert UI_ALERT_OLD_ERROR";
+        case CMD_SET_UI_ERROR_CLEAR_ALERT:
+            return "SetUIError clearalert UI_ALERT_OLD_ERROR";
         default:
             return "";
     }
