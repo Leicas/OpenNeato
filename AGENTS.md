@@ -94,23 +94,21 @@ and add a one-line summary to the completed list above. Do this before committin
 - TestMode enable/disable for direct motor control
 
 ### OTA update via GitHub Releases
-- Background update checker on ESP32: periodic HTTP GET to GitHub Releases API
-  to compare latest release tag against current `FIRMWARE_VERSION`
-- Configurable check interval stored in NVS (default: every 24h)
-- Settings API: `GET/PUT /api/firmware/settings` for check interval,
-  enable/disable auto-check, GitHub repo URL
-- When update available: push notification via ntfy.sh with direct link to
-  the device's firmware update page (e.g. `http://neato.home/#/firmware`)
+- Entirely browser-side — ESP32 has no background update checker and makes no
+  outbound connections to GitHub
+- On firmware page load, the browser fetches the GitHub Releases API (HTTPS
+  handled by browser, not by ESP32) and compares the latest release tag against
+  the device's current `FIRMWARE_VERSION` (obtained from `GET /api/firmware/version`)
+- GitHub repo URL configurable in settings (stored in NVS)
 - Web UI firmware page: shows current version, available version, changelog,
   one-click update button
-- Update flow entirely browser-side:
+- Update flow:
   1. Browser fetches GitHub Releases API (HTTPS handled by browser)
   2. Browser downloads `.bin` asset from the release
   3. Browser uploads to `POST /api/firmware/update?hash=<md5>`
   4. Device reboots, auto-rollback protects against bad firmware
-- ESP32 never makes outbound HTTPS connections to GitHub — the background
-  checker uses the GitHub API over HTTPS only for version comparison (small
-  JSON response); the heavy binary download happens in the browser
+- ESP32 never makes outbound HTTPS connections — all GitHub communication
+  happens in the browser
 
 ### LIDAR and mapping
 - Read LIDAR distance data via GetLDSScan
@@ -130,10 +128,10 @@ and add a one-line summary to the completed list above. Do this before committin
   - Stuck or pickup detected (wheel extended, bumper stuck)
   - Returning to base due to low battery
   - Charging started / completed
-  - OTA update available / applied / failed
+  - OTA update applied / failed
   - Device boot / unexpected restart
 - User-configurable settings stored in NVS:
-  - ntfy server URL (default: `https://ntfy.sh`, supports self-hosted instances)
+  - ntfy server URL (default: `http://ntfy.sh`, supports self-hosted instances)
   - Topic name
   - Enable/disable per notification category
   - Priority levels per category (min, low, default, high, urgent)
