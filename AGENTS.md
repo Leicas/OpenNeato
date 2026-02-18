@@ -647,7 +647,7 @@ Laser_RPM,52428 Charger_MaxPWM,65536 Charger_PWM,-858993460 Charger_mAH,52428
 - Collapsible categories: each section is a `SettingsCategory` component with icon,
   title, and chevron. Expand/collapse animated via CSS `grid-template-rows` (0fr→1fr).
   Categories: Appearance (palette icon, default open), Network (wifi icon),
-  Robot (robot vacuum icon), Diagnostics (stethoscope icon).
+  Robot (robot vacuum icon), Firmware (bolt icon), Diagnostics (stethoscope icon).
 - Appearance category: 3-button theme selector (Auto, Light, Dark)
 - Theme preference persisted in localStorage, defaults to system if unset
 - Network category: hostname text input (max 32 chars, alphanumeric + hyphens),
@@ -655,6 +655,10 @@ Laser_RPM,52428 Charger_MaxPWM,65536 Charger_PWM,-858993460 Charger_mAH,52428
 - Robot category: timezone dropdown with 16 common POSIX TZ presets (UTC offset shown),
   robot time display (dimmed small text from `GET /api/system` `time` field adjusted
   by selected TZ offset), UART Pins (two number inputs TX/RX 0–21, no duplicates)
+- Firmware category: shows current firmware version (tag icon) + chip model (bolt icon).
+  File picker for .bin upload, client-side chip validation (parses ESP32 image header
+  byte 12 to detect target chip, rejects firmware built for wrong chip), MD5 hash
+  computation, upload with progress bar via XMLHttpRequest, auto-reboot after success.
 - Diagnostics category: debug logging toggle, "Logs" nav row (database icon + chevron)
 - Unified Save button between categories and Device section: "Save" for non-reboot
   changes, "Save & Reboot" when hostname or pins changed — shows confirm dialog
@@ -709,6 +713,9 @@ Laser_RPM,52428 Charger_MaxPWM,65536 Charger_PWM,-858993460 Charger_mAH,52428
 - `applyTheme()` in app.tsx sets the correct class on `document.documentElement`
 - Theme persisted to localStorage only on user interaction (not on initial mount)
 - All theme-sensitive values use CSS variables (surfaces, cards, buttons, text)
+- Dynamic `<meta name="theme-color">` updated by `applyTheme()` to match active
+  theme (`#161618` dark, `#ffffff` light) — controls PWA/mobile status bar color.
+  System theme tracks OS preference changes via `matchMedia` listener.
 
 **Responsive breakpoints:**
 ```css
@@ -1051,7 +1058,7 @@ frontend/
 | Method | Path | Handler |
 |--------|------|---------|
 | GET | `/*` (static) | Serve any embedded frontend asset from WEB_ASSETS[] registry (gzip) |
-| GET | `/api/firmware/version` | Current firmware version (from FIRMWARE_VERSION define) |
+| GET | `/api/firmware/version` | Current firmware version + chip model (ESP.getChipModel()) |
 | POST | `/api/firmware/update?hash=<md5>` | Firmware upload (multipart, optional MD5 validation) |
 | GET | `/api/version` | `NeatoSerial::getVersion` -> JSON |
 | GET | `/api/charger` | `NeatoSerial::getCharger` -> JSON |

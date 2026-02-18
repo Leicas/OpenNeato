@@ -10,15 +10,26 @@ import { SettingsView } from "./views/settings";
 
 type Theme = "system" | "dark" | "light";
 
+const THEME_DARK = "#161618";
+const THEME_LIGHT = "#ffffff";
+
+function setThemeColor(color: string) {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
+}
+
 function applyTheme(theme: Theme) {
     const html = document.documentElement;
     html.classList.remove("light", "system-theme");
     if (theme === "light") {
         html.classList.add("light");
+        setThemeColor(THEME_LIGHT);
     } else if (theme === "system") {
         html.classList.add("system-theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        setThemeColor(prefersDark ? THEME_DARK : THEME_LIGHT);
+    } else {
+        setThemeColor(THEME_DARK);
     }
-    // "dark" = no extra class, just :root defaults
 }
 
 function loadTheme(): Theme {
@@ -37,6 +48,14 @@ export function App() {
             localStorage.setItem("theme", theme);
         }
         themeInitialized.current = true;
+
+        // When using system theme, track OS preference changes for status bar color
+        if (theme === "system") {
+            const mq = window.matchMedia("(prefers-color-scheme: dark)");
+            const onChange = (e: MediaQueryListEvent) => setThemeColor(e.matches ? THEME_DARK : THEME_LIGHT);
+            mq.addEventListener("change", onChange);
+            return () => mq.removeEventListener("change", onChange);
+        }
     }, [theme]);
 
     const state = usePolling<StateData>(api.getState, 2000);
@@ -51,7 +70,7 @@ export function App() {
                 <DashboardView system={system} firmware={firmware} error={error} state={state} charger={charger} />
             </Route>
             <Route path="/settings">
-                <SettingsView theme={theme} onThemeChange={setTheme} system={system.data} />
+                <SettingsView theme={theme} onThemeChange={setTheme} system={system.data} firmware={firmware.data} />
             </Route>
             <Route path="/schedule">
                 <ScheduleView />
