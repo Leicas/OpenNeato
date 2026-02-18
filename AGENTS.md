@@ -790,7 +790,8 @@ firmware/
     firmware_manager.h/cpp # Firmware update business logic using ESP32 Update.h,
                            #   no web server dependency — pure update lifecycle:
                            #   beginUpdate(), writeChunk(), endUpdate(),
-                           #   getFirmwareVersion(), MD5 validation, auto-reboot,
+                           #   getFirmwareVersion(), getChipModel() (ESP.getChipModel()),
+                           #   MD5 validation, auto-reboot,
                            #   isInProgress()/getProgress()/getError() queries,
                            #   LogCallback hook. Routes registered by WebServer.
     settings_manager.h/cpp # Unified settings management: owns all user-configurable
@@ -951,11 +952,14 @@ frontend/
     types.ts               # TypeScript interfaces (ChargerData, AnalogSensorData,
                            #   LogFileInfo, SettingsData, etc.)
     api.ts                 # Typed fetch wrappers for all API endpoints (get/post/put/del
-                           #   with server error parsing from JSON body)
+                           #   with server error parsing from JSON body),
+                           #   uploadFirmware() via XMLHttpRequest with progress callback
     style.css              # Single CSS file with all styles + responsive breakpoints
     svg.d.ts               # TypeScript declaration for *.svg?raw imports
     hooks/
-      use-polling.ts       # Generic polling hook with configurable interval
+      use-polling.ts       # Generic polling hook with configurable interval,
+                           #   pauses when browser tab is hidden (visibilitychange),
+                           #   resumes immediately on tab return
       use-route.ts         # Hash-based routing hook (reads/writes location.hash)
       use-fetch.ts         # Generic one-shot fetch hook (loading/data/error state)
     components/
@@ -983,23 +987,30 @@ frontend/
                            #   shows Pause (enabled), Paused shows play icon + "Resume"
                            #   on relevant button (House or Spot) and Stop enabled.
       settings.tsx         # Settings view: collapsible categories (Appearance,
-                           #   Network, Robot, Diagnostics) with icons and animated
-                           #   expand/collapse via CSS grid-template-rows. Each
-                           #   category is a SettingsCategory component with icon,
+                           #   Network, Robot, Firmware, Diagnostics) with icons and
+                           #   animated expand/collapse via CSS grid-template-rows.
+                           #   Each category is a SettingsCategory component with icon,
                            #   title, and chevron. Appearance theme selector, timezone
                            #   dropdown with POSIX TZ presets, robot time display,
                            #   debug logging toggle (fetches/updates via settings API)
                            #   Unified settings page with single Save button
                            #   (auto-detects reboot-required changes). Configurable
-                           #   hostname, UART pins, WiFi TX power. Device restart
-                           #   and factory reset with type-to-confirm. Unsaved
-                           #   changes guards (beforeunload + in-app navigation).
+                           #   hostname, UART pins, WiFi TX power. Firmware category:
+                           #   shows current version + chip model, file picker for .bin
+                           #   upload, chip validation (parses ESP32 image header byte 12
+                           #   to reject wrong-chip firmware), progress bar during upload,
+                           #   auto-reboot after success. Device restart and factory
+                           #   reset with type-to-confirm. Unsaved changes guards
+                           #   (beforeunload + in-app navigation).
       settings/            # Settings view submodules (extracted from settings.tsx)
         constants.ts       # TIMEZONE_PRESETS, TX_POWER_PRESETS arrays
         helpers.ts         # findPresetLabel(), formatRobotTime() utilities
         settings-category.tsx  # Collapsible category component
         use-reboot.ts      # Reboot polling hook (polls /api/system until uptime drops)
         use-settings-form.ts   # Settings form state, dirty detection, save logic
+        use-firmware-upload.ts # Firmware upload hook: file selection, ESP32 chip ID
+                           #   validation from .bin header, MD5 hash computation,
+                           #   upload with progress via XMLHttpRequest, reboot flow
       schedule.tsx         # Schedule view: 7-day Mon-Sun cleaning schedule,
                            #   per-day toggle + time picker (hour/minute selects),
                            #   master enable/disable toggle, uses flat settings keys.
@@ -1018,7 +1029,9 @@ frontend/
     server.js              # Mock API server (plain Node.js http, zero deps),
                            #   SCENARIO selector for quick state switching,
                            #   stateful simulation of all REST endpoints.
-                            #   Pause state support: POST /api/clean?action=stop
+                           #   Request logging via Vite logger (timestamp + tag,
+                           #   color-coded by status: info/warn/error).
+                           #   Pause state support: POST /api/clean?action=stop
                            #   transitions RUNNING → PAUSED → IDLE on successive calls.
                            #   TestMode and LDS rotation routes with query params.
                            #   Fault injection via scenario codes (fa, fs, fl,

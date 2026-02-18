@@ -7,6 +7,7 @@ export interface PollResult<T> {
 
 // Polls continuously: waits for the previous request to complete, then waits
 // at least intervalMs before starting the next one. Never overlaps requests.
+// Pauses when the browser tab is hidden and resumes immediately on return.
 export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number): PollResult<T> {
     const [data, setData] = useState<T | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -16,8 +17,11 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number): Po
     useEffect(() => {
         let active = true;
         let timer: ReturnType<typeof setTimeout>;
+        let polling = false; // true while a fetch is in-flight
 
         const poll = async () => {
+            if (document.hidden) return;
+            polling = true;
             const start = Date.now();
             try {
                 const result = await fetcherRef.current();
@@ -31,17 +35,32 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number): Po
                     setError(e instanceof Error ? e.message : "fetch failed");
                 }
             }
-            if (active) {
+            polling = false;
+            if (active && !document.hidden) {
                 const elapsed = Date.now() - start;
                 const delay = Math.max(0, intervalMs - elapsed);
                 timer = setTimeout(poll, delay);
             }
         };
 
+        const onVisibilityChange = () => {
+            if (!active) return;
+            if (document.hidden) {
+                // Tab went to background — cancel pending timer
+                clearTimeout(timer);
+            } else if (!polling) {
+                // Tab returned — poll immediately
+                poll();
+            }
+        };
+
+        document.addEventListener("visibilitychange", onVisibilityChange);
         poll();
+
         return () => {
             active = false;
             clearTimeout(timer);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
         };
     }, [intervalMs]);
 

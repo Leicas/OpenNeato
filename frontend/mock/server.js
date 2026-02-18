@@ -28,6 +28,23 @@ const jsonResponse = (res, data, status = 200) => {
 const sendOk = (res) => jsonResponse(res, { ok: true });
 const sendError = (res, msg, status = 500) => jsonResponse(res, { error: msg }, status);
 
+// Request logging — captures original writeHead to log via Vite's logger
+let viteLogger = null;
+
+const logRequest = (req, res) => {
+    if (!viteLogger) return;
+    const start = Date.now();
+    const origWriteHead = res.writeHead.bind(res);
+    res.writeHead = (status, ...args) => {
+        const ms = Date.now() - start;
+        const msg = `${req.method} ${req.url} \x1b[90m${status} ${ms}ms\x1b[0m`;
+        if (status >= 500) viteLogger.error(msg, { timestamp: true });
+        else if (status >= 400) viteLogger.warn(msg, { timestamp: true });
+        else viteLogger.info(msg, { timestamp: true });
+        return origWriteHead(status, ...args);
+    };
+};
+
 const readBody = (req) =>
     new Promise((resolve) => {
         let body = "";
@@ -513,7 +530,7 @@ const routes = {
     },
 
     "GET /api/firmware/version": (_req, res) => {
-        jsonResponse(res, { version: getVersion() });
+        jsonResponse(res, { version: getVersion(), chip: "ESP32-C3" });
     },
 };
 
@@ -547,6 +564,20 @@ const handleRequest = async (req, res) => {
             return sendOk(res);
         }
         return sendError(res, "method not allowed", 405);
+    }
+
+    // POST /api/firmware/update — simulate firmware upload and reboot
+    if (req.method === "POST" && path === "/api/firmware/update") {
+        await new Promise((resolve) => {
+            req.on("data", () => {}); // drain body
+            req.on("end", resolve);
+        });
+        await new Promise((r) => setTimeout(r, rand(1000, 2000)));
+        sendOk(res);
+        setTimeout(() => {
+            bootTime = Date.now();
+        }, 2000);
+        return;
     }
 
     // PUT /api/settings — partial update, simulate NVS write delay
@@ -614,9 +645,12 @@ function mockApiPlugin() {
     return {
         name: "mock-api",
         configureServer(server) {
+            viteLogger = server.config.logger;
             server.middlewares.use(async (req, res, next) => {
                 // Only intercept /api/* requests
                 if (!req.url.startsWith("/api")) return next();
+
+                logRequest(req, res);
 
                 // Latency simulation (50-200ms)
                 await new Promise((r) => setTimeout(r, rand(50, 200)));
