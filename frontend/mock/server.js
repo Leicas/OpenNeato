@@ -566,13 +566,29 @@ const handleRequest = async (req, res) => {
         return sendError(res, "method not allowed", 405);
     }
 
-    // POST /api/firmware/update — simulate firmware upload and reboot
+    // POST /api/firmware/update — validate chip ID, simulate flash write, reboot
     if (req.method === "POST" && path === "/api/firmware/update") {
+        const MOCK_CHIP_ID = 5; // ESP32-C3
+        const chunks = [];
         await new Promise((resolve) => {
-            req.on("data", () => {}); // drain body
+            req.on("data", (chunk) => chunks.push(chunk));
             req.on("end", resolve);
         });
-        await new Promise((r) => setTimeout(r, rand(1000, 2000)));
+        // Extract file bytes from multipart body (skip boundary/headers, find file content)
+        const body = Buffer.concat(chunks);
+        const bodyStr = body.toString("binary");
+        const headerEnd = bodyStr.indexOf("\r\n\r\n");
+        if (headerEnd !== -1) {
+            const fileStart = headerEnd + 4;
+            if (body.length >= fileStart + 16) {
+                const chipId = body[fileStart + 12];
+                if (chipId !== MOCK_CHIP_ID) {
+                    return sendError(res, "Firmware chip mismatch: file targets a different ESP32 variant", 400);
+                }
+            }
+        }
+        // Simulate flash write: 3-5s delay
+        await new Promise((r) => setTimeout(r, rand(3000, 5000)));
         sendOk(res);
         setTimeout(() => {
             bootTime = Date.now();

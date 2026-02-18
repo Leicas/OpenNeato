@@ -913,6 +913,143 @@ body {
     outline: 2px solid var(--accent, #5ac8fa);
 }
 
+/* Firmware update section */
+
+.fw-info-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.fw-info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+}
+
+.fw-info-item span:first-child {
+    display: flex;
+}
+
+.fw-info-item svg {
+    width: 14px;
+    height: 14px;
+    opacity: 0.5;
+}
+
+.fw-file-label {
+    display: block;
+    cursor: pointer;
+}
+
+.fw-file-input {
+    display: none;
+}
+
+.fw-file-btn {
+    display: block;
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fw-file-btn.has-file {
+    color: var(--text);
+    border-style: solid;
+}
+
+.fw-file-label:active .fw-file-btn {
+    opacity: 0.7;
+}
+
+.fw-file-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.fw-chip-error {
+    color: var(--red);
+    font-weight: 600;
+}
+
+.fw-upload-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-accent);
+    border-radius: 12px;
+    background: rgba(249, 235, 178, 0.08);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.fw-upload-btn:active {
+    opacity: 0.7;
+}
+
+.fw-progress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fw-progress-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.fw-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+}
+
+.fw-progress-fill.indeterminate {
+    width: 40%;
+    animation: fw-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes fw-indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(350%);
+    }
+}
+
+.fw-progress-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-align: center;
+}
+
 /* Unified save button */
 
 .settings-save-btn {

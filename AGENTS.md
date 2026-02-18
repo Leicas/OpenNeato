@@ -30,7 +30,10 @@ firmware through REST API. Everything runs on the device itself.
    (current.jsonl survives reboots, rotates at 32KB when NTP synced). Frontend sorts
    logs newest-first.
 4. **Firmware management** — Custom FirmwareManager (Update.h), MD5 validation,
-   safe boot checkpoint, dual OTA partition auto-rollback
+   server-side chip ID validation (rejects wrong-chip binaries before flash write),
+   safe boot checkpoint, dual OTA partition auto-rollback. Settings page Firmware
+   category: version + chip display, file picker with client-side chip validation,
+   smoothed upload progress bar, auto-reboot after success.
 5. **Mock API server** — Stateful Node.js dev server (Vite plugin), all REST
    endpoints, realistic responses. Edit state object directly for testing scenarios.
 6. **Web UI dashboard** — Preact SPA with dark/light theme, mobile-first responsive
@@ -647,7 +650,7 @@ Laser_RPM,52428 Charger_MaxPWM,65536 Charger_PWM,-858993460 Charger_mAH,52428
 - Collapsible categories: each section is a `SettingsCategory` component with icon,
   title, and chevron. Expand/collapse animated via CSS `grid-template-rows` (0fr→1fr).
   Categories: Appearance (palette icon, default open), Network (wifi icon),
-  Robot (robot vacuum icon), Firmware (bolt icon), Diagnostics (stethoscope icon).
+  Robot (robot vacuum icon), Firmware (chip icon), Diagnostics (stethoscope icon).
 - Appearance category: 3-button theme selector (Auto, Light, Dark)
 - Theme preference persisted in localStorage, defaults to system if unset
 - Network category: hostname text input (max 32 chars, alphanumeric + hyphens),
@@ -655,10 +658,15 @@ Laser_RPM,52428 Charger_MaxPWM,65536 Charger_PWM,-858993460 Charger_mAH,52428
 - Robot category: timezone dropdown with 16 common POSIX TZ presets (UTC offset shown),
   robot time display (dimmed small text from `GET /api/system` `time` field adjusted
   by selected TZ offset), UART Pins (two number inputs TX/RX 0–21, no duplicates)
-- Firmware category: shows current firmware version (tag icon) + chip model (bolt icon).
+- Firmware category: shows current firmware version (tag icon) + chip model (chip icon).
   File picker for .bin upload, client-side chip validation (parses ESP32 image header
-  byte 12 to detect target chip, rejects firmware built for wrong chip), MD5 hash
-  computation, upload with progress bar via XMLHttpRequest, auto-reboot after success.
+  byte 12 to detect target chip, rejects firmware built for wrong chip), server-side
+  chip validation (compares binary header chip ID against esp_chip_info at first chunk,
+  aborts before flash write on mismatch), MD5 hash computation, upload with smoothed
+  progress bar via XMLHttpRequest (caps at 90% during upload, holds at "Writing
+  firmware..." while server writes flash, jumps to 100% on response), auto-reboot
+  after success. Bootloader provides third safety net via
+  bootloader_common_check_chip_validity on boot with auto-rollback.
 - Diagnostics category: debug logging toggle, "Logs" nav row (database icon + chevron)
 - Unified Save button between categories and Device section: "Save" for non-reboot
   changes, "Save & Reboot" when hostname or pins changed — shows confirm dialog
@@ -798,7 +806,10 @@ firmware/
                            #   no web server dependency — pure update lifecycle:
                            #   beginUpdate(), writeChunk(), endUpdate(),
                            #   getFirmwareVersion(), getChipModel() (ESP.getChipModel()),
-                           #   MD5 validation, auto-reboot,
+                           #   MD5 validation, server-side chip ID validation
+                           #   (validateChip() compares image header byte 12 against
+                           #   esp_chip_info, aborts before flash write on mismatch),
+                           #   auto-reboot,
                            #   isInProgress()/getProgress()/getError() queries,
                            #   LogCallback hook. Routes registered by WebServer.
     settings_manager.h/cpp # Unified settings management: owns all user-configurable
@@ -1029,9 +1040,9 @@ frontend/
     assets/
       robot.svg            # Main robot illustration (30KB, vectorized 4-layer greyscale)
       icons/               # SVG icons loaded via ?raw import (alert, back, battery,
-                           #   bolt, check, clock, database, gear, house, idle, moon,
-                           #   palette, pause, play, power, robot, sparkle, spot,
-                           #   stethoscope, stop, sun, tag, wifi, wifi-off, calendar)
+                           #   bolt, calendar, check, chip, clock, database, gear,
+                           #   house, idle, moon, palette, pause, play, power, robot,
+                           #   sparkle, spot, stethoscope, stop, sun, tag, wifi, wifi-off)
   mock/
     server.js              # Mock API server (plain Node.js http, zero deps),
                            #   SCENARIO selector for quick state switching,

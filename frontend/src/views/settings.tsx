@@ -3,6 +3,7 @@ import { api } from "../api";
 import alertSvg from "../assets/icons/alert.svg?raw";
 import backSvg from "../assets/icons/back.svg?raw";
 import calendarSvg from "../assets/icons/calendar.svg?raw";
+import chipSvg from "../assets/icons/chip.svg?raw";
 import clockSvg from "../assets/icons/clock.svg?raw";
 import databaseSvg from "../assets/icons/database.svg?raw";
 import moonSvg from "../assets/icons/moon.svg?raw";
@@ -11,15 +12,17 @@ import powerSvg from "../assets/icons/power.svg?raw";
 import robotSvg from "../assets/icons/robot.svg?raw";
 import stethoscopeSvg from "../assets/icons/stethoscope.svg?raw";
 import sunSvg from "../assets/icons/sun.svg?raw";
+import tagSvg from "../assets/icons/tag.svg?raw";
 import wifiSvg from "../assets/icons/wifi.svg?raw";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { ErrorBannerStack, useErrorStack } from "../components/error-banner";
 import { Icon } from "../components/icon";
 import { useNavigate } from "../components/router";
-import type { SystemData } from "../types";
+import type { FirmwareVersion, SystemData } from "../types";
 import { TIMEZONE_PRESETS, TX_POWER_PRESETS } from "./settings/constants";
 import { findPresetLabel, formatRobotTime } from "./settings/helpers";
 import { SettingsCategory } from "./settings/settings-category";
+import { useFirmwareUpload } from "./settings/use-firmware-upload";
 import { useReboot } from "./settings/use-reboot";
 import { useSettingsForm } from "./settings/use-settings-form";
 
@@ -29,12 +32,15 @@ interface SettingsViewProps {
     theme: Theme;
     onThemeChange: (t: Theme) => void;
     system: SystemData | null;
+    firmware: FirmwareVersion | null;
 }
 
-export function SettingsView({ theme, onThemeChange, system }: SettingsViewProps) {
+export function SettingsView({ theme, onThemeChange, system, firmware }: SettingsViewProps) {
     const navigate = useNavigate();
     const [errors, errorStack] = useErrorStack();
     const { rebooting, startRebootFlow } = useReboot(system?.uptime ?? 0);
+
+    const fw = useFirmwareUpload(firmware?.chip ?? null, errorStack, startRebootFlow);
 
     const {
         tz,
@@ -313,6 +319,79 @@ export function SettingsView({ theme, onThemeChange, system }: SettingsViewProps
                             </div>
                             <span class="settings-nav-chevron">&rsaquo;</span>
                         </button>
+                    </div>
+                </SettingsCategory>
+
+                <SettingsCategory title="Firmware" icon={chipSvg}>
+                    <div class="settings-section">
+                        <div class="settings-section-title">Firmware</div>
+                        <div class="fw-info-row">
+                            <div class="fw-info-item">
+                                <Icon svg={tagSvg} />
+                                <span>{firmware?.version ?? "..."}</span>
+                            </div>
+                            <div class="fw-info-item">
+                                <Icon svg={chipSvg} />
+                                <span>{firmware?.chip ?? "..."}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">Update</div>
+                        {fw.status === "idle" && (
+                            <>
+                                <label class="fw-file-label">
+                                    <input
+                                        type="file"
+                                        accept=".bin"
+                                        class="fw-file-input"
+                                        onChange={(e) =>
+                                            fw.selectFile((e.target as HTMLInputElement).files?.[0] ?? null)
+                                        }
+                                    />
+                                    <span class={`fw-file-btn${fw.file ? " has-file" : ""}`}>
+                                        {fw.file ? fw.file.name : "Select firmware file (.bin)"}
+                                    </span>
+                                </label>
+                                {fw.file && (
+                                    <div class="fw-file-meta">
+                                        {(fw.file.size / 1024).toFixed(0)} KB
+                                        {fw.chipError && <span class="fw-chip-error">{fw.chipError}</span>}
+                                    </div>
+                                )}
+                                {fw.file && !fw.chipError && (
+                                    <button type="button" class="fw-upload-btn" onClick={fw.startUpload}>
+                                        Upload & Install
+                                    </button>
+                                )}
+                            </>
+                        )}
+                        {fw.status === "hashing" && (
+                            <div class="fw-progress-wrap">
+                                <div class="fw-progress-bar">
+                                    <div class="fw-progress-fill indeterminate" />
+                                </div>
+                                <div class="fw-progress-text">Computing checksum...</div>
+                            </div>
+                        )}
+                        {fw.status === "uploading" && (
+                            <div class="fw-progress-wrap">
+                                <div class="fw-progress-bar">
+                                    <div class="fw-progress-fill" style={{ width: `${fw.progress}%` }} />
+                                </div>
+                                <div class="fw-progress-text">
+                                    {fw.progress >= 90 ? "Writing firmware..." : `Uploading... ${fw.progress}%`}
+                                </div>
+                            </div>
+                        )}
+                        {fw.status === "done" && (
+                            <div class="fw-progress-wrap">
+                                <div class="fw-progress-bar">
+                                    <div class="fw-progress-fill" style={{ width: "100%" }} />
+                                </div>
+                                <div class="fw-progress-text">Upload complete. Rebooting...</div>
+                            </div>
+                        )}
                     </div>
                 </SettingsCategory>
 

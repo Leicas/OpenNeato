@@ -1,6 +1,7 @@
 #ifndef FIRMWARE_MANAGER_H
 #define FIRMWARE_MANAGER_H
 
+#include <Arduino.h>
 #include <Update.h>
 #include <StreamString.h>
 #include <functional>
@@ -14,6 +15,7 @@ public:
 
     // Version info
     const char *getFirmwareVersion() const { return FIRMWARE_VERSION; }
+    String getChipModel() const { return ESP.getChipModel(); }
 
     // Update lifecycle
     bool beginUpdate(const String& md5Hash = "");
@@ -30,7 +32,10 @@ public:
     void setLogger(LogCallback logger) { loggerCallback = logger; }
 
 private:
+    bool validateChip(uint8_t *data, size_t len);
+
     bool updateInProgress = false;
+    bool chipValidated = false;
     bool rebootPending = false;
     unsigned long rebootRequestMs = 0;
     size_t currentProgress = 0;

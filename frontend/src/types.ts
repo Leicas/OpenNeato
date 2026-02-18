@@ -72,6 +72,7 @@ export interface SettingsData {
 
 export interface FirmwareVersion {
     version: string;
+    chip: string;
 }
 
 export interface LogFileInfo {

@@ -235,9 +235,12 @@ void WebServer::registerSettingsRoutes() {
 // -- Firmware endpoints -------------------------------------------------------
 
 void WebServer::registerFirmwareRoutes() {
-    // GET /api/firmware/version — current ESP32 firmware version
+    // GET /api/firmware/version — current ESP32 firmware version + chip model
     loggedRoute("/api/firmware/version", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
-        std::vector<Field> fields = {{"version", fwMgr.getFirmwareVersion(), FIELD_STRING}};
+        std::vector<Field> fields = {
+                {"version", fwMgr.getFirmwareVersion(), FIELD_STRING},
+                {"chip", fwMgr.getChipModel(), FIELD_STRING},
+        };
         request->send(200, "application/json", fieldsToJson(fields));
         return 200;
     });

@@ -50,6 +50,33 @@ async function fetchLogText(name: string): Promise<string> {
     return res.text();
 }
 
+function uploadFirmware(file: File, md5: string, onProgress: (pct: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `/api/firmware/update?hash=${md5}`);
+        xhr.upload.addEventListener("progress", (e) => {
+            if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        });
+        xhr.addEventListener("load", () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+            } else {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    reject(new Error(data.error || `${xhr.status} ${xhr.statusText}`));
+                } catch {
+                    reject(new Error(`${xhr.status} ${xhr.statusText}`));
+                }
+            }
+        });
+        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+        const form = new FormData();
+        form.append("file", file);
+        xhr.send(form);
+    });
+}
+
 export const api = {
     getState: () => get<StateData>("/api/state"),
     getCharger: () => get<ChargerData>("/api/charger"),
@@ -70,6 +97,8 @@ export const api = {
     getLogContent: (name: string) => fetchLogText(name),
     deleteLog: (name: string) => del(`/api/logs/${name}`),
     deleteAllLogs: () => del("/api/logs"),
+    uploadFirmware: (file: File, md5: string, onProgress: (pct: number) => void) =>
+        uploadFirmware(file, md5, onProgress),
     setScheduleDay: (day: number, hour: number, minute: number, on: boolean) =>
         put<SettingsData>("/api/settings", {
             [`sched${day}Hour`]: hour,
