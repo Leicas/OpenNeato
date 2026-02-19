@@ -1523,6 +1523,32 @@ body {
     border-color: var(--pink);
 }
 
+/* Drill-down sub-filter bar */
+
+.logs-drilldown-bar {
+    padding-top: 2px;
+}
+
+.logs-drilldown-chip {
+    font-size: 10px;
+    padding: 3px 8px;
+    gap: 4px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.logs-drilldown-chip.active {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+
+.logs-drilldown-count {
+    font-size: 9px;
+    font-weight: 500;
+    opacity: 0.5;
+}
+
 /* Log detail entries */
 
 .logs-entries {
@@ -1935,6 +1961,10 @@ body {
     background: var(--blue);
     color: #fff;
     border-color: var(--blue);
+}
+
+.manual-motor-btn.pending {
+    animation: btn-pulse 1s ease-in-out infinite;
 }
 
 .manual-motor-btn:active {

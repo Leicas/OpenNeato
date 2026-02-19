@@ -81,7 +81,20 @@ interface LogEntry {
     type: string;
     summary: string;
     resp: string | null;
+    /** Drill-down key extracted from the data object (e.g. cmd, path, msg) */
+    detail: string | null;
 }
+
+/** Map log type -> which data field to use as the drill-down key */
+const DETAIL_KEY: Record<string, string> = {
+    command: "cmd",
+    request: "path",
+    event: "msg",
+    error: "msg",
+    wifi: "event",
+    ntp: "event",
+    boot: "reason",
+};
 
 function parseLogLine(line: string): LogEntry | null {
     try {
@@ -100,7 +113,9 @@ function parseLogLine(line: string): LogEntry | null {
             }
             parts.push(`${k}=${v}`);
         }
-        return { ts, type, summary: parts.join(" "), resp };
+        const detailKey = DETAIL_KEY[type];
+        const detail = detailKey && typeof data[detailKey] === "string" ? (data[detailKey] as string) : null;
+        return { ts, type, summary: parts.join(" "), resp, detail };
     } catch {
         return null;
     }
@@ -126,12 +141,24 @@ export function LogsView() {
 
     // Filter state: empty set = show all, non-empty = show only selected types
     const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+    // Drill-down sub-filter: empty set = show all within type, non-empty = show only selected detail values
+    const [activeDetails, setActiveDetails] = useState<Set<string>>(new Set());
 
     const toggleFilter = useCallback((type: string) => {
         setActiveFilters((prev) => {
             const next = new Set(prev);
             if (next.has(type)) next.delete(type);
             else next.add(type);
+            return next;
+        });
+        setActiveDetails(new Set()); // reset drill-down when type filter changes
+    }, []);
+
+    const toggleDetail = useCallback((value: string) => {
+        setActiveDetails((prev) => {
+            const next = new Set(prev);
+            if (next.has(value)) next.delete(value);
+            else next.add(value);
             return next;
         });
     }, []);
@@ -147,14 +174,38 @@ export function LogsView() {
         return sorted;
     }, [logLines]);
 
-    const filteredLines = useMemo(() => {
-        if (activeFilters.size === 0) return logLines;
-        return logLines.filter((l) => activeFilters.has(l.type));
+    // Available drill-down values when exactly one type filter is active
+    const drillDownValues = useMemo(() => {
+        if (activeFilters.size !== 1) return [];
+        const [type] = activeFilters;
+        if (!DETAIL_KEY[type]) return [];
+        const counts = new Map<string, number>();
+        for (const l of logLines) {
+            if (l.type === type && l.detail) {
+                counts.set(l.detail, (counts.get(l.detail) ?? 0) + 1);
+            }
+        }
+        // Sort by count descending, then alphabetically
+        return [...counts.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([value, count]) => ({ value, count }));
     }, [logLines, activeFilters]);
+
+    const filteredLines = useMemo(() => {
+        let lines = logLines;
+        if (activeFilters.size > 0) {
+            lines = lines.filter((l) => activeFilters.has(l.type));
+        }
+        if (activeDetails.size > 0) {
+            lines = lines.filter((l) => l.detail !== null && activeDetails.has(l.detail));
+        }
+        return lines;
+    }, [logLines, activeFilters, activeDetails]);
 
     // Reset filters when navigating to a different file
     useEffect(() => {
         setActiveFilters(new Set());
+        setActiveDetails(new Set());
     }, [selectedFile]);
 
     // Deleting state
@@ -344,7 +395,10 @@ export function LogsView() {
                                 <button
                                     type="button"
                                     class={`logs-filter-chip${activeFilters.size === 0 ? " active" : ""}`}
-                                    onClick={() => setActiveFilters(new Set())}
+                                    onClick={() => {
+                                        setActiveFilters(new Set());
+                                        setActiveDetails(new Set());
+                                    }}
                                 >
                                     All
                                 </button>
@@ -361,6 +415,29 @@ export function LogsView() {
                                         </button>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {!loadingContent && drillDownValues.length > 1 && (
+                            <div class="logs-filter-bar logs-drilldown-bar">
+                                <button
+                                    type="button"
+                                    class={`logs-filter-chip logs-drilldown-chip${activeDetails.size === 0 ? " active" : ""}`}
+                                    onClick={() => setActiveDetails(new Set())}
+                                >
+                                    All ({drillDownValues.reduce((s, d) => s + d.count, 0)})
+                                </button>
+                                {drillDownValues.map((d) => (
+                                    <button
+                                        type="button"
+                                        key={d.value}
+                                        class={`logs-filter-chip logs-drilldown-chip${activeDetails.has(d.value) ? " active" : ""}`}
+                                        onClick={() => toggleDetail(d.value)}
+                                    >
+                                        {d.value}
+                                        <span class="logs-drilldown-count">{d.count}</span>
+                                    </button>
+                                ))}
                             </div>
                         )}
 
