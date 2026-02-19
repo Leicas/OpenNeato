@@ -160,6 +160,7 @@ const state = {
     errorCode: 200,
     errorMessage: "",
     testMode: false,
+    manualClean: false,
     tz: "UTC0",
     debugLog: false,
     wifiTxPower: 60, // 15 dBm in 0.25 dBm units
@@ -279,7 +280,10 @@ const mockLogContent = [
 // --- Derive UI/robot state from current state ---
 
 const deriveStates = () => {
-    if (state.testMode) {
+    if (state.manualClean) {
+        state.uiState = "UIMGR_STATE_MANUALCLEANING";
+        state.robotState = "ST_C_ManualCleaning";
+    } else if (state.testMode) {
         state.uiState = "UIMGR_STATE_TESTMODE";
         state.robotState = "ST_C_TestMode";
     } else if (state.cleaning && !state.paused) {
@@ -458,6 +462,18 @@ const routes = {
         sendOk(res);
     },
 
+    "POST /api/manual/move": (_req, res) => {
+        if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
+        if (!state.manualClean) return sendError(res, "Not in manual mode", 400);
+        sendOk(res);
+    },
+
+    "POST /api/manual/motors": (_req, res) => {
+        if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
+        if (!state.manualClean) return sendError(res, "Not in manual mode", 400);
+        sendOk(res);
+    },
+
     "POST /api/sound": (_req, res) => {
         // Accept and ignore — just acknowledge
         sendOk(res);
@@ -466,6 +482,19 @@ const routes = {
     "POST /api/testmode": (_req, res, query) => {
         if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
         state.testMode = query.enable === "1";
+        deriveStates();
+        sendOk(res);
+    },
+
+    "POST /api/manual": (_req, res, query) => {
+        if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
+        const enable = query.enable === "1";
+        state.manualClean = enable;
+        if (enable) {
+            state.cleaning = false;
+            state.spotCleaning = false;
+            state.paused = false;
+        }
         deriveStates();
         sendOk(res);
     },

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api";
 import alertSvg from "../assets/icons/alert.svg?raw";
 import boltSvg from "../assets/icons/bolt.svg?raw";
@@ -8,6 +8,7 @@ import databaseSvg from "../assets/icons/database.svg?raw";
 import gearSvg from "../assets/icons/gear.svg?raw";
 import houseSvg from "../assets/icons/house.svg?raw";
 import idleSvg from "../assets/icons/idle.svg?raw";
+import manualSvg from "../assets/icons/manual.svg?raw";
 import pauseSvg from "../assets/icons/pause.svg?raw";
 import playSvg from "../assets/icons/play.svg?raw";
 import sparkleSvg from "../assets/icons/sparkle.svg?raw";
@@ -26,11 +27,17 @@ import type { ChargerData, ErrorData, FirmwareVersion, StateData, SystemData } f
 
 // -- Helpers --
 
-function statusInfo(s: string): { label: string; color: string; icon: string } {
+interface StatusInfo {
+    label: string;
+    color: string;
+    icon: string;
+}
+
+function statusInfo(s: string): StatusInfo {
     if (s.includes("CLEANINGRUNNING")) return { label: "Cleaning", color: "green", icon: "sparkle" };
     if (s.includes("CLEANINGPAUSED")) return { label: "Paused", color: "amber", icon: "alert" };
+    if (s.includes("MANUALCLEANING")) return { label: "Cleaning", color: "green", icon: "sparkle" };
     if (s.includes("DOCKING")) return { label: "Docking", color: "amber", icon: "bolt" };
-    if (s.includes("TESTMODE")) return { label: "Test", color: "amber", icon: "gear" };
     return { label: "Active", color: "green", icon: "check" };
 }
 
@@ -39,7 +46,7 @@ const STATUS_ICONS: Record<string, string> = {
     sparkle: sparkleSvg,
     alert: alertSvg,
     bolt: boltSvg,
-    gear: gearSvg,
+    manual: manualSvg,
 };
 
 const MODE_ICONS: Record<string, string> = {
@@ -48,6 +55,7 @@ const MODE_ICONS: Record<string, string> = {
     spot: spotSvg,
     bolt: boltSvg,
     alert: alertSvg,
+    manual: manualSvg,
 };
 
 function modeInfo(
@@ -55,7 +63,9 @@ function modeInfo(
     docked: boolean,
     isSpot: boolean,
     isCleaning: boolean,
-): { label: string; color: string; icon: string } {
+    isManual: boolean,
+): StatusInfo {
+    if (isManual) return { label: "Manual", color: "blue", icon: "manual" };
     if (charging) return { label: "Charging", color: "amber", icon: "bolt" };
     if (docked) return { label: "Docked", color: "amber", icon: "bolt" };
     if (isSpot) return { label: "Spot", color: "blue", icon: "spot" };
@@ -97,9 +107,10 @@ interface DashboardViewProps {
     error: PollResult<ErrorData>;
     state: PollResult<StateData>;
     charger: PollResult<ChargerData>;
+    isManual: boolean;
 }
 
-export function DashboardView({ system, firmware, error, state, charger }: DashboardViewProps) {
+export function DashboardView({ system, firmware, error, state, charger, isManual }: DashboardViewProps) {
     const navigate = useNavigate();
 
     const connErr = state.error && charger.error;
@@ -114,6 +125,7 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
     const [pending, setPending] = useState(false);
     const lastUiState = useRef<string | null>(null);
     const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingManual = useRef(false);
     const [actionErrors, actionErrorStack] = useErrorStack();
 
     if (state.data && state.data.uiState !== lastUiState.current) {
@@ -127,16 +139,26 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
         }
     }
 
+    // Navigate to manual page only after polled state confirms MANUALCLEANING
+    useEffect(() => {
+        if (isManual && pendingManual.current) {
+            pendingManual.current = false;
+            navigate("/manual");
+        }
+    }, [isManual, navigate]);
+
     const handleAction = useCallback(
         (action: () => Promise<unknown>) => {
             setPending(true);
             if (pendingTimer.current) clearTimeout(pendingTimer.current);
             pendingTimer.current = setTimeout(() => {
                 setPending(false);
+                pendingManual.current = false;
                 pendingTimer.current = null;
             }, 10000);
             action().catch((e: unknown) => {
                 setPending(false);
+                pendingManual.current = false;
                 if (pendingTimer.current) {
                     clearTimeout(pendingTimer.current);
                     pendingTimer.current = null;
@@ -146,6 +168,7 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
         },
         [actionErrorStack],
     );
+
     const isRunning = state.data?.uiState?.includes("CLEANINGRUNNING") ?? false;
     const isPaused = state.data?.uiState?.includes("CLEANINGPAUSED") ?? false;
     const isCleaning = isRunning || isPaused;
@@ -158,7 +181,7 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
     const modeErr = (!state.data && state.error) || (!charger.data && charger.error);
     const mi = modeErr
         ? { label: "Error", color: "red", icon: "alert" }
-        : modeInfo(charging, docked, isSpot, isCleaning);
+        : modeInfo(charging, docked, isSpot, isCleaning, isManual);
 
     return (
         <>
@@ -274,7 +297,12 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                         class={`action-btn primary${pending ? " pending" : ""}`}
                         onClick={() => handleAction(api.cleanHouse)}
                         disabled={
-                            offline || (isCleaning && !isPaused) || pending || hasRobotError || (isPaused && isSpot)
+                            offline ||
+                            (isCleaning && !isPaused) ||
+                            isManual ||
+                            pending ||
+                            hasRobotError ||
+                            (isPaused && isSpot)
                         }
                     >
                         <Icon svg={isPaused && !isSpot ? playSvg : houseSvg} />
@@ -285,7 +313,12 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                         class={`action-btn${pending ? " pending" : ""}`}
                         onClick={() => handleAction(api.cleanSpot)}
                         disabled={
-                            offline || (isCleaning && !isPaused) || pending || hasRobotError || (isPaused && !isSpot)
+                            offline ||
+                            (isCleaning && !isPaused) ||
+                            isManual ||
+                            pending ||
+                            hasRobotError ||
+                            (isPaused && !isSpot)
                         }
                     >
                         <Icon svg={isPaused && isSpot ? playSvg : spotSvg} />
@@ -294,11 +327,20 @@ export function DashboardView({ system, firmware, error, state, charger }: Dashb
                     <button
                         type="button"
                         class={`action-btn${pending ? " pending" : ""}`}
-                        onClick={() => handleAction(api.cleanStop)}
-                        disabled={offline || !isCleaning || pending}
+                        onClick={() =>
+                            isCleaning
+                                ? handleAction(api.cleanStop)
+                                : isManual
+                                  ? navigate("/manual")
+                                  : handleAction(() => {
+                                        pendingManual.current = true;
+                                        return api.manual(true);
+                                    })
+                        }
+                        disabled={offline || (pending && !isManual) || (hasRobotError && !isCleaning && !isManual)}
                     >
-                        <Icon svg={isPaused ? stopSvg : pauseSvg} />
-                        {isPaused ? "Stop" : "Pause"}
+                        <Icon svg={isCleaning ? (isPaused ? stopSvg : pauseSvg) : manualSvg} />
+                        {isCleaning ? (isPaused ? "Stop" : "Pause") : "Manual"}
                     </button>
                 </div>
             </div>

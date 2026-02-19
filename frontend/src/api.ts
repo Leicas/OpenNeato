@@ -2,6 +2,7 @@ import type {
     ChargerData,
     ErrorData,
     FirmwareVersion,
+    LidarScan,
     LogFileInfo,
     SettingsData,
     StateData,
@@ -86,7 +87,12 @@ export const api = {
     cleanHouse: () => post("/api/clean?action=house"),
     cleanSpot: () => post("/api/clean?action=spot"),
     cleanStop: () => post("/api/clean?action=stop"),
-    testMode: (enable: boolean) => post(`/api/testmode?enable=${enable ? 1 : 0}`),
+    manual: (enable: boolean) => post(`/api/manual?enable=${enable ? 1 : 0}`),
+    manualMove: (left: number, right: number, speed: number) =>
+        post(`/api/manual/move?left=${left}&right=${right}&speed=${speed}`),
+    manualMotors: (brush: boolean, vacuum: boolean, sideBrush: boolean) =>
+        post(`/api/manual/motors?brush=${brush ? 1 : 0}&vacuum=${vacuum ? 1 : 0}&sideBrush=${sideBrush ? 1 : 0}`),
+    getLidar: () => get<LidarScan>("/api/lidar"),
     lidarRotate: (enable: boolean) => post(`/api/lidar/rotate?enable=${enable ? 1 : 0}`),
     getSettings: () => get<SettingsData>("/api/settings"),
     updateSettings: (patch: Partial<SettingsData>) => put<SettingsData>("/api/settings", patch),

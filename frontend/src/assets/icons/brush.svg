@@ -1,0 +1,13 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 32h56"/>
+  <path d="M8 32a5 5 0 0 1 5-5h38a5 5 0 0 1 5 5"/>
+  <path d="M8 32a5 5 0 0 0 5 5h38a5 5 0 0 0 5-5"/>
+  <line x1="14" y1="27" x2="13" y2="19"/>
+  <line x1="25" y1="27" x2="25" y2="18"/>
+  <line x1="39" y1="27" x2="39" y2="18"/>
+  <line x1="50" y1="27" x2="51" y2="19"/>
+  <line x1="14" y1="37" x2="13" y2="45"/>
+  <line x1="25" y1="37" x2="25" y2="46"/>
+  <line x1="39" y1="37" x2="39" y2="46"/>
+  <line x1="50" y1="37" x2="51" y2="45"/>
+</svg>

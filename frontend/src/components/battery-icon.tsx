@@ -5,8 +5,8 @@ interface BatteryIconProps {
 }
 
 export function BatteryIcon({ pct }: BatteryIconProps) {
-    // Fill width inside the battery body (8 to 48 = 40 units range)
-    const fillWidth = Math.round((pct / 100) * 40);
+    // Fill width inside the battery (8 to 56 = 48 units range, includes nub at 100%)
+    const fillWidth = Math.round((pct / 100) * 48);
     const fillRight = 8 + fillWidth;
 
     // Color the fill based on charge level

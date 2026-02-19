@@ -8,6 +8,7 @@ export interface PollResult<T> {
 // Polls continuously: waits for the previous request to complete, then waits
 // at least intervalMs before starting the next one. Never overlaps requests.
 // Pauses when the browser tab is hidden and resumes immediately on return.
+// Pass intervalMs <= 0 to disable polling (returns null data/error).
 export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number): PollResult<T> {
     const [data, setData] = useState<T | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -15,6 +16,12 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number): Po
     fetcherRef.current = fetcher;
 
     useEffect(() => {
+        if (intervalMs <= 0) {
+            setData(null);
+            setError(null);
+            return;
+        }
+
         let active = true;
         let timer: ReturnType<typeof setTimeout>;
         let polling = false; // true while a fetch is in-flight

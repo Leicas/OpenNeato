@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import { Route, Router } from "./components/router";
 import { usePolling } from "./hooks/use-polling";
 import type { ChargerData, ErrorData, FirmwareVersion, StateData, SystemData } from "./types";
 import { DashboardView } from "./views/dashboard";
 import { LogsView } from "./views/logs";
+import { ManualView } from "./views/manual";
 import { ScheduleView } from "./views/schedule";
 import { SettingsView } from "./views/settings";
 
@@ -64,13 +65,81 @@ export function App() {
     const system = usePolling<SystemData>(api.getSystem, 10000);
     const firmware = usePolling<FirmwareVersion>(api.getFirmwareVersion, 60000);
 
+    // Derive manual mode from polled state — single source of truth
+    const isManual = state.data?.uiState?.includes("MANUALCLEANING") ?? false;
+
+    // Motor toggle state — owned at app level, persists across page navigation
+    const [brush, setBrush] = useState(false);
+    const [vacuum, setVacuum] = useState(false);
+    const [sideBrush, setSideBrush] = useState(false);
+
+    // Reset motor state when manual mode ends
+    useEffect(() => {
+        if (!isManual) {
+            setBrush(false);
+            setVacuum(false);
+            setSideBrush(false);
+        }
+    }, [isManual]);
+
+    const sendMotors = useCallback((b: boolean, v: boolean, s: boolean) => {
+        api.manualMotors(b, v, s).catch(() => {});
+    }, []);
+
+    const toggleBrush = useCallback(() => {
+        const next = !brush;
+        setBrush(next);
+        sendMotors(next, vacuum, sideBrush);
+    }, [brush, vacuum, sideBrush, sendMotors]);
+
+    const toggleVacuum = useCallback(() => {
+        const next = !vacuum;
+        setVacuum(next);
+        sendMotors(brush, next, sideBrush);
+    }, [brush, vacuum, sideBrush, sendMotors]);
+
+    const toggleSideBrush = useCallback(() => {
+        const next = !sideBrush;
+        setSideBrush(next);
+        sendMotors(brush, vacuum, next);
+    }, [brush, vacuum, sideBrush, sendMotors]);
+
+    const toggleAll = useCallback(() => {
+        const allOn = brush && vacuum && sideBrush;
+        const next = !allOn;
+        setBrush(next);
+        setVacuum(next);
+        setSideBrush(next);
+        sendMotors(next, next, next);
+    }, [brush, vacuum, sideBrush, sendMotors]);
+
     return (
         <Router>
             <Route path="/">
-                <DashboardView system={system} firmware={firmware} error={error} state={state} charger={charger} />
+                <DashboardView
+                    system={system}
+                    firmware={firmware}
+                    error={error}
+                    state={state}
+                    charger={charger}
+                    isManual={isManual}
+                />
             </Route>
             <Route path="/settings">
                 <SettingsView theme={theme} onThemeChange={setTheme} system={system.data} firmware={firmware.data} />
+            </Route>
+            <Route path="/manual">
+                <ManualView
+                    isManual={isManual}
+                    charger={charger.data}
+                    brush={brush}
+                    vacuum={vacuum}
+                    sideBrush={sideBrush}
+                    onToggleBrush={toggleBrush}
+                    onToggleVacuum={toggleVacuum}
+                    onToggleSideBrush={toggleSideBrush}
+                    onToggleAll={toggleAll}
+                />
             </Route>
             <Route path="/schedule">
                 <ScheduleView />

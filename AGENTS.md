@@ -103,11 +103,21 @@ and add a one-line summary to the completed list above. Do this before committin
 - Behavior may vary across robot models and firmware versions — D3/D4/D6/D7
   may not have the state machine bug at all and may not need the workaround
 
-### Manual control
-- Drive the robot manually from the web UI (forward, back, rotate)
-- Start/stop/pause cleaning cycles
-- SetMotor, SetLED commands
-- TestMode enable/disable for direct motor control
+### Manual clean (frontend complete, firmware pending)
+- Web UI manual clean page (`#/manual`) with LIDAR map, virtual joystick, motor toggles
+- `POST /api/manual?enable=1|0` enters/exits manual mode (mock server only for now)
+- `POST /api/manual/move?left=N&right=N&speed=N` differential wheel drive
+- `POST /api/manual/motors?brush=0|1&vacuum=0|1&sideBrush=0|1` motor control
+- `isManual` derived from polled `GET /api/state` returning `UIMGR_STATE_MANUALCLEANING`
+- Dashboard 3rd button: Manual (idle) navigates to manual page, same when already manual
+- Back button on manual page returns to dashboard without stopping manual mode
+- Only the Stop button on the manual page exits manual mode
+- Status card shows "Cleaning" during manual mode, Mode card always shows "Manual"
+- Manual page status bar shows battery % and charging/docked state from charger polling
+- Motor toggle state owned by app.tsx, persists across page navigation, resets on mode exit
+- LIDAR map uses CSS variables for theme-aware rendering (dark/light)
+- Joystick uses stable callback refs to prevent re-render flicker
+- Firmware backend still needed: TestMode management, safety checks, move/motor commands
 
 ### OTA update via GitHub Releases
 - Entirely browser-side — ESP32 has no background update checker and makes no
@@ -997,23 +1007,28 @@ frontend/
     main.tsx               # Preact render entry point
     app.tsx                # Root shell: theme management, polling, Router with
                            #   Route declarations for dashboard, settings, logs,
-                           #   schedule views
+                           #   schedule, manual views. Derives isManual from polled
+                           #   state, owns motor toggle state (brush/vacuum/sideBrush)
+                           #   at app level, passes charger data to ManualView.
     types.ts               # TypeScript interfaces (ChargerData, AnalogSensorData,
-                           #   LogFileInfo, SettingsData, etc.)
+                           #   LogFileInfo, SettingsData, LidarPoint, LidarScan, etc.)
     api.ts                 # Typed fetch wrappers for all API endpoints (get/post/put/del
                            #   with server error parsing from JSON body),
-                           #   uploadFirmware() via XMLHttpRequest with progress callback
+                           #   uploadFirmware() via XMLHttpRequest with progress callback,
+                           #   manual(), manualMove(), manualMotors(), getLidar() methods
     style.css              # Single CSS file with all styles + responsive breakpoints
     svg.d.ts               # TypeScript declaration for *.svg?raw imports
     hooks/
       use-polling.ts       # Generic polling hook with configurable interval,
                            #   pauses when browser tab is hidden (visibilitychange),
-                           #   resumes immediately on tab return
+                           #   resumes immediately on tab return. Supports disabling
+                           #   via intervalMs <= 0 (resets data/error to null).
       use-route.ts         # Hash-based routing hook (reads/writes location.hash)
       use-fetch.ts         # Generic one-shot fetch hook (loading/data/error state)
     components/
       icon.tsx             # SVG renderer component using dangerouslySetInnerHTML
-      battery-icon.tsx     # Dynamic battery with clipPath + color thresholds
+      battery-icon.tsx     # Dynamic battery with clipPath + color thresholds,
+                           #   fill extends into nub/tip at 100%
       error-banner.tsx     # Reusable error banner (title + message, alert icon,
                            #   optional onDismiss prop for × close button),
                            #   useErrorStack hook (stable refs via useMemo),
@@ -1024,6 +1039,11 @@ frontend/
                            #   destructive actions like factory reset)
       router.tsx           # Router (context provider), Route (path matcher),
                            #   useNavigate/usePath hooks for any component
+      joystick.tsx         # Virtual joystick component (touch + mouse), stable
+                           #   callback refs via useRef to prevent re-render flicker,
+                           #   absolute-positioned knob with will-change: transform
+      lidar-map.tsx        # Canvas-based LIDAR top-down map component, theme-aware
+                           #   via CSS variable reads (--surface, --border, --text-dim)
     views/
       dashboard.tsx        # Dashboard view: status bar, hero area, info cards,
                            #   action buttons, pending state, helpers
@@ -1035,6 +1055,8 @@ frontend/
                            #   Pause/resume/stop: Idle shows Pause (disabled), Running
                            #   shows Pause (enabled), Paused shows play icon + "Resume"
                            #   on relevant button (House or Spot) and Stop enabled.
+                           #   Manual mode: 3rd button navigates to /manual page,
+                           #   Status shows "Cleaning", Mode always shows "Manual".
       settings.tsx         # Settings view: collapsible categories (Appearance,
                            #   Network, Robot, Firmware, Diagnostics) with icons and
                            #   animated expand/collapse via CSS grid-template-rows.
@@ -1060,6 +1082,11 @@ frontend/
         use-firmware-upload.ts # Firmware upload hook: file selection, ESP32 chip ID
                            #   validation from .bin header, MD5 hash computation,
                            #   upload with progress via XMLHttpRequest, reboot flow
+      manual.tsx           # Manual clean page: LIDAR map, virtual joystick,
+                           #   motor toggles (brush/vacuum/sideBrush/all with icons),
+                           #   stop button, status bar (battery + charging/docked).
+                           #   Back navigates to dashboard without stopping mode.
+                           #   Controls disabled when not in manual state.
       schedule.tsx         # Schedule view: 7-day Mon-Sun cleaning schedule,
                            #   per-day toggle + time picker (hour/minute selects),
                            #   master enable/disable toggle, uses flat settings keys.
@@ -1071,9 +1098,10 @@ frontend/
     assets/
       robot.svg            # Main robot illustration (30KB, vectorized 4-layer greyscale)
       icons/               # SVG icons loaded via ?raw import (alert, back, battery,
-                           #   bolt, calendar, check, chip, clock, database, gear,
-                           #   house, idle, moon, palette, pause, play, power, robot,
-                           #   sparkle, spot, stethoscope, stop, sun, tag, wifi, wifi-off)
+                           #   bolt, brush, calendar, check, chip, clock, database, gear,
+                           #   house, idle, manual, moon, palette, pause, play, power,
+                           #   robot, side-brush, sparkle, spot, stethoscope, stop, sun,
+                           #   tag, vacuum, wifi, wifi-off)
   mock/
     server.js              # Mock API server (plain Node.js http, zero deps),
                            #   SCENARIO selector for quick state switching,
@@ -1089,6 +1117,8 @@ frontend/
                            #   restart/reset/pin-change/hostname-change requests.
                            #   Schedule: flat keys (sched{0-6}{Hour,Min,On}) in
                            #   state, GET/PUT handlers with loops.
+                           #   Manual mode: MANUALCLEANING state, /api/manual,
+                           #   /api/manual/move, /api/manual/motors routes.
   scripts/
     embed_frontend.js      # Auto-discovers all dist/ files, gzips each, generates
                            #   firmware/src/web_assets.h with WebAsset registry
@@ -1125,6 +1155,9 @@ frontend/
 | POST | `/api/system/reset` | Factory reset (NVS clear + WiFi + SPIFFS format) via SystemManager |
 | GET | `/api/settings` | All user settings (tz, debugLog, hostname, wifiTxPower, uartTxPin, uartRxPin, scheduleEnabled, sched{0-6}{Hour,Min,On}) |
 | PUT | `/api/settings` | Partial settings update (body: `{"tz":"...","debugLog":true}`) |
+| POST | `/api/manual?enable=1\|0` | Enter/exit manual clean mode (mock only) |
+| POST | `/api/manual/move?left=N&right=N&speed=N` | Differential wheel drive (mock only) |
+| POST | `/api/manual/motors?brush=0\|1&vacuum=0\|1&sideBrush=0\|1` | Motor control (mock only) |
 
 
 ## Build Commands
@@ -1257,13 +1290,29 @@ APIs and project utilities are insufficient.
 - **Inline trivial getters** in headers: `bool isActive() const { return active; }`
 - **Non-trivial methods**: Declared in header, defined in `.cpp`
 
-### Types
+### Types (firmware)
 - Use Arduino `String` throughout (never `std::string`)
 - Use `std::function` and `std::vector` from STL where needed (C++11)
 - Use `static_cast<>` for conversions (not C-style casts)
 - Use `unsigned long` for `millis()` timestamps
 - Use `bool` for flags, `int` for counters/indexes, `size_t` for collection iteration
 - Default-initialize member variables in the header: `bool active = false;`
+
+### Types (frontend)
+- Never use inline object type literals in function return types, variable declarations,
+  or generic parameters — always define a named `interface` or `type` and reference it.
+  This applies to function signatures, `useRef<T>`, `useState<T>`, and any other position
+  where a type annotation appears.
+  ```ts
+  // Bad
+  function getInfo(): { label: string; color: string } { ... }
+  const ref = useRef<{ x: number; y: number } | null>(null);
+  
+  // Good
+  interface Info { label: string; color: string; }
+  function getInfo(): Info { ... }
+  const ref = useRef<Point | null>(null);
+  ```
 
 ### Comments
 - `//` single-line comments only (no Doxygen or `/** */` blocks)

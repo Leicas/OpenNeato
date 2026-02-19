@@ -70,6 +70,19 @@ export interface SettingsData {
     sched6On: boolean;
 }
 
+export interface LidarPoint {
+    angle: number;
+    dist: number;
+    intensity: number;
+    error: number;
+}
+
+export interface LidarScan {
+    rotationSpeed: number;
+    validPoints: number;
+    points: LidarPoint[];
+}
+
 export interface FirmwareVersion {
     version: string;
     chip: string;
