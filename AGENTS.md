@@ -47,6 +47,10 @@ Browser fetches releases API, downloads .bin, uploads to device.
 
 **LIDAR and mapping** — GetLDSScan data, 2D occupancy maps on ESP32, SPIFFS persistence.
 
+**Return to base** — Experiment with `Clean Persistent MinCharge 99` during an
+active clean to see if the robot forces a recharge dock return. If it works,
+add a "Return to Base" button on the dashboard while cleaning is in progress.
+
 **Push notifications via ntfy.sh** — Fire-and-forget HTTP POST to configurable ntfy topic.
 Piggybacks on existing sensor polling for event detection.
 
