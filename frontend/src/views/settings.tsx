@@ -119,6 +119,7 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
     // --- Dialogs ---
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
     const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+    const [showFormatConfirm, setShowFormatConfirm] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [restarting, setRestarting] = useState(false);
     const pendingNav = useRef<string | null>(null);
@@ -172,6 +173,25 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                 } else {
                     errorStack.push(e instanceof Error ? e.message : "Failed to restart");
                     setShowRestartConfirm(false);
+                }
+            })
+            .finally(() => setRestarting(false));
+    }, [startRebootFlow, errorStack]);
+
+    const handleFormatSpiffs = useCallback(() => {
+        setRestarting(true);
+        api.formatSpiffs()
+            .then(() => {
+                setShowFormatConfirm(false);
+                startRebootFlow();
+            })
+            .catch((e: unknown) => {
+                if (e instanceof TypeError) {
+                    setShowFormatConfirm(false);
+                    startRebootFlow();
+                } else {
+                    errorStack.push(e instanceof Error ? e.message : "Failed to format storage");
+                    setShowFormatConfirm(false);
                 }
             })
             .finally(() => setRestarting(false));
@@ -637,23 +657,36 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                     {saveLabel}
                 </button>
 
-                <div class="settings-section">
-                    <div class="settings-section-title">Device</div>
-                    <div class="settings-device-actions">
-                        <button type="button" class="settings-device-btn" onClick={() => setShowRestartConfirm(true)}>
-                            <Icon svg={powerSvg} />
-                            Restart
-                        </button>
-                        <button
-                            type="button"
-                            class="settings-device-btn danger"
-                            onClick={() => setShowResetConfirm(true)}
-                        >
-                            <Icon svg={alertSvg} />
-                            Factory Reset
+                <SettingsCategory title="Device" icon={powerSvg}>
+                    <div class="settings-section">
+                        <button type="button" class="settings-nav-row" onClick={() => setShowRestartConfirm(true)}>
+                            <div class="settings-nav-row-left">
+                                <Icon svg={powerSvg} />
+                                Restart
+                            </div>
                         </button>
                     </div>
-                </div>
+                    <div class="settings-section">
+                        <button
+                            type="button"
+                            class="settings-nav-row danger"
+                            onClick={() => setShowFormatConfirm(true)}
+                        >
+                            <div class="settings-nav-row-left">
+                                <Icon svg={databaseSvg} />
+                                Format Storage
+                            </div>
+                        </button>
+                    </div>
+                    <div class="settings-section">
+                        <button type="button" class="settings-nav-row danger" onClick={() => setShowResetConfirm(true)}>
+                            <div class="settings-nav-row-left">
+                                <Icon svg={alertSvg} />
+                                Factory Reset
+                            </div>
+                        </button>
+                    </div>
+                </SettingsCategory>
             </div>
 
             {showDiscardConfirm && (
@@ -682,6 +715,16 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                     disabled={restarting}
                     onConfirm={handleRestart}
                     onCancel={() => setShowRestartConfirm(false)}
+                />
+            )}
+
+            {showFormatConfirm && (
+                <ConfirmDialog
+                    message="This will erase all logs and map data. Settings are preserved. Device will reboot."
+                    confirmLabel="Format"
+                    disabled={restarting}
+                    onConfirm={handleFormatSpiffs}
+                    onCancel={() => setShowFormatConfirm(false)}
                 />
             )}
 

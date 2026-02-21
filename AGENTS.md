@@ -35,6 +35,10 @@ firmware through REST API. Everything runs on the device itself.
 13. **Task Watchdog** — Hardware TWDT resets ESP32 if loop() hangs
 14. **Manual clean** — Full-stack manual driving: firmware backend (TestMode lifecycle, motor commands, safety polling, stall detection, client timeout), configurable motor settings (brush RPM, vacuum speed, side brush power, stall threshold) with NVS persistence and preset dropdowns in settings UI
 15. **Push notifications** — Fire-and-forget HTTP POST to ntfy.sh, adaptive polling (3s active / 30s idle), triggers on cleaning done, error, and return-to-base, configurable topic in settings with test button
+16. **Cleaning history** — SPIFFS JSONL session recording (path snapshots via GetRobotPos), heatshrink compression, canvas map visualization, dual-interval compression, auto-delete quota enforcement
+17. **API cleanup** — Removed diagnostic-only endpoints (robotpos, buttons, accel, analog/digital sensors) and unused serial/command plumbing; kept internal consumers (ManualCleanManager, CleaningHistory)
+18. **Mock server in-memory history** — Replaced file-based mock history with in-memory Map, rolling-window recording simulation, no runtime file I/O
+19. **View file splitting** — Split monolithic logs and history views into list/item/helpers submodules
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 
@@ -48,8 +52,6 @@ Browser fetches `api.github.com` releases list (CORS allowed), displays availabl
 versions with release notes in settings. User clicks download link which opens the
 `.bin` asset in a new tab (normal navigation, no CORS issue), then uploads via the
 existing firmware upload file picker. Two-click flow, zero infrastructure.
-
-**LIDAR and mapping** — GetLDSScan data, 2D occupancy maps on ESP32, SPIFFS persistence.
 
 **Return to base** — Experiment with `Clean Persistent MinCharge 99` during an
 active clean to see if the robot forces a recharge dock return. If it works,
@@ -397,40 +399,134 @@ ChassisRev,-1,, UIPanelRev,-1,,
 **GetErr [Clear]** — Returns error message if present, otherwise no message
 - Error code 200 (`UI_ALERT_INVALID`) = no error (normal state)
 - `Clear` flag dismisses the reported error
-- **Complete error code list:**
-  - 1: WDT, 2: SSEG LED, 3: BTN LED, 4: BACK LED, 5: FLASH
-  - 10: BattNominal, 11: BattOverVolt, 12: BattUnderVolt, 13: BattOverTemp
-  - 14: BattShutdownTemp, 15: BattUnderCurrent, 16: BattTimeout, 17: BattTempPeak
-  - 18: BattFastCapacity, 19: BattMACapacity, 20: BattOnReserve, 21: BattEmpty
-  - 22: BattMismatch, 23: BattLithiumAdapterFailure
-  - 207: I had to reset my system. Please press START to clean
-  - 217: Please unplug my Power Cable when you want me to clean
-  - 218: Please unplug my USB Cable when you want me to clean
-  - 219: Please set schedule to ON first
-  - 220: Please set my clock first
-  - 222: Please put my Dirt Bin back in
-  - 223: Please check my Dirt Bin and Filter. Empty them as needed
-  - 224: My Brush is overheated. Please wait while I cool down
-  - 225: My Battery is overheated. Please wait while I cool down
-  - 226: I am unable to navigate. Please clear my path
-  - 227: Please return me to my base
-  - 228: My Bumper is stuck. Please free it
-  - 229: Please put me down on the floor
-  - 230: I can't charge. Try moving the base station to a new location
-  - 231: My Left Wheel is stuck. Please free it from debris
-  - 232: My Right Wheel is stuck. Please free it from debris
-  - 233: I have an RPS error. Please visit web support
-  - 234: My Brush is stuck. Please free it from debris
-  - 235: My Brush is overloaded. Please free it from debris
-  - 236: My Vacuum is stuck. Please visit web support
-  - 237: Please Check my filter and Dirt Bin
-  - 238: My Battery has a critical error. Please visit web support
-  - 239: My Brush has a critical error. Please visit web support
-  - 240: My Schedule is now OFF
-  - 241: I can't shut down while I am connected to power
-  - 243: A Software update is available. Please visit web support
-  - 244: My SCB was corrupted. I reinitialized it. Please visit web support
-  - 245: Please Dust me off so that I can see
+- **Complete error/alert code list** (from `SetUIError list`, firmware 4.5.3):
+  - **Legacy hardware errors (1-23):**
+    - 1: WDT, 2: SSEG LED, 3: BTN LED, 4: BACK LED, 5: FLASH
+    - 10: BattNominal, 11: BattOverVolt, 12: BattUnderVolt, 13: BattOverTemp
+    - 14: BattShutdownTemp, 15: BattUnderCurrent, 16: BattTimeout, 17: BattTempPeak
+    - 18: BattFastCapacity, 19: BattMACapacity, 20: BattOnReserve, 21: BattEmpty
+    - 22: BattMismatch, 23: BattLithiumAdapterFailure
+  - **Alerts (200-242):**
+    - 200: `UI_ALERT_INVALID` (= no error, normal state)
+    - 201: `UI_ALERT_RETURN_TO_BASE`
+    - 202: `UI_ALERT_RETURN_TO_BASE_PWR`
+    - 203: `UI_ALERT_RETURN_TO_START`
+    - 204: `UI_ALERT_RETURN_TO_CHARGE`
+    - 205: `UI_ALERT_DUST_BIN_FULL`
+    - 206: `UI_ALERT_BUSY_CHARGING`
+    - 207: `UI_ALERT_OLD_ERROR`
+    - 208: `UI_ALERT_RECOVERING_LOCATION`
+    - 209: `UI_ALERT_INFO_THANK_YOU`
+    - 210: `UI_ALERT_LOG_READ_FAIL`
+    - 211: `UI_ALERT_LOG_WRITE_FAIL`
+    - 212: `UI_ALERT_USB_DISCONNECTED`
+    - 213: `UI_ALERT_SWUPDATE_SUCCESS`
+    - 214: `UI_ALERT_SWUPDATE_FAIL`
+    - 215: `UI_ALERT_LOG_WRITE_SUCCESS`
+    - 216: `UI_ALERT_TIME_NOT_SET`
+    - 217: `UI_ALERT_TIME_SET`
+    - 218: `UI_ALERT_TIMER_SET`
+    - 219: `UI_ALERT_TIMER_REMOVED`
+    - 220: `UI_ALERT_ENABLE_TIMER`
+    - 221: `UI_ALERT_CHARGING_POWER`
+    - 222: `UI_ALERT_CHARGING_BASE`
+    - 223: `UI_ALERT_BATTERY_ChargeBaseCommErr`
+    - 224: `UI_ALERT_CONNECT_CHRG_CABLE`
+    - 225: `UI_ALERT_WAIT_FOR_POWER_SWITCH_DETECT`
+    - 226: `UI_ALERT_LINKEDAPP`
+    - 227: `UI_ALERT_ORIGIN_UNCLEAN`
+    - 228: `UI_ALERT_LOGUPLOAD_FAIL`
+    - 229: `UI_ALERT_BRUSH_CHANGE`
+    - 230: `UI_ALERT_FILTER_CHANGE`
+    - 231: `UI_ALERT_PERSISTENT_RELOCALIZATION_FAIL`
+    - 232: `UI_ALERT_TRAINING_MULTIPLE_FLOORPLANS_VALID`
+    - 233: `UI_ALERT_MULTIPLE_FLOORPLANS_VALID`
+    - 234: `UI_ALERT_PM_LOAD_FAIL`
+    - 235: `UI_ALERT_PM_SETUP_FAIL`
+    - 236: `UI_ALERT_ACQUIRING_PERSISTENT_MAP_IDS`
+    - 237: `UI_ALERT_CREATING_AND_UPLOADING_MAP`
+    - 238: `UI_ALERT_PM_START_CLEAN_FAIL`
+    - 239: `UI_ALERT_NAV_FLOORPLAN_NOT_CREATED`
+    - 240: `UI_ALERT_NAV_FLOORPLAN_ZONE_UNREACHABLE`
+    - 241: `UI_ALERT_NAV_FLOORPLAN_ZONE_WRONG_FLOOR`
+    - 242: `UI_ALERT_TRAINING_MAP_SPARSE`
+  - **Errors (243-316):**
+    - 243: `UI_ERROR_CHECK_BATTERY_SWITCH`
+    - 244: `UI_ERROR_DISCONNECT_CHRG_CABLE`
+    - 245: `UI_ERROR_DISCONNECT_USB_CABLE`
+    - 246: `UI_ERROR_SCHED_OFF`
+    - 247: `UI_ERROR_TIME_NOT_SET`
+    - 248: `UI_ERROR_DUST_BIN_EMPTIED`
+    - 249: `UI_ERROR_DUST_BIN_MISSING`
+    - 250: `UI_ERROR_DUST_BIN_FULL`
+    - 251: `UI_ERROR_BATTERY_OVERTEMP`
+    - 252: `UI_ERROR_UNABLE_TO_RETURN_TO_BASE`
+    - 253: `UI_ERROR_QA_FAIL`
+    - 254: `UI_ERROR_BUMPER_STUCK`
+    - 255: `UI_ERROR_PICKED_UP`
+    - 256: `UI_ERROR_RECONNECT_FAILED`
+    - 257: `UI_ERROR_LWHEEL_STUCK`
+    - 258: `UI_ERROR_RWHEEL_STUCK`
+    - 259: `UI_ERROR_LDS_JAMMED`
+    - 260: `UI_ERROR_LDS_DISCONNECTED`
+    - 261: `UI_ERROR_LDS_MISSED_PACKETS`
+    - 262: `UI_ERROR_LDS_BAD_PACKETS`
+    - 263: `UI_ERROR_LDS_LASER_OVER_POWER`
+    - 264: `UI_ERROR_LDS_LASER_UNDER_POWER`
+    - 265: `UI_ERROR_BRUSH_STUCK`
+    - 266: `UI_ERROR_BRUSH_OVERLOAD`
+    - 267: `UI_ERROR_VACUUM_STUCK`
+    - 268: `UI_ERROR_VACUUM_SLIP`
+    - 269: `UI_ERROR_BATTERY_CRITICAL`
+    - 270: `UI_ERROR_BATTERY_OverVolt`
+    - 271: `UI_ERROR_BATTERY_UnderVolt`
+    - 272: `UI_ERROR_BATTERY_UnderCurrent`
+    - 273: `UI_ERROR_BATTERY_Mismatch`
+    - 274: `UI_ERROR_BATTERY_LithiumAdapterFailure`
+    - 275: `UI_ERROR_BATTERY_UnderTemp`
+    - 276: `UI_ERROR_BATTERY_Unplugged`
+    - 277: `UI_ERROR_BATTERY_NoThermistor`
+    - 278: `UI_ERROR_BATTERY_BattUnderVoltLithiumSafety`
+    - 279: `UI_ERROR_BATTERY_InvalidSensor`
+    - 280: `UI_ERROR_BATTERY_PermanentError`
+    - 281: `UI_ERROR_BATTERY_Fault`
+    - 282: `UI_ERROR_NAVIGATION_UndockingFailed`
+    - 283: `UI_ERROR_NAVIGATION_Falling`
+    - 284: `UI_ERROR_NAVIGATION_PinkyCommsFail`
+    - 285: `UI_ERROR_NAVIGATION_NoMotionCommands`
+    - 286: `UI_ERROR_NAVIGATION_BackDrop_LeftBump`
+    - 287: `UI_ERROR_NAVIGATION_BackDrop_FrontBump`
+    - 288: `UI_ERROR_NAVIGATION_BackDrop_WheelExtended`
+    - 289: `UI_ERROR_NAVIGATION_RightDrop_LeftBump`
+    - 290: `UI_ERROR_NAVIGATION_NoExitsToGo`
+    - 291: `UI_ERROR_NAVIGATION_PathProblems_ReturningHome`
+    - 292: `UI_ERROR_NAVIGATION_NoProgress`
+    - 293: `UI_ERROR_NAVIGATION_BadMagSensor`
+    - 294: `UI_ERROR_NAVIGATION_Origin_Unclean`
+    - 295: `UI_ERROR_NAVIGATION_PathBlocked_GoingToZone`
+    - 296: `UI_ERROR_SHUTDOWN`
+    - 297: `UI_ERROR_DFLT_APP`
+    - 298: `UI_ERROR_CORRUPT_SCB`
+    - 299: `UI_ERROR_SCB_FLASH_READ`
+    - 300: `UI_ERROR_SCB_SIGNATURE`
+    - 301: `UI_ERROR_SCB_LENGTH_MISMATCH`
+    - 302: `UI_ERROR_SCB_CHECKSUM`
+    - 303: `UI_ERROR_SCB_VALIDATION`
+    - 304: `UI_ERROR_SCB_INTERFACE`
+    - 305: `UI_ERROR_HARDWARE_FAILURE`
+    - 306: `UI_ERROR_DECK_DEBRIS`
+    - 307: `UI_ERROR_RDROP_STUCK`
+    - 308: `UI_ERROR_LDROP_STUCK`
+    - 309: `UI_ERROR_UNABLE_TO_SEE`
+    - 310: `UI_ERROR_TILTED_ON_CLEANING_STARTUP`
+    - 311: `UI_ERROR_SWUPDATE_FILEMISSING`
+    - 312: `UI_ERROR_FLIGHT_SENSOR_DISCONNECTED`
+    - 313: `UI_ERROR_WIFIPSWDORROUTERISSUE`
+    - 314: `UI_ERROR_CONNECTINGTOSERVER`
+    - 315: `UI_ERROR_TIMEDOUTCONNECTROUTER`
+    - 316: `LAST_UI_ALERT`
+  - **Note:** Codes 200-242 are alerts (informational), 243+ are errors (action required).
+    Code numbers shifted between firmware 3.2.0 and 4.5.3 — always match by name, not number.
 
 ### Polling Intervals (from reference project)
 - `GetErr` + `GetState`: every 2 seconds
@@ -439,9 +535,69 @@ ChassisRev,-1,, UIPanelRev,-1,,
 - TestMode -> SetSystemMode delay: 100ms
 
 ### UI States (UIMGR_STATE_*)
-Key states: `POWERUP`, `STANDBY`, `IDLE`, `HOUSECLEANINGRUNNING`,
-`HOUSECLEANINGPAUSED`, `SPOTCLEANINGRUNNING`, `SPOTCLEANINGPAUSED`,
-`DOCKINGRUNNING`, `DOCKINGPAUSED`, `TESTMODE`, `MANUALCLEANING`
+Complete list from firmware 3.2.0 (unchanged in 4.5.3):
+- `UIMGR_STATE_POWERUP`
+- `UIMGR_STATE_IDLE`
+- `UIMGR_STATE_USERMENU`
+- `UIMGR_STATE_STANDBY`
+- `UIMGR_STATE_STARTSPOTCLEANING`
+- `UIMGR_STATE_SPOTCLEANINGRUNNING`
+- `UIMGR_STATE_STARTHOUSECLEANING`
+- `UIMGR_STATE_HOUSECLEANINGRUNNING`
+- `UIMGR_STATE_HOUSECLEANINGPAUSED`
+- `UIMGR_STATE_SPOTCLEANINGPAUSED`
+- `UIMGR_STATE_DOCKINGRUNNING`
+- `UIMGR_STATE_DOCKINGPAUSED`
+- `UIMGR_STATE_CLEANINGTESTRUNNING`
+- `UIMGR_STATE_CLEANINGSUSPENDED`
+- `UIMGR_STATE_CLEANINGSUSPENDEDMENU`
+- `UIMGR_STATE_TESTMENU`
+- `UIMGR_STATE_MANUALDRIVING`
+- `UIMGR_STATE_TESTMODE`
+- `UIMGR_STATE_INITIALSETUPMENU`
+- `UIMGR_STATE_SMARTDEVICECONTROL`
+- `UIMGR_STATE_USB_LOGCOPY`
+- `UIMGR_STATE_SWUPGRADE`
+- `UIMGR_STATE_OTA_LOGUPLOAD`
+- `UIMGR_STATE_INVALID`
+
+### Robot States (ST_*)
+Reported in `GetState` second line (`Current Robot State is:`). Available in
+firmware 4.5.3+ (not present in 3.2.0):
+- `ST_A_Init` — Initialization
+- `ST_C_Standby` — Standby/idle
+- `ST_F_Cleaning` — House cleaning (top-level)
+- `ST_F1_Undocking` — Undocking for house clean
+- `ST_F2_PartialMapManagement` — Partial map management
+- `ST_F21_Exploring` — Exploring during house clean
+- `ST_F3_InteriorCleaning` — Interior cleaning in progress
+- `ST_F4_BoundaryFollowing` — Following boundaries
+- `ST_F5_PickedUp` — Robot picked up during house clean
+- `ST_F6_CleaningErrRecovery` — Error recovery during house clean
+- `ST_F7_CleaningError` — Cleaning error state
+- `ST_G_SpotCleaning` — Spot cleaning (top-level)
+- `ST_G1_Undocking` — Undocking for spot clean
+- `ST_G2_PartialMapManagement` — Partial map management (spot)
+- `ST_G21_Exploring` — Exploring during spot clean
+- `ST_G3_InteriorCleaning` — Interior cleaning (spot)
+- `ST_G4_BoundaryFollowing` — Following boundaries (spot)
+- `ST_G5_PickedUp` — Robot picked up during spot clean
+- `ST_G6_CleaningErrRecovery` — Error recovery during spot clean
+- `ST_G7_CleaningError` — Cleaning error (spot)
+- `ST_K_Critical` — Critical error
+- `ST_L_Safety` — Safety stop
+- `ST_M_Charging` — Charging (top-level)
+- `ST_M1_Charging_Cleaning` — Charging mid-clean (recharge-and-resume)
+- `ST_M2_Charging_StdBy` — Charging in standby
+- `ST_P_PopState` — Pop state (internal transition)
+- `ST_T_Test` — Test mode (top-level)
+- `ST_T1_TestObstacleMonitor` — Obstacle monitor test
+- `ST_T3_ProxFollowTest` — Proximity follow test
+- `ST_T4_TestMotionExecutor` — Motion executor test
+- `ST_T6_BoundFollowOnly` — Boundary follow test
+- `ST_T7_TestDocking` — Docking test
+- `ST_T8_TestService` — Service test
+- `ST_X_ManNav` — Manual navigation
 
 ### Clean Stop Behavior
 Single `Clean Stop` command transitions:
@@ -586,6 +742,7 @@ Two top-level directories: `firmware/` for ESP32 code, `frontend/` for the web U
 | `neato_serial` | UART command queue state machine with AsyncCache per sensor type |
 | `neato_commands` | Command string constants, response structs, CSV parsers |
 | `async_cache.h` | Generic `AsyncCache<T>` template (TTL, dedup, invalidation) |
+| `loop_task.h` | `Ticker` one-shot timer, `LoopTask` base class, `TaskRegistry` for loop dispatch |
 | `web_server` | REST API routes, serves embedded frontend from PROGMEM |
 | `web_assets.h` | Auto-generated embedded frontend assets (gzipped PROGMEM arrays) |
 | `wifi_manager` | WiFi config, credentials (NVS), auto-reconnect, modem sleep |
@@ -596,6 +753,7 @@ Two top-level directories: `firmware/` for ESP32 code, `frontend/` for the web U
 | `data_logger` | SPIFFS JSON-lines logging, heatshrink compression, log management |
 | `manual_clean_manager` | Manual clean lifecycle, safety polling, obstacle blocking |
 | `notification_manager` | ntfy.sh push notifications, adaptive polling, state transition detection |
+| `cleaning_history` | SPIFFS JSONL session recording, heatshrink compression, canvas map data, quota enforcement |
 | `json_fields` | Lightweight field-based JSON serialization (no ArduinoJson) |
 | `serial_menu` | Interactive serial menu for USB debug console |
 
@@ -615,16 +773,17 @@ Use the appropriate typed helper; `logEvent` is private. Current public helpers:
 | `logWifi(event, extra)` | `wifi` | `event` | wifi_manager |
 | `logOta(event, extra)` | `ota` | `event` | firmware_manager |
 | `logNtp(event, extra)` | `ntp` | `event` | system_manager |
-| `logSchedule(category, extra)` | `event` | `category` | scheduler |
+| `logGenericEvent(category, extra)` | `event` | `category` | scheduler, cleaning_history |
 | `logNotification(category, message, success)` | `event` | `category` | notification_manager |
 
 When adding a new manager that needs logging, add a typed helper to `DataLogger`
 (following the pattern above) rather than exposing `logEvent` or adding a callback.
 Log both success and failure outcomes so issues are diagnosable from the log files.
 
-**`event` type entries** (scheduler + notifications) use `category` as the drill-down
-discriminator in the frontend. Scheduler categories are prefixed `scheduler_*`;
-notification categories are prefixed `notif_*`.
+**`event` type entries** (scheduler, cleaning history, notifications) use `category` as
+the drill-down discriminator in the frontend. Scheduler categories are prefixed
+`scheduler_*`; cleaning history categories are prefixed `history_*`; notification
+categories are prefixed `notif_*`.
 
 ### Frontend (`frontend/src/`)
 
@@ -633,15 +792,18 @@ notification categories are prefixed `notif_*`.
 | `app.tsx` | Root shell: theme, polling, routing, global state |
 | `api.ts` | Typed fetch wrappers for all REST endpoints |
 | `types.ts` | TypeScript interfaces for API data |
+| `history-data.ts` | JSONL parser, coverage map generation, path/bounding-box extraction |
 | `style.css` | Single CSS file, CSS variables for theming, responsive breakpoints |
-| `views/` | Page components: dashboard, settings, logs, schedule, manual |
-| `components/` | Reusable: Icon, BatteryIcon, ErrorBanner, ConfirmDialog, Router |
+| `views/` | Page components: dashboard, settings, logs, schedule, manual, history |
+| `views/logs/` | Logs submodules: list, item, helpers |
+| `views/history/` | History submodules: list, item, helpers (canvas renderer) |
+| `views/settings/` | Settings submodules: form state, firmware upload, reboot polling, constants (presets), helpers, category component |
+| `components/` | Reusable: Icon, BatteryIcon, ErrorBanner, ConfirmDialog, Router, Joystick, LidarMap |
 | `hooks/` | `usePolling`, `useRoute`, `useFetch` |
-| `settings/` | Settings submodules: form state, firmware upload, reboot polling |
 | `assets/` | SVG robot illustration + icon set |
 
 **Key patterns:**
-- Hash-based routing (`#/`, `#/settings`, `#/logs`, `#/schedule`, `#/manual`)
+- Hash-based routing (`#/`, `#/settings`, `#/logs`, `#/schedule`, `#/manual`, `#/history`)
 - Polling hooks pause when tab is hidden, resume on return
 - Dark theme default, CSS variables for light/dark/auto
 - Mobile-first responsive (breakpoints: 400px, 600px, 900px)
@@ -651,13 +813,17 @@ notification categories are prefixed `notif_*`.
 
 Stateful Node.js dev server (Vite plugin). Edit `SCENARIO` constant for quick
 state switching (e.g. `"ok"`, `"err"`, `"chg"`, fault injection codes).
-Reset to `"ok"` before committing.
+Supports pipe-separated compound scenarios (e.g. `"err|fa"`, `"man|llq"`).
+Includes LIDAR quality scenarios (`llq`, `lsl`, `lno`), manual clean scenarios
+(`man`, `mlf`, `mbf`, `mbs`, `msf`, `msr`), and in-memory history simulation
+with mapdata JSONL fixtures. Reset to `"ok"` before committing.
 
 ### Frontend build pipeline
 
-`npm run build` -> Biome lint -> Vite build -> `embed_frontend.js` gzips dist/
-files and generates `web_assets.h` -> firmware compiles with assets in PROGMEM.
-Frontend is part of the firmware binary — single OTA update covers both.
+`npm run build` -> Biome lint -> TypeScript check (`tsc --noEmit`) -> Vite build ->
+`embed_frontend.js` gzips dist/ files and generates `web_assets.h` -> firmware
+compiles with assets in PROGMEM. Frontend is part of the firmware binary — single
+OTA update covers both.
 
 ### Current API routes
 
@@ -668,13 +834,9 @@ Frontend is part of the firmware binary — single OTA update covers both.
 | POST | `/api/firmware/update?hash=<md5>` | OTA firmware upload |
 | GET | `/api/version` | Robot version info |
 | GET | `/api/charger` | Battery and charging data |
-| GET | `/api/sensors/analog` | Analog sensor readings |
-| GET | `/api/sensors/digital` | Digital sensor states |
 | GET | `/api/motors` | Motor diagnostic data |
 | GET | `/api/state` | Robot UI state |
 | GET | `/api/error` | Robot error/alert |
-| GET | `/api/accel` | Accelerometer readings |
-| GET | `/api/buttons` | Button states |
 | GET | `/api/lidar` | LIDAR scan data |
 | POST | `/api/clean?action=house\|spot\|stop` | Cleaning control |
 | POST | `/api/sound?id=N` | Play sound |
@@ -687,6 +849,7 @@ Frontend is part of the firmware binary — single OTA update covers both.
 | GET | `/api/system` | System health (heap, uptime, RSSI, SPIFFS, NTP) |
 | POST | `/api/system/restart` | Restart device |
 | POST | `/api/system/reset` | Factory reset |
+| POST | `/api/system/format-spiffs` | Format SPIFFS (erases logs + history, restarts) |
 | GET | `/api/settings` | All user settings |
 | PUT | `/api/settings` | Partial settings update |
 | POST | `/api/manual?enable=1\|0` | Manual mode (TestMode + LDS lifecycle) |
@@ -694,6 +857,10 @@ Frontend is part of the firmware binary — single OTA update covers both.
 | POST | `/api/manual/move?left=N&right=N&speed=N` | Manual clean movement (safety-checked) |
 | POST | `/api/manual/motors?brush=0\|1&vacuum=0\|1&sideBrush=0\|1` | Motor control |
 | POST | `/api/notifications/test?topic=<topic>` | Send test notification via ntfy.sh |
+| GET | `/api/history` | List cleaning history sessions |
+| GET | `/api/history/{filename}` | Download session JSONL |
+| DELETE | `/api/history/{filename}` | Delete session file |
+| DELETE | `/api/history` | Delete all history |
 
 ## Build Commands
 
@@ -727,12 +894,12 @@ npm run fix          # Auto-fix safe issues (formatting, import order)
 npm run fix:unsafe   # Also apply unsafe fixes (template literals, etc.)
 ```
 
-Frontend build runs `biome check` before `vite build` — lint/format errors fail the build.
+Frontend build runs `biome check` and `tsc --noEmit` before `vite build` — lint/format/type errors fail the build.
 
 ## Dependencies (all pinned)
 
 - `ESP32Async/AsyncTCP @ 3.4.10`
-- `ESP32Async/ESPAsyncWebServer @ 3.9.6`
+- `ESP32Async/ESPAsyncWebServer @ 3.10.0`
 - Vendored: `heatshrink @ 0.4.1` (in `firmware/lib/heatshrink/`)
 - Built-in: `Preferences @ 2.0.0`, `WiFi @ 2.0.0`, `SPIFFS @ 2.0.0`, `Update @ 2.0.0`
 

@@ -6,6 +6,7 @@ import checkSvg from "../assets/icons/check.svg?raw";
 import clockSvg from "../assets/icons/clock.svg?raw";
 import databaseSvg from "../assets/icons/database.svg?raw";
 import gearSvg from "../assets/icons/gear.svg?raw";
+import historySvg from "../assets/icons/history.svg?raw";
 import houseSvg from "../assets/icons/house.svg?raw";
 import idleSvg from "../assets/icons/idle.svg?raw";
 import manualSvg from "../assets/icons/manual.svg?raw";
@@ -189,14 +190,24 @@ export function DashboardView({ firmware, state, isManual }: DashboardViewProps)
             {/* Header */}
             <div class="header">
                 <h1>OpenNeato</h1>
-                <button
-                    type="button"
-                    class="header-right-btn"
-                    aria-label="Settings"
-                    onClick={() => navigate("/settings")}
-                >
-                    <Icon svg={gearSvg} />
-                </button>
+                <div class="header-btns">
+                    <button
+                        type="button"
+                        class="header-right-btn"
+                        aria-label="Cleaning History"
+                        onClick={() => navigate("/history")}
+                    >
+                        <Icon svg={historySvg} />
+                    </button>
+                    <button
+                        type="button"
+                        class="header-right-btn"
+                        aria-label="Settings"
+                        onClick={() => navigate("/settings")}
+                    >
+                        <Icon svg={gearSvg} />
+                    </button>
+                </div>
             </div>
 
             {/* Status bar */}

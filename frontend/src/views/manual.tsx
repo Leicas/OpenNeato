@@ -109,14 +109,16 @@ export function ManualView({
     // Poll LIDAR only when in manual mode
     const lidar = usePolling<LidarScan>(api.getLidar, isManual ? 1000 : 0);
 
-    // Measure available map container width
+    // Measure available map container — use the smaller of width/height so the
+    // square canvas fits without pushing controls off screen.
     useEffect(() => {
         const el = mapContainerRef.current;
         if (!el) return;
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const w = Math.floor(entry.contentRect.width);
-                setMapSize(Math.min(w, 400));
+                const h = Math.floor(entry.contentRect.height);
+                setMapSize(Math.min(w, h));
             }
         });
         observer.observe(el);
@@ -202,39 +204,41 @@ export function ManualView({
             </div>
 
             <div class="manual-page">
-                {/* LIDAR map */}
-                <div class="manual-map" ref={mapContainerRef}>
-                    <LidarMap scan={lidar.data} size={mapSize} moving={moving} />
-                    {charger.data && (
-                        <div class="manual-map-battery">
-                            <BatteryIcon pct={charger.data.fuelPercent} />
-                            <span>{charger.data.fuelPercent}%</span>
-                            {(charger.data.chargingActive || charger.data.extPwrPresent) && <Icon svg={boltSvg} />}
-                        </div>
-                    )}
-                    {!lidar.data && !isManual && (
-                        <div class="manual-map-warn manual-map-center">Not in manual mode</div>
-                    )}
-                    {!lidar.data && isManual && lidar.error && (
-                        <div class="manual-map-warn manual-map-center">LIDAR unavailable</div>
-                    )}
-                    {safetyWarning(status) && (
-                        <div class="manual-map-warn manual-map-top error">{safetyWarning(status)}</div>
-                    )}
-                    {lidar.data &&
-                        (lidar.data.validPoints < 90 ||
-                            (lidar.data.rotationSpeed > 0 && lidar.data.rotationSpeed < 4.0)) && (
-                            <div class="manual-map-warn">
-                                {[
-                                    lidar.data.validPoints < 90 && `Low quality (${lidar.data.validPoints}/360)`,
-                                    lidar.data.rotationSpeed > 0 &&
-                                        lidar.data.rotationSpeed < 4.0 &&
-                                        `Slow LDS (${lidar.data.rotationSpeed.toFixed(1)} Hz)`,
-                                ]
-                                    .filter(Boolean)
-                                    .join(" · ")}
+                {/* LIDAR map — outer div fills remaining height, inner div wraps canvas */}
+                <div class="manual-map-sizer" ref={mapContainerRef}>
+                    <div class="manual-map">
+                        <LidarMap scan={lidar.data} size={mapSize} moving={moving} />
+                        {charger.data && (
+                            <div class="manual-map-battery">
+                                <BatteryIcon pct={charger.data.fuelPercent} />
+                                <span>{charger.data.fuelPercent}%</span>
+                                {(charger.data.chargingActive || charger.data.extPwrPresent) && <Icon svg={boltSvg} />}
                             </div>
                         )}
+                        {!lidar.data && !isManual && (
+                            <div class="manual-map-warn manual-map-center">Not in manual mode</div>
+                        )}
+                        {!lidar.data && isManual && lidar.error && (
+                            <div class="manual-map-warn manual-map-center">LIDAR unavailable</div>
+                        )}
+                        {safetyWarning(status) && (
+                            <div class="manual-map-warn manual-map-top error">{safetyWarning(status)}</div>
+                        )}
+                        {lidar.data &&
+                            (lidar.data.validPoints < 90 ||
+                                (lidar.data.rotationSpeed > 0 && lidar.data.rotationSpeed < 4.0)) && (
+                                <div class="manual-map-warn">
+                                    {[
+                                        lidar.data.validPoints < 90 && `Low quality (${lidar.data.validPoints}/360)`,
+                                        lidar.data.rotationSpeed > 0 &&
+                                            lidar.data.rotationSpeed < 4.0 &&
+                                            `Slow LDS (${lidar.data.rotationSpeed.toFixed(1)} Hz)`,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                </div>
+                            )}
+                    </div>
                 </div>
 
                 {/* Controls area */}

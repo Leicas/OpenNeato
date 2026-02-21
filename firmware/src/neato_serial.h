@@ -36,7 +36,6 @@ public:
 
     void getVersion(std::function<void(bool, const VersionData&)> callback);
     void getCharger(std::function<void(bool, const ChargerData&)> callback);
-    void getAnalogSensors(std::function<void(bool, const AnalogSensorData&)> callback);
     void getDigitalSensors(std::function<void(bool, const DigitalSensorData&)> callback);
     void getDigitalSensors(std::function<void(bool, const DigitalSensorData&)> callback, CommandPriority priority);
     void getMotors(std::function<void(bool, const MotorData&)> callback);
@@ -45,8 +44,6 @@ public:
     void getErr(std::function<void(bool, const ErrorData&)> callback);
     void getErrClear(std::function<void(bool, const ErrorData&)> callback);
     void getLdsScan(std::function<void(bool, const LdsScanData&)> callback);
-    void getAccel(std::function<void(bool, const AccelData&)> callback);
-    void getButtons(std::function<void(bool, const ButtonData&)> callback);
     void getRobotPos(bool smooth, std::function<void(bool, const RobotPosData&)> callback);
     // -- Action commands (fire-and-forget by default) ------------------------
 
@@ -131,13 +128,10 @@ private:
 
     AsyncCache<VersionData> versionCache;
     AsyncCache<ChargerData> chargerCache;
-    AsyncCache<AnalogSensorData> analogCache;
     AsyncCache<DigitalSensorData> digitalCache;
     AsyncCache<MotorData> motorCache;
     AsyncCache<RobotState> stateCache;
     AsyncCache<ErrorData> errCache;
-    AsyncCache<AccelData> accelCache;
-    AsyncCache<ButtonData> buttonCache;
     AsyncCache<LdsScanData> ldsCache;
     AsyncCache<RobotPosData> robotPosRawCache;
     AsyncCache<RobotPosData> robotPosSmoothCache;
@@ -145,15 +139,12 @@ private:
     // Raw (uncached) fetch methods — enqueue the command and parse response
     void fetchVersion(std::function<void(bool, const VersionData&)> callback);
     void fetchCharger(std::function<void(bool, const ChargerData&)> callback);
-    void fetchAnalogSensors(std::function<void(bool, const AnalogSensorData&)> callback);
     void fetchDigitalSensors(std::function<void(bool, const DigitalSensorData&)> callback,
                              CommandPriority priority = PRIORITY_NORMAL);
     void fetchMotors(std::function<void(bool, const MotorData&)> callback, CommandPriority priority = PRIORITY_NORMAL);
     void fetchState(std::function<void(bool, const RobotState&)> callback);
     void fetchErr(std::function<void(bool, const ErrorData&)> callback);
     void fetchErrClear(std::function<void(bool, const ErrorData&)> callback);
-    void fetchAccel(std::function<void(bool, const AccelData&)> callback);
-    void fetchButtons(std::function<void(bool, const ButtonData&)> callback);
     void fetchLdsScan(std::function<void(bool, const LdsScanData&)> callback);
     void fetchRobotPos(const char *cmd, std::function<void(bool, const RobotPosData&)> callback);
 };

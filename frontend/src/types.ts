@@ -116,3 +116,63 @@ export interface LogFileInfo {
     size: number;
     compressed: boolean;
 }
+
+export interface MapSession {
+    type: "session";
+    mode: string;
+    time: number;
+    battery: number;
+}
+
+export interface MapSummary {
+    type: "summary";
+    time: number;
+    duration: number;
+    mode: string;
+    recharges: number;
+    snapshots: number;
+    distanceTraveled: number;
+    maxDistFromOrigin: number;
+    totalRotation: number;
+    areaCovered: number;
+    errorsDuringClean: number;
+    battery: number;
+}
+
+export interface MapPathPoint {
+    x: number;
+    y: number;
+    t: number;
+    ts: number;
+}
+
+export interface MapBounds {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+}
+
+export interface MapRechargePoint {
+    x: number;
+    y: number;
+}
+
+export interface MapData {
+    session: MapSession | null;
+    summary: MapSummary | null;
+    path: MapPathPoint[];
+    coverage: [number, number][];
+    recharges: MapRechargePoint[];
+    bounds: MapBounds | null;
+    cellSize: number;
+}
+
+export interface HistoryFileInfo {
+    name: string;
+    size: number;
+    compressed: boolean;
+    recording: boolean;
+    session: MapSession | null;
+    summary: MapSummary | null;
+}

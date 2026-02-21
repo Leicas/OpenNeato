@@ -7,15 +7,16 @@
 #include "firmware_manager.h"
 #include "manual_clean_manager.h"
 #include "notification_manager.h"
+#include "cleaning_history.h"
 #include <SPIFFS.h>
 
 unsigned long WebServer::lastApiActivity = 0;
 
 WebServer::WebServer(AsyncWebServer& server, NeatoSerial& neato, DataLogger& logger, SystemManager& sys,
                      FirmwareManager& fw, SettingsManager& settings, ManualCleanManager& manual,
-                     NotificationManager& notif) :
+                     NotificationManager& notif, CleaningHistory& history) :
     server(server), neato(neato), logger(logger), sysMgr(sys), fwMgr(fw), settingsMgr(settings), manualMgr(manual),
-    notifMgr(notif) {}
+    notifMgr(notif), historyMgr(history) {}
 
 void WebServer::loggedRoute(const char *path, WebRequestMethodComposite httpMethod, SyncHandler handler) {
     server.on(path, httpMethod, [this, handler](AsyncWebServerRequest *request) {
@@ -69,6 +70,7 @@ void WebServer::begin() {
     registerSystemRoutes();
     registerSettingsRoutes();
     registerFirmwareRoutes();
+    registerMapRoutes();
 
     LOG("WEB", "Frontend and API routes registered");
 }
@@ -78,24 +80,13 @@ void WebServer::registerApiRoutes() {
 
     registerGetRoute("/api/version", neato, &NeatoSerial::getVersion, {});
     registerGetRoute("/api/charger", neato, &NeatoSerial::getCharger, {});
-    registerGetRoute("/api/sensors/analog", neato, &NeatoSerial::getAnalogSensors, {});
-    registerGetRoute("/api/sensors/digital", neato,
-                     static_cast<void (NeatoSerial::*)(std::function<void(bool, const DigitalSensorData&)>)>(
-                             &NeatoSerial::getDigitalSensors),
-                     {});
     registerGetRoute(
             "/api/motors", neato,
             static_cast<void (NeatoSerial::*)(std::function<void(bool, const MotorData&)>)>(&NeatoSerial::getMotors),
             {});
     registerGetRoute("/api/state", neato, &NeatoSerial::getState, {});
     registerGetRoute("/api/error", neato, &NeatoSerial::getErr, {});
-    registerGetRoute("/api/accel", neato, &NeatoSerial::getAccel, {});
-    registerGetRoute("/api/buttons", neato, &NeatoSerial::getButtons, {});
     registerGetRoute("/api/lidar", neato, &NeatoSerial::getLdsScan, {});
-
-    // -- Exploration endpoints (temporary — response format unknown) ----------
-
-    registerGetRoute("/api/robotpos", neato, &NeatoSerial::getRobotPos, {"smooth"});
 
     // -- Action endpoints ----------------------------------------------------
     // All parameterized actions use query strings: resource URL identifies the
@@ -218,6 +209,13 @@ void WebServer::registerSystemRoutes() {
         return 200;
     });
 
+    // POST /api/system/format-spiffs — format SPIFFS (erases logs + map data, then restarts)
+    loggedRoute("/api/system/format-spiffs", HTTP_POST, [this](AsyncWebServerRequest *request) -> int {
+        sendOk(request);
+        sysMgr.formatSpiffs();
+        return 200;
+    });
+
     LOG("WEB", "System routes registered");
 }
 
@@ -335,4 +333,80 @@ void WebServer::registerFirmwareRoutes() {
             });
 
     LOG("WEB", "Firmware routes registered");
+}
+
+// -- Map data endpoints -------------------------------------------------------
+
+void WebServer::registerMapRoutes() {
+    // GET /api/history[/filename] — list sessions, collection status, or download a specific file
+    server.on("/api/history", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        lastApiActivity = millis();
+        unsigned long startMs = lastApiActivity;
+        String suffix = request->url().substring(String("/api/history/").length());
+
+        if (suffix.isEmpty()) {
+            // List all session files with embedded session/summary metadata
+            auto sessions = historyMgr.listSessions();
+            String json = "[";
+            for (size_t i = 0; i < sessions.size(); i++) {
+                if (i > 0)
+                    json += ",";
+                const auto& s = sessions[i];
+                json += "{\"name\":\"" + s.name + "\",\"size\":" + String(static_cast<unsigned long>(s.size)) +
+                        ",\"compressed\":" + String(s.compressed ? "true" : "false") +
+                        ",\"recording\":" + String(s.recording ? "true" : "false");
+                if (s.session.length() > 0) {
+                    json += ",\"session\":" + s.session;
+                } else {
+                    json += ",\"session\":null";
+                }
+                if (s.summary.length() > 0) {
+                    json += ",\"summary\":" + s.summary;
+                } else {
+                    json += ",\"summary\":null";
+                }
+                json += "}";
+            }
+            json += "]";
+            logger.logRequest(HTTP_GET, "/api/history", 200, millis() - startMs);
+            request->send(200, "application/json", json);
+            return;
+        }
+
+        // Download specific session
+        auto reader = historyMgr.readSession(suffix);
+        if (!reader) {
+            logger.logRequest(HTTP_GET, request->url().c_str(), 404, millis() - startMs);
+            sendError(request, 404, "session not found");
+            return;
+        }
+
+        logger.logRequest(HTTP_GET, request->url().c_str(), 200, millis() - startMs);
+
+        AsyncWebServerResponse *response = request->beginChunkedResponse(
+                "application/x-ndjson",
+                [reader](uint8_t *buffer, size_t maxLen, size_t) -> size_t { return reader->read(buffer, maxLen); });
+        request->send(response);
+    });
+
+    // DELETE /api/history[/filename] — delete one or all sessions
+    loggedRoute("/api/history", HTTP_DELETE, [this](AsyncWebServerRequest *request) -> int {
+        String filename = request->url().substring(String("/api/history/").length());
+
+        if (filename.isEmpty()) {
+            historyMgr.deleteAllSessions();
+            sendOk(request);
+            return 200;
+        }
+
+        if (historyMgr.deleteSession(filename)) {
+            sendOk(request);
+            return 200;
+        }
+
+        sendError(request, 404, "session not found");
+        return 404;
+    });
+
+    LOG("WEB", "History routes registered");
 }

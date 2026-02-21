@@ -34,39 +34,6 @@ static bool findCsvValue(const String& raw, const String& label, String& value) 
     return false;
 }
 
-// Find value in 3-column CSV "Name,Unit,Value," format (GetAnalogSensors)
-static bool findCsv3Value(const String& raw, const String& label, String& value) {
-    int pos = 0;
-    while (pos < static_cast<int>(raw.length())) {
-        int lineEnd = raw.indexOf('\n', pos);
-        if (lineEnd < 0)
-            lineEnd = raw.length();
-
-        String line = raw.substring(pos, lineEnd);
-        line.trim();
-
-        // Find first and second commas
-        int comma1 = line.indexOf(',');
-        if (comma1 > 0) {
-            String key = line.substring(0, comma1);
-            key.trim();
-            if (key == label) {
-                int comma2 = line.indexOf(',', comma1 + 1);
-                if (comma2 > 0) {
-                    value = line.substring(comma2 + 1);
-                    value.trim();
-                    if (value.endsWith(",")) {
-                        value = value.substring(0, value.length() - 1);
-                    }
-                    return true;
-                }
-            }
-        }
-        pos = lineEnd + 1;
-    }
-    return false;
-}
-
 // -- toFields() implementations ----------------------------------------------
 
 std::vector<Field> VersionData::toFields() const {
@@ -95,25 +62,6 @@ std::vector<Field> ChargerData::toFields() const {
             {"vExtV", String(vExtV, 2), FIELD_FLOAT},
             {"chargerMAH", String(chargerMAH), FIELD_INT},
             {"dischargeMAH", String(dischargeMAH), FIELD_INT},
-    };
-}
-
-std::vector<Field> AnalogSensorData::toFields() const {
-    return {
-            {"batteryVoltage", String(batteryVoltage), FIELD_INT},
-            {"batteryCurrent", String(batteryCurrent), FIELD_INT},
-            {"batteryTemp", String(batteryTemp), FIELD_INT},
-            {"externalVoltage", String(externalVoltage), FIELD_INT},
-            {"accelX", String(accelX), FIELD_INT},
-            {"accelY", String(accelY), FIELD_INT},
-            {"accelZ", String(accelZ), FIELD_INT},
-            {"vacuumCurrent", String(vacuumCurrent), FIELD_INT},
-            {"sideBrushCurrent", String(sideBrushCurrent), FIELD_INT},
-            {"magSensorLeft", String(magSensorLeft), FIELD_INT},
-            {"magSensorRight", String(magSensorRight), FIELD_INT},
-            {"wallSensor", String(wallSensor), FIELD_INT},
-            {"dropSensorLeft", String(dropSensorLeft), FIELD_INT},
-            {"dropSensorRight", String(dropSensorRight), FIELD_INT},
     };
 }
 
@@ -163,24 +111,6 @@ std::vector<Field> ErrorData::toFields() const {
             {"hasError", hasError ? "true" : "false", FIELD_BOOL},
             {"errorCode", String(errorCode), FIELD_INT},
             {"errorMessage", errorMessage, FIELD_STRING},
-    };
-}
-
-std::vector<Field> AccelData::toFields() const {
-    return {
-            {"pitchDeg", String(pitchDeg, 2), FIELD_FLOAT}, {"rollDeg", String(rollDeg, 2), FIELD_FLOAT},
-            {"xInG", String(xInG, 4), FIELD_FLOAT},         {"yInG", String(yInG, 4), FIELD_FLOAT},
-            {"zInG", String(zInG, 4), FIELD_FLOAT},         {"sumInG", String(sumInG, 4), FIELD_FLOAT},
-    };
-}
-
-std::vector<Field> ButtonData::toFields() const {
-    return {
-            {"softKey", softKey ? "true" : "false", FIELD_BOOL},
-            {"scrollUp", scrollUp ? "true" : "false", FIELD_BOOL},
-            {"start", start ? "true" : "false", FIELD_BOOL},
-            {"back", back ? "true" : "false", FIELD_BOOL},
-            {"scrollDown", scrollDown ? "true" : "false", FIELD_BOOL},
     };
 }
 
@@ -275,66 +205,6 @@ bool parseChargerData(const String& raw, ChargerData& out) {
     if (findCsvValue(raw, "Discharge_mAH", val))
         out.dischargeMAH = val.toInt();
     return out.fuelPercent >= 0;
-}
-
-bool parseAnalogSensorData(const String& raw, AnalogSensorData& out) {
-    String val;
-    bool found = false;
-
-    // Try 3-column format first: "SensorName,Unit,Value,"
-    if (findCsv3Value(raw, "BatteryVoltage", val)) {
-        out.batteryVoltage = val.toInt();
-        found = true;
-    }
-    if (findCsv3Value(raw, "BatteryCurrent", val))
-        out.batteryCurrent = val.toInt();
-    if (findCsv3Value(raw, "BatteryTemperature", val))
-        out.batteryTemp = val.toInt();
-    if (findCsv3Value(raw, "ExternalVoltage", val))
-        out.externalVoltage = val.toInt();
-    if (findCsv3Value(raw, "AccelerometerX", val))
-        out.accelX = val.toInt();
-    if (findCsv3Value(raw, "AccelerometerY", val))
-        out.accelY = val.toInt();
-    if (findCsv3Value(raw, "AccelerometerZ", val))
-        out.accelZ = val.toInt();
-    if (findCsv3Value(raw, "VacuumCurrent", val))
-        out.vacuumCurrent = val.toInt();
-    if (findCsv3Value(raw, "SideBrushCurrent", val))
-        out.sideBrushCurrent = val.toInt();
-    if (findCsv3Value(raw, "MagSensorLeft", val))
-        out.magSensorLeft = val.toInt();
-    if (findCsv3Value(raw, "MagSensorRight", val))
-        out.magSensorRight = val.toInt();
-    if (findCsv3Value(raw, "WallSensor", val))
-        out.wallSensor = val.toInt();
-    if (findCsv3Value(raw, "DropSensorLeft", val))
-        out.dropSensorLeft = val.toInt();
-    if (findCsv3Value(raw, "DropSensorRight", val))
-        out.dropSensorRight = val.toInt();
-
-    // Fallback: try 2-column raw format "SensorName,Value"
-    if (!found) {
-        if (findCsvValue(raw, "BatteryVoltageInmV", val)) {
-            out.batteryVoltage = val.toInt();
-            found = true;
-        }
-        if (findCsvValue(raw, "CurrentInmA", val))
-            out.batteryCurrent = val.toInt();
-        if (findCsvValue(raw, "WallSensorInMM", val))
-            out.wallSensor = val.toInt();
-        if (findCsvValue(raw, "LeftDropInMM", val))
-            out.dropSensorLeft = val.toInt();
-        if (findCsvValue(raw, "RightDropInMM", val))
-            out.dropSensorRight = val.toInt();
-        if (findCsvValue(raw, "LeftMagSensor", val))
-            out.magSensorLeft = val.toInt();
-        if (findCsvValue(raw, "RightMagSensor", val))
-            out.magSensorRight = val.toInt();
-        if (findCsvValue(raw, "VacuumCurrentInmA", val))
-            out.vacuumCurrent = val.toInt();
-    }
-    return found;
 }
 
 bool parseDigitalSensorData(const String& raw, DigitalSensorData& out) {
@@ -473,44 +343,6 @@ bool parseErrorData(const String& raw, ErrorData& out) {
         searchFrom = dashPos + 3;
     }
     return true;
-}
-
-bool parseAccelData(const String& raw, AccelData& out) {
-    String val;
-    bool found = false;
-    if (findCsvValue(raw, "PitchInDegrees", val)) {
-        out.pitchDeg = val.toFloat();
-        found = true;
-    }
-    if (findCsvValue(raw, "RollInDegrees", val))
-        out.rollDeg = val.toFloat();
-    if (findCsvValue(raw, "XInG", val))
-        out.xInG = val.toFloat();
-    if (findCsvValue(raw, "YInG", val))
-        out.yInG = val.toFloat();
-    if (findCsvValue(raw, "ZInG", val))
-        out.zInG = val.toFloat();
-    if (findCsvValue(raw, "SumInG", val))
-        out.sumInG = val.toFloat();
-    return found;
-}
-
-bool parseButtonData(const String& raw, ButtonData& out) {
-    String val;
-    bool found = false;
-    if (findCsvValue(raw, "BTN_SOFT_KEY", val)) {
-        out.softKey = val.toInt() != 0;
-        found = true;
-    }
-    if (findCsvValue(raw, "BTN_SCROLL_UP", val))
-        out.scrollUp = val.toInt() != 0;
-    if (findCsvValue(raw, "BTN_START", val))
-        out.start = val.toInt() != 0;
-    if (findCsvValue(raw, "BTN_BACK", val))
-        out.back = val.toInt() != 0;
-    if (findCsvValue(raw, "BTN_SCROLL_DOWN", val))
-        out.scrollDown = val.toInt() != 0;
-    return found;
 }
 
 bool parseLdsScanData(const String& raw, LdsScanData& out) {

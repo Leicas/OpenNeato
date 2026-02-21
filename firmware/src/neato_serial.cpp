@@ -18,9 +18,6 @@ NeatoSerial::NeatoSerial() :
     chargerCache(
             CACHE_TTL_CHARGER, [this](AsyncCache<ChargerData>::Callback cb) { fetchCharger(cb); },
             CACHE_HIT(CMD_GET_CHARGER)),
-    analogCache(
-            CACHE_TTL_SENSORS, [this](AsyncCache<AnalogSensorData>::Callback cb) { fetchAnalogSensors(cb); },
-            CACHE_HIT(CMD_GET_ANALOG_SENSORS)),
     digitalCache(
             CACHE_TTL_SENSORS, [this](AsyncCache<DigitalSensorData>::Callback cb) { fetchDigitalSensors(cb); },
             CACHE_HIT(CMD_GET_DIGITAL_SENSORS)),
@@ -31,11 +28,6 @@ NeatoSerial::NeatoSerial() :
             CACHE_TTL_STATE, [this](AsyncCache<RobotState>::Callback cb) { fetchState(cb); }, CACHE_HIT(CMD_GET_STATE)),
     errCache(
             CACHE_TTL_STATE, [this](AsyncCache<ErrorData>::Callback cb) { fetchErr(cb); }, CACHE_HIT(CMD_GET_ERR)),
-    accelCache(
-            CACHE_TTL_ACCEL, [this](AsyncCache<AccelData>::Callback cb) { fetchAccel(cb); }, CACHE_HIT(CMD_GET_ACCEL)),
-    buttonCache(
-            CACHE_TTL_BUTTONS, [this](AsyncCache<ButtonData>::Callback cb) { fetchButtons(cb); },
-            CACHE_HIT(CMD_GET_BUTTONS)),
     ldsCache(
             CACHE_TTL_LDS, [this](AsyncCache<LdsScanData>::Callback cb) { fetchLdsScan(cb); },
             CACHE_HIT(CMD_GET_LDS_SCAN)),
@@ -260,10 +252,6 @@ void NeatoSerial::getCharger(std::function<void(bool, const ChargerData&)> callb
     chargerCache.get(callback);
 }
 
-void NeatoSerial::getAnalogSensors(std::function<void(bool, const AnalogSensorData&)> callback) {
-    analogCache.get(callback);
-}
-
 void NeatoSerial::getDigitalSensors(std::function<void(bool, const DigitalSensorData&)> callback) {
     getDigitalSensors(callback, PRIORITY_NORMAL);
 }
@@ -326,14 +314,6 @@ void NeatoSerial::getLdsScan(std::function<void(bool, const LdsScanData&)> callb
     ldsCache.get(callback);
 }
 
-void NeatoSerial::getAccel(std::function<void(bool, const AccelData&)> callback) {
-    accelCache.get(callback);
-}
-
-void NeatoSerial::getButtons(std::function<void(bool, const ButtonData&)> callback) {
-    buttonCache.get(callback);
-}
-
 void NeatoSerial::getRobotPos(bool smooth, std::function<void(bool, const RobotPosData&)> callback) {
     (smooth ? robotPosSmoothCache : robotPosRawCache).get(callback);
 }
@@ -355,16 +335,6 @@ void NeatoSerial::fetchCharger(std::function<void(bool, const ChargerData&)> cal
         ChargerData data;
         if (ok)
             ok = parseChargerData(raw, data);
-        if (callback)
-            callback(ok, data);
-    });
-}
-
-void NeatoSerial::fetchAnalogSensors(std::function<void(bool, const AnalogSensorData&)> callback) {
-    enqueue(CMD_GET_ANALOG_SENSORS, [callback](bool ok, const String& raw) {
-        AnalogSensorData data;
-        if (ok)
-            ok = parseAnalogSensorData(raw, data);
         if (callback)
             callback(ok, data);
     });
@@ -447,26 +417,6 @@ void NeatoSerial::fetchRobotPos(const char *cmd, std::function<void(bool, const 
     });
 }
 
-void NeatoSerial::fetchAccel(std::function<void(bool, const AccelData&)> callback) {
-    enqueue(CMD_GET_ACCEL, [callback](bool ok, const String& raw) {
-        AccelData data;
-        if (ok)
-            ok = parseAccelData(raw, data);
-        if (callback)
-            callback(ok, data);
-    });
-}
-
-void NeatoSerial::fetchButtons(std::function<void(bool, const ButtonData&)> callback) {
-    enqueue(CMD_GET_BUTTONS, [callback](bool ok, const String& raw) {
-        ButtonData data;
-        if (ok)
-            ok = parseButtonData(raw, data);
-        if (callback)
-            callback(ok, data);
-    });
-}
-
 // -- Cache invalidation ------------------------------------------------------
 
 void NeatoSerial::invalidateState() {
@@ -477,13 +427,10 @@ void NeatoSerial::invalidateState() {
 void NeatoSerial::invalidateAll() {
     versionCache.invalidate();
     chargerCache.invalidate();
-    analogCache.invalidate();
     digitalCache.invalidate();
     motorCache.invalidate();
     stateCache.invalidate();
     errCache.invalidate();
-    accelCache.invalidate();
-    buttonCache.invalidate();
     ldsCache.invalidate();
     robotPosRawCache.invalidate();
     robotPosSmoothCache.invalidate();

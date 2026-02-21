@@ -9,15 +9,13 @@
 
 #define CMD_GET_VERSION "GetVersion"
 #define CMD_GET_CHARGER "GetCharger"
-#define CMD_GET_ANALOG_SENSORS "GetAnalogSensors"
 #define CMD_GET_DIGITAL_SENSORS "GetDigitalSensors"
 #define CMD_GET_MOTORS "GetMotors"
 #define CMD_GET_STATE "GetState"
 #define CMD_GET_ERR "GetErr"
 #define CMD_GET_ERR_CLEAR "GetErr Clear"
 #define CMD_GET_LDS_SCAN "GetLDSScan"
-#define CMD_GET_ACCEL "GetAccel"
-#define CMD_GET_BUTTONS "GetButtons"
+
 #define CMD_GET_TIME "GetTime"
 #define CMD_GET_CAL_INFO "GetCalInfo"
 #define CMD_GET_LIFE_STAT_LOG "GetLifeStatLog"
@@ -95,25 +93,6 @@ struct ChargerData : public JsonSerializable {
     std::vector<Field> toFields() const override;
 };
 
-struct AnalogSensorData : public JsonSerializable {
-    int batteryVoltage = 0; // mV
-    int batteryCurrent = 0; // mA (negative = discharging)
-    int batteryTemp = 0; // milli-Celsius
-    int externalVoltage = 0; // mV
-    int accelX = 0; // milli-G
-    int accelY = 0; // milli-G
-    int accelZ = 0; // milli-G
-    int vacuumCurrent = 0; // mA
-    int sideBrushCurrent = 0; // mA
-    int magSensorLeft = 0;
-    int magSensorRight = 0;
-    int wallSensor = 0; // mm
-    int dropSensorLeft = 0; // mm
-    int dropSensorRight = 0; // mm
-
-    std::vector<Field> toFields() const override;
-};
-
 struct DigitalSensorData : public JsonSerializable {
     bool dcJackIn = false;
     bool dustbinIn = false;
@@ -164,27 +143,6 @@ struct ErrorData : public JsonSerializable {
     std::vector<Field> toFields() const override;
 };
 
-struct AccelData : public JsonSerializable {
-    float pitchDeg = 0.0f;
-    float rollDeg = 0.0f;
-    float xInG = 0.0f;
-    float yInG = 0.0f;
-    float zInG = 0.0f;
-    float sumInG = 0.0f;
-
-    std::vector<Field> toFields() const override;
-};
-
-struct ButtonData : public JsonSerializable {
-    bool softKey = false;
-    bool scrollUp = false;
-    bool start = false;
-    bool back = false;
-    bool scrollDown = false;
-
-    std::vector<Field> toFields() const override;
-};
-
 struct TimeData : public JsonSerializable {
     int dayOfWeek = -1; // 0=Sunday .. 6=Saturday
     int hour = 0;
@@ -223,13 +181,10 @@ struct RobotPosData : public JsonSerializable {
 
 bool parseVersionData(const String& raw, VersionData& out);
 bool parseChargerData(const String& raw, ChargerData& out);
-bool parseAnalogSensorData(const String& raw, AnalogSensorData& out);
 bool parseDigitalSensorData(const String& raw, DigitalSensorData& out);
 bool parseMotorData(const String& raw, MotorData& out);
 bool parseRobotState(const String& raw, RobotState& out);
 bool parseErrorData(const String& raw, ErrorData& out);
-bool parseAccelData(const String& raw, AccelData& out);
-bool parseButtonData(const String& raw, ButtonData& out);
 bool parseLdsScanData(const String& raw, LdsScanData& out);
 bool parseTimeData(const String& raw, TimeData& out);
 bool parseRobotPosData(const String& raw, RobotPosData& out);

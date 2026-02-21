@@ -365,8 +365,9 @@ bool DataLogger::compressStep() {
 }
 
 void DataLogger::enforceLimits() {
-    // Count archived files and find the oldest in one pass
+    // Count archived files, sum log directory size, and find the oldest in one pass
     int archiveCount = 0;
+    size_t logDirBytes = 0;
     String oldest;
     File root = SPIFFS.open(LOG_DIR);
     if (!root || !root.isDirectory())
@@ -375,6 +376,7 @@ void DataLogger::enforceLimits() {
     File entry = root.openNextFile();
     while (entry) {
         String name = String(entry.name());
+        logDirBytes += entry.size();
         if ((name.endsWith(".jsonl") || name.endsWith(".jsonl.hs")) && name != "current.jsonl") {
             archiveCount++;
             if (oldest.isEmpty() || name < oldest) {
@@ -387,12 +389,18 @@ void DataLogger::enforceLimits() {
     if (oldest.isEmpty())
         return;
 
-    // Delete oldest if over space limit or file count limit
-    size_t maxBytes = (SPIFFS.totalBytes() * LOG_MAX_SPIFFS_PERCENT) / 100;
-    if (SPIFFS.usedBytes() > maxBytes || archiveCount > LOG_MAX_FILES) {
+    // Log budget: total SPIFFS cap minus what non-log data uses, but always at least 10% of SPIFFS
+    size_t total = SPIFFS.totalBytes();
+    size_t globalCap = (total * LOG_MAX_SPIFFS_PERCENT) / 100;
+    size_t nonLogBytes = SPIFFS.usedBytes() > logDirBytes ? SPIFFS.usedBytes() - logDirBytes : 0;
+    size_t available = globalCap > nonLogBytes ? globalCap - nonLogBytes : 0;
+    size_t minReserved = (total * LOG_MIN_SPIFFS_PERCENT) / 100;
+    size_t logBudget = available > minReserved ? available : minReserved;
+
+    if (logDirBytes > logBudget || archiveCount > LOG_MAX_FILES) {
         String fullPath = String(LOG_DIR) + "/" + oldest;
-        LOG("DLOG", "Limit: deleting %s (files=%d, space=%u/%u)", fullPath.c_str(), archiveCount, SPIFFS.usedBytes(),
-            SPIFFS.totalBytes());
+        LOG("DLOG", "Limit: deleting %s (files=%d, logBytes=%u/%u)", fullPath.c_str(), archiveCount, logDirBytes,
+            logBudget);
         SPIFFS.remove(fullPath);
     }
 }
@@ -445,7 +453,7 @@ void DataLogger::logNtp(const String& event, const std::vector<Field>& extra) {
     logEvent("ntp", fields);
 }
 
-void DataLogger::logSchedule(const String& category, const std::vector<Field>& extra) {
+void DataLogger::logGenericEvent(const String& category, const std::vector<Field>& extra) {
     std::vector<Field> fields = {{"category", category, FIELD_STRING}};
     fields.insert(fields.end(), extra.begin(), extra.end());
     logEvent("event", fields);

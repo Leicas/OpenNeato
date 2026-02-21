@@ -108,6 +108,12 @@ void SystemManager::factoryReset() {
     pendingRebootAt = millis();
 }
 
+void SystemManager::formatSpiffs() {
+    LOG("SYS", "SPIFFS format scheduled");
+    pendingFormatSpiffs = true;
+    pendingRebootAt = millis();
+}
+
 void SystemManager::checkPendingReboot() {
     if (pendingRebootAt == 0 || millis() - pendingRebootAt < 500)
         return;
@@ -116,6 +122,10 @@ void SystemManager::checkPendingReboot() {
         LOG("SYS", "Factory reset: clearing NVS, WiFi credentials, and SPIFFS...");
         prefs.clear();
         WiFi.disconnect(true, true);
+        SPIFFS.format();
+        delay(500);
+    } else if (pendingFormatSpiffs) {
+        LOG("SYS", "Formatting SPIFFS...");
         SPIFFS.format();
         delay(500);
     }

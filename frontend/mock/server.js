@@ -4,7 +4,7 @@
 // To test different scenarios, edit the `state` object directly and reload
 
 const { execSync } = require("node:child_process");
-const { readFileSync } = require("node:fs");
+const { readFileSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 
 // --- Helpers ---
@@ -55,7 +55,7 @@ const readBody = (req) =>
     });
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-const randf = (min, max, decimals = 2) => parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
+const _randf = (min, max, decimals = 2) => parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 
 // --- Scenario selector ---
 // Change this value to switch between test states. Save and Vite hot-reloads.
@@ -253,10 +253,57 @@ const vBattFromFuel = (fuel) => parseFloat((12.0 + (fuel / 100) * 4.6).toFixed(2
 
 // --- LIDAR captured scans (real data from Neato D7) ---
 
-const lidarScans = [1, 2, 3, 4, 5, 6].map((n) =>
-    JSON.parse(readFileSync(join(__dirname, `lidar-scan${n}.json`), "utf8")),
-);
+const lidarScans = readdirSync(__dirname)
+    .filter((f) => f.startsWith("lidar-scan") && f.endsWith(".json"))
+    .sort()
+    .map((f) => JSON.parse(readFileSync(join(__dirname, f), "utf8")));
 let lidarScanIndex = 0;
+
+// --- Map data — in-memory session store ---
+// Load mapdata-*.jsonl files into memory at startup. The active recording
+// session (no summary line) grows via random-walk timer — no file I/O.
+
+const historySessions = new Map(); // name -> string[] (JSONL lines)
+
+for (const f of readdirSync(__dirname)
+    .filter((n) => n.startsWith("mapdata-") && n.endsWith(".jsonl"))
+    .sort()) {
+    const lines = readFileSync(join(__dirname, f), "utf8")
+        .trim()
+        .split("\n")
+        .filter((l) => l.length > 0);
+    historySessions.set(f, lines);
+}
+
+// Find the active recording session (no summary line) and start random-walk timer
+const recordingFile = [...historySessions.entries()].find(
+    ([, lines]) => !lines.some((l) => l.includes('"type":"summary"')),
+);
+
+if (recordingFile) {
+    const [recordingName, recordingLines] = recordingFile;
+    const lastPose = [...recordingLines].reverse().find((l) => l.includes('"x":'));
+    const pos = lastPose ? JSON.parse(lastPose) : { x: 0, y: 0, t: 0, ts: 7244 };
+    let simX = pos.x;
+    let simY = pos.y;
+    let simT = pos.t;
+    let simTs = pos.ts;
+
+    setInterval(() => {
+        simT += (Math.random() - 0.5) * 30;
+        if (simT < 0) simT += 360;
+        if (simT >= 360) simT -= 360;
+        const rad = (simT * Math.PI) / 180;
+        const step = 0.08 + Math.random() * 0.12;
+        simX += Math.cos(rad) * step;
+        simY -= Math.sin(rad) * step;
+        simTs += 2.0 + Math.random() * 0.3;
+        const lines = historySessions.get(recordingName);
+        // Rolling window: drop oldest coordinate (keep session header at [0])
+        if (lines.length > 1) lines.splice(1, 1);
+        lines.push(`{"x":${simX.toFixed(3)},"y":${simY.toFixed(3)},"t":${simT.toFixed(1)},"ts":${simTs.toFixed(1)}}`);
+    }, 2000);
+}
 
 const getLidarScan = () => {
     const scan = lidarScans[lidarScanIndex];
@@ -290,15 +337,11 @@ const mockLogContent = [
     '{"t":1700000500,"typ":"command","d":{"cmd":"GetMotors","status":"ok","ms":110,"q":2,"bytes":520}}',
     '{"t":1700000600,"typ":"command","d":{"cmd":"GetLDSScan","status":"ok","ms":450,"q":0,"bytes":8200}}',
     '{"t":1700000601,"typ":"command","d":{"cmd":"GetCharger","status":"ok","ms":0,"q":0,"bytes":0,"age":401}}',
-    '{"t":1700000602,"typ":"command","d":{"cmd":"GetAnalogSensors","status":"ok","ms":95,"q":1,"bytes":480}}',
-    '{"t":1700000604,"typ":"command","d":{"cmd":"GetDigitalSensors","status":"ok","ms":35,"q":0,"bytes":210}}',
-    '{"t":1700000610,"typ":"request","d":{"method":"GET","path":"/api/sensors/analog","status":200,"ms":102}}',
-    '{"t":1700000612,"typ":"request","d":{"method":"GET","path":"/api/sensors/digital","status":200,"ms":41}}',
+
     '{"t":1700000615,"typ":"request","d":{"method":"GET","path":"/api/lidar","status":200,"ms":460}}',
     '{"t":1700000620,"typ":"command","d":{"cmd":"GetLDSScan","status":"ok","ms":440,"q":1,"bytes":8140}}',
     '{"t":1700000621,"typ":"command","d":{"cmd":"GetLDSScan","status":"ok","ms":0,"q":0,"bytes":0,"age":1}}',
-    '{"t":1700000625,"typ":"command","d":{"cmd":"GetAccel","status":"ok","ms":28,"q":0,"bytes":96}}',
-    '{"t":1700000630,"typ":"request","d":{"method":"GET","path":"/api/accel","status":200,"ms":34}}',
+
     '{"t":1700000700,"typ":"event","d":{"msg":"cleaning_completed","duration":600}}',
 ].join("\n");
 
@@ -364,41 +407,6 @@ const routes = {
         });
     },
 
-    "GET /api/sensors/analog": (_req, res) => {
-        const cleaning = state.cleaning || state.spotCleaning;
-        jsonResponse(res, {
-            batteryVoltage: Math.round(vBattFromFuel(state.fuelPercent) * 1000),
-            batteryCurrent: cleaning ? -600 : -150,
-            batteryTemp: rand(21000, 25000),
-            externalVoltage: state.extPwrPresent ? 22300 : 0,
-            accelX: rand(-20, 20),
-            accelY: rand(-20, 20),
-            accelZ: rand(950, 970),
-            vacuumCurrent: cleaning ? rand(300, 600) : 0,
-            sideBrushCurrent: cleaning ? rand(100, 300) : 0,
-            magSensorLeft: 0,
-            magSensorRight: 0,
-            wallSensor: cleaning ? rand(20, 400) : rand(200, 300),
-            dropSensorLeft: rand(15, 25),
-            dropSensorRight: rand(15, 25),
-        });
-    },
-
-    "GET /api/sensors/digital": (_req, res) => {
-        jsonResponse(res, {
-            dcJackIn: state.extPwrPresent,
-            dustbinIn: true,
-            leftWheelExtended: false,
-            rightWheelExtended: false,
-            lSideBit: false,
-            lFrontBit: false,
-            lLdsBit: false,
-            rSideBit: false,
-            rFrontBit: false,
-            rLdsBit: false,
-        });
-    },
-
     "GET /api/motors": (_req, res) => {
         const cleaning = state.cleaning || state.spotCleaning;
         jsonResponse(res, {
@@ -437,27 +445,6 @@ const routes = {
         });
     },
 
-    "GET /api/accel": (_req, res) => {
-        jsonResponse(res, {
-            pitchDeg: randf(-2, 2),
-            rollDeg: randf(-2, 2),
-            xInG: randf(-0.05, 0.05, 4),
-            yInG: randf(-0.05, 0.05, 4),
-            zInG: randf(0.95, 1.0, 4),
-            sumInG: randf(0.96, 1.01, 4),
-        });
-    },
-
-    "GET /api/buttons": (_req, res) => {
-        jsonResponse(res, {
-            softKey: false,
-            scrollUp: false,
-            start: false,
-            back: false,
-            scrollDown: false,
-        });
-    },
-
     "GET /api/lidar": (_req, res) => {
         if (state.lidarUnavailable) return sendError(res, "UART timeout reading LDS scan", 500);
         const scan = getLidarScan();
@@ -475,15 +462,6 @@ const routes = {
             return jsonResponse(res, degraded);
         }
         jsonResponse(res, scan);
-    },
-
-    "GET /api/robotpos/raw": (_req, res) => {
-        // Exploration endpoint — response format unknown on real hardware.
-        jsonResponse(res, { raw: "GetRobotPos Raw\r\nX,Y,Theta\r\n150.3,220.7,45.2\r\n" });
-    },
-
-    "GET /api/robotpos/smooth": (_req, res) => {
-        jsonResponse(res, { raw: "GetRobotPos Smooth\r\nX,Y,Theta\r\n150.3,220.7,45.2\r\n" });
     },
 
     // Action routes — parameterized via query string
@@ -620,6 +598,13 @@ const routes = {
         }, 2000);
     },
 
+    "POST /api/system/format-spiffs": (_req, res) => {
+        sendOk(res);
+        setTimeout(() => {
+            bootTime = Date.now();
+        }, 2000);
+    },
+
     "POST /api/system/reset": (_req, res) => {
         sendOk(res);
         setTimeout(() => {
@@ -678,6 +663,62 @@ const handleRequest = async (req, res) => {
     const parsed = new URL(req.url, "http://localhost");
     const path = parsed.pathname;
     const query = Object.fromEntries(parsed.searchParams);
+
+    // Match history routes: GET /api/history, GET/DELETE /api/history/{filename}
+    if (path === "/api/history" && req.method === "GET") {
+        // List sessions from in-memory store with embedded session/summary metadata
+        const list = [...historySessions.entries()].map(([name, lines]) => {
+            let session = null;
+            let summary = null;
+            if (lines.length > 0) {
+                try {
+                    const first = JSON.parse(lines[0]);
+                    if (first.type === "session") session = first;
+                } catch {}
+            }
+            if (lines.length > 1) {
+                try {
+                    const last = JSON.parse(lines[lines.length - 1]);
+                    if (last.type === "summary") summary = last;
+                } catch {}
+            }
+            const raw = `${lines.join("\n")}\n`;
+            return {
+                name,
+                size: Buffer.byteLength(raw),
+                compressed: name.endsWith(".hs"),
+                recording: summary === null,
+                session,
+                summary,
+            };
+        });
+        return jsonResponse(res, list);
+    }
+
+    if (path === "/api/history" && req.method === "DELETE") {
+        historySessions.clear();
+        return sendOk(res);
+    }
+
+    const historyMatch = path.match(/^\/api\/history\/(.+)$/);
+    if (historyMatch) {
+        const filename = historyMatch[1];
+        if (req.method === "GET") {
+            const lines = historySessions.get(filename);
+            if (!lines) return sendError(res, "session not found", 404);
+            const raw = `${lines.join("\n")}\n`;
+            res.writeHead(200, {
+                "Content-Type": "application/x-ndjson",
+                "Content-Length": Buffer.byteLength(raw),
+            });
+            return res.end(raw);
+        }
+        if (req.method === "DELETE") {
+            historySessions.delete(filename);
+            return sendOk(res);
+        }
+        return sendError(res, "method not allowed", 405);
+    }
 
     // Match log file routes: GET/DELETE /api/logs/{filename}
     const logFileMatch = path.match(/^\/api\/logs\/(.+)$/);

@@ -4,6 +4,7 @@ import { Route, Router } from "./components/router";
 import { usePolling } from "./hooks/use-polling";
 import type { FirmwareVersion, ManualStatus, StateData } from "./types";
 import { DashboardView } from "./views/dashboard";
+import { HistoryView } from "./views/history";
 import { LogsView } from "./views/logs";
 import { ManualView } from "./views/manual";
 import { ScheduleView } from "./views/schedule";
@@ -139,6 +140,9 @@ export function App() {
             </Route>
             <Route path="/logs" prefix>
                 <LogsView />
+            </Route>
+            <Route path="/history">
+                <HistoryView />
             </Route>
         </Router>
     );

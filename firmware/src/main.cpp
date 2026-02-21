@@ -13,6 +13,7 @@
 #include "scheduler.h"
 #include "manual_clean_manager.h"
 #include "notification_manager.h"
+#include "cleaning_history.h"
 #include "loop_task.h"
 
 // Global objects
@@ -27,8 +28,9 @@ FirmwareManager firmwareManager(dataLogger);
 Scheduler scheduler(settingsManager, systemManager, neatoSerial, dataLogger);
 ManualCleanManager manualClean(neatoSerial);
 NotificationManager notifMgr(neatoSerial, settingsManager, dataLogger);
+CleaningHistory cleaningHistory(neatoSerial, dataLogger, systemManager);
 WebServer webServer(server, neatoSerial, dataLogger, systemManager, firmwareManager, settingsManager, manualClean,
-                    notifMgr);
+                    notifMgr, cleaningHistory);
 
 // Robot time sync state (managed here, not in SystemManager)
 unsigned long lastRobotSync = 0;

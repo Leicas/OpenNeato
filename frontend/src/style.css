@@ -193,6 +193,11 @@ body {
     opacity: 0.6;
 }
 
+.header-btns {
+    display: flex;
+    gap: 8px;
+}
+
 .header-right-btn {
     width: 42px;
     height: 42px;
@@ -788,6 +793,12 @@ body {
     opacity: 0.5;
 }
 
+.settings-nav-row.danger {
+    border-color: rgba(255, 69, 58, 0.2);
+    background: rgba(255, 69, 58, 0.08);
+    color: var(--red);
+}
+
 .settings-nav-chevron {
     font-size: 20px;
     color: var(--text-muted);
@@ -1133,7 +1144,6 @@ body {
 
 .settings-device-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: 10px;
 }
 
@@ -1706,6 +1716,347 @@ body {
     overflow-y: auto;
 }
 
+/* Cleaning history page */
+
+.history-page {
+    flex: 1;
+    padding: 0 20px 24px;
+}
+
+.history-empty {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 48px 0;
+}
+
+.history-session-row {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.history-session-row.running {
+    border-color: var(--green);
+    border-width: 1.5px;
+    box-shadow: 0 0 8px rgba(52, 199, 89, 0.15);
+}
+
+.history-running-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--green);
+    background: rgba(52, 199, 89, 0.1);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    animation: running-pulse 2s ease-in-out infinite;
+}
+
+.light .history-session-row.running {
+    box-shadow: 0 0 8px rgba(22, 130, 50, 0.2);
+}
+
+.light .history-running-badge {
+    background: rgba(22, 130, 50, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+    .system-theme .history-session-row.running {
+        box-shadow: 0 0 8px rgba(22, 130, 50, 0.2);
+    }
+
+    .system-theme .history-running-badge {
+        background: rgba(22, 130, 50, 0.12);
+    }
+}
+
+@keyframes running-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.history-session-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    background: none;
+    color: var(--text);
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+    min-width: 0;
+}
+
+.history-session-card:active {
+    opacity: 0.7;
+}
+
+.history-session-delete {
+    flex-shrink: 0;
+    width: 40px;
+    height: 100%;
+    min-height: 44px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: none;
+    color: var(--red);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.history-session-delete:active {
+    opacity: 1;
+}
+
+.history-session-delete span {
+    display: flex;
+}
+
+.history-session-delete svg {
+    width: 16px;
+    height: 16px;
+}
+
+.history-session-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(249, 235, 178, 0.08);
+    flex-shrink: 0;
+}
+
+.history-session-icon span {
+    display: flex;
+}
+
+.history-session-icon svg {
+    width: 20px;
+    height: 20px;
+    opacity: 0.7;
+    color: var(--accent);
+}
+
+.history-session-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-session-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.history-session-mode {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.history-session-date {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.history-session-stats {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.history-session-stats span {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.history-session-stats svg {
+    width: 12px;
+    height: 12px;
+    opacity: 0.5;
+}
+
+.history-session-chevron {
+    font-size: 20px;
+    color: var(--text-muted);
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.history-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.history-delete-all-btn {
+    padding: 6px 14px;
+    border: 1px solid rgba(255, 69, 58, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 69, 58, 0.08);
+    color: var(--red);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.history-delete-all-btn:active {
+    opacity: 0.7;
+}
+
+.history-delete-all-btn:disabled {
+    cursor: default;
+}
+
+.history-delete-all-btn.pending {
+    animation: btn-pulse 1s ease-in-out infinite;
+}
+
+.history-detail-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: 12px 0;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.history-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.history-stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.history-stat-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.history-canvas-wrap {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.history-canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    max-height: 70vh;
+}
+
+.history-legend {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.history-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.history-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.history-legend-dot.start {
+    background: rgba(52, 199, 89, 0.9);
+}
+
+.history-legend-dot.end {
+    background: rgba(255, 69, 58, 0.9);
+}
+
+.history-legend-dot.current {
+    background: transparent;
+    border: 2px solid rgba(52, 199, 89, 0.9);
+    box-shadow: 0 0 4px rgba(52, 199, 89, 0.5);
+}
+
+.history-legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.history-legend-swatch.coverage {
+    background: rgba(52, 199, 89, 0.15);
+    border: 1px solid rgba(52, 199, 89, 0.3);
+}
+
+.light .history-legend-swatch.coverage {
+    background: rgba(22, 130, 50, 0.22);
+    border: 1px solid rgba(22, 130, 50, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+    .system-theme .history-legend-swatch.coverage {
+        background: rgba(22, 130, 50, 0.22);
+        border: 1px solid rgba(22, 130, 50, 0.35);
+    }
+}
+
+.history-legend-bolt {
+    color: rgba(255, 204, 0, 0.9);
+    display: flex;
+}
+
+.history-legend-bolt svg {
+    width: 14px;
+    height: 14px;
+}
+
 /* Schedule page */
 
 .schedule-page {
@@ -1892,18 +2243,23 @@ body {
 
 .manual-page {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     padding: 0 20px;
-    overflow-y: auto;
-    gap: 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    gap: 12px;
+}
+
+.manual-map-sizer {
+    flex: 1 1 0;
+    min-height: 0;
 }
 
 .manual-map {
     position: relative;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    width: fit-content;
+    margin: 0 auto;
 }
 
 .lidar-canvas {
@@ -1941,6 +2297,7 @@ body {
 }
 
 .manual-controls {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2031,8 +2388,7 @@ body {
 }
 
 .manual-stop {
-    padding: 0 0 8px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    flex-shrink: 0;
 }
 
 .manual-stop-btn {

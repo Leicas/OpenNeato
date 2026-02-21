@@ -1,10 +1,13 @@
+import { parseMapData } from "./history-data";
 import type {
     ChargerData,
     ErrorData,
     FirmwareVersion,
+    HistoryFileInfo,
     LidarScan,
     LogFileInfo,
     ManualStatus,
+    MapData,
     SettingsData,
     StateData,
     SystemData,
@@ -50,6 +53,14 @@ async function fetchLogText(name: string): Promise<string> {
     const res = await fetch(`/api/logs/${name}`);
     if (!res.ok) throw new Error(await parseError(res));
     return res.text();
+}
+
+async function fetchSessionData(filename: string): Promise<MapData[]> {
+    const res = await fetch(`/api/history/${filename}`);
+    if (!res.ok) throw new Error(await parseError(res));
+    const raw = await res.text();
+    if (!raw.trim()) return [];
+    return parseMapData(raw);
 }
 
 function uploadFirmware(file: File, md5: string, onProgress: (pct: number) => void): Promise<void> {
@@ -101,11 +112,16 @@ export const api = {
     testNotification: (topic: string) => post(`/api/notifications/test?topic=${encodeURIComponent(topic)}`),
     playSound: (id: number) => post(`/api/sound?id=${id}`),
     restart: () => post("/api/system/restart"),
+    formatSpiffs: () => post("/api/system/format-spiffs"),
     factoryReset: () => post("/api/system/reset"),
     getLogs: () => get<LogFileInfo[]>("/api/logs"),
     getLogContent: (name: string) => fetchLogText(name),
     deleteLog: (name: string) => del(`/api/logs/${name}`),
     deleteAllLogs: () => del("/api/logs"),
+    getHistoryList: () => get<HistoryFileInfo[]>("/api/history"),
+    getHistorySession: (filename: string) => fetchSessionData(filename),
+    deleteHistorySession: (name: string) => del(`/api/history/${name}`),
+    deleteAllHistory: () => del("/api/history"),
     uploadFirmware: (file: File, md5: string, onProgress: (pct: number) => void) =>
         uploadFirmware(file, md5, onProgress),
     setScheduleDay: (day: number, hour: number, minute: number, on: boolean) =>

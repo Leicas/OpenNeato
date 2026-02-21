@@ -27,8 +27,12 @@ private:
 
     // Previous state for transition detection
     String prevUiState;
+    String prevRobotState;
     bool prevHasError = false;
     int prevErrorCode = 200; // UI_ALERT_INVALID = no error
+
+    // Track whether the robot was cleaning before entering docking state
+    bool wasCleaningBeforeDock = false;
 
     // Pending state fetch tracking
     bool fetchPending = false;

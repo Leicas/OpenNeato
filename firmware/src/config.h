@@ -40,8 +40,6 @@
 #define CACHE_TTL_CHARGER 30000 // GetCharger — battery data (30s)
 #define CACHE_TTL_SENSORS 1000 // Analog/digital sensors, motors (1s — fast for manual clean safety)
 #define CACHE_TTL_VERSION 300000 // GetVersion — rarely changes (5 min)
-#define CACHE_TTL_ACCEL 5000 // Accelerometer (5s)
-#define CACHE_TTL_BUTTONS 2000 // Button state (2s)
 #define CACHE_TTL_LDS 1500 // LIDAR scan — 1.5s (scan takes ~800ms on serial)
 
 // Manual clean safety
@@ -70,7 +68,8 @@ enum CommandStatus {
 
 // Data logger
 #define LOG_MAX_FILE_SIZE 32768 // 32 KB per file before rotation
-#define LOG_MAX_SPIFFS_PERCENT 90 // Delete the oldest logs when SPIFFS usage exceeds this %
+#define LOG_MAX_SPIFFS_PERCENT 60 // Delete oldest logs when log dir exceeds this share of SPIFFS
+#define LOG_MIN_SPIFFS_PERCENT 10 // Logs always get at least this % of SPIFFS, even if other data fills the rest
 #define LOG_MAX_FILES 50 // Maximum number of archived log files to keep
 #define LOG_DIR "/log"
 #define LOG_CURRENT_FILE "/log/current.jsonl"
@@ -117,6 +116,15 @@ enum CommandStatus {
 // Notification manager — adaptive polling intervals
 #define NOTIF_INTERVAL_ACTIVE_MS 3000 // Check state every 3s when robot is active (cleaning/docking)
 #define NOTIF_INTERVAL_IDLE_MS 30000 // Check state every 30s when robot is idle
+
+// Cleaning history
+#define HISTORY_INTERVAL_MS 2000 // Poll interval for state watching and pose collection
+#define HISTORY_COMPRESS_INTERVAL_MS 50 // Fast tick during post-session compression (512B/tick)
+#define HISTORY_DIR "/history" // SPIFFS directory for session files
+#define HISTORY_MAX_SPIFFS_PERCENT 50 // Delete oldest sessions when history dir exceeds this share of SPIFFS
+#define HISTORY_MIN_SPIFFS_PERCENT 10 // History always gets at least this % of SPIFFS
+#define HISTORY_MAX_FILES 20 // Maximum number of archived session files to keep
+#define HISTORY_AREA_CELL_M 0.5f // Coarse grid cell size in meters for visited-area estimation
 
 // Task Watchdog Timer (TWDT) — hardware watchdog that resets the ESP32 if
 // loop() stops running (deadlock, infinite loop, blocking I/O). The main task

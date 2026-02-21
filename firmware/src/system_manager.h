@@ -58,6 +58,9 @@ public:
     // Deferred factory reset — clears NVS + WiFi, then restarts
     void factoryReset();
 
+    // Deferred SPIFFS format — erases all logs/map data, then restarts
+    void formatSpiffs();
+
     // True if a deferred reboot is pending (restart or factory reset)
     bool isRebootPending() const { return pendingRebootAt > 0; }
 
@@ -80,6 +83,7 @@ private:
     // Deferred reboot state
     unsigned long pendingRebootAt = 0;
     bool pendingFactoryReset = false;
+    bool pendingFormatSpiffs = false;
 
     // Heap watchdog state
     unsigned long heapLowSince = 0; // millis() when heap first dropped below threshold (0 = healthy)

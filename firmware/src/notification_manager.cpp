@@ -43,29 +43,47 @@ void NotificationManager::checkTransitions() {
             const String& hostname = cfg.hostname;
 
             if (stateOk) {
-                const String& newState = state.uiState;
+                const String& ui = state.uiState;
+                const String& rs = state.robotState;
 
                 // Detect transitions
                 if (!prevUiState.isEmpty()) {
                     bool wasCleaning = prevUiState.indexOf("CLEANINGRUNNING") >= 0;
-                    bool isIdle = newState == "UIMGR_STATE_IDLE";
-                    bool isDocking = newState.indexOf("DOCKING") >= 0;
+                    bool wasDocking = prevUiState.indexOf("DOCKING") >= 0;
+                    bool isDocking = ui.indexOf("DOCKING") >= 0;
+                    bool isIdle = ui == "UIMGR_STATE_IDLE" || ui == "UIMGR_STATE_STANDBY";
 
-                    // Cleaning completed: was running -> now idle
-                    if (wasCleaning && isIdle && cfg.ntfyOnDone) {
+                    // Track cleaning context when entering docking
+                    if (wasCleaning && isDocking) {
+                        wasCleaningBeforeDock = true;
+                    }
+
+                    // Mid-clean recharge: robot state ST_M1_Charging_Cleaning means
+                    // the robot docked to recharge and will resume cleaning afterwards
+                    bool isRecharging = rs.indexOf("Charging_Cleaning") >= 0;
+
+                    if (isDocking && !wasDocking && isRecharging && cfg.ntfyOnDocking) {
+                        // Recharge dock — robot will resume cleaning after charging
+                        sendNotification(topic, "electric_plug", hostname + ": Returning to base to recharge");
+                    }
+
+                    // Cleaning completed: cleaning/docking -> idle, but NOT if it's a recharge
+                    bool dockingDone = wasDocking && wasCleaningBeforeDock && !isRecharging;
+                    if ((wasCleaning || dockingDone) && isIdle && cfg.ntfyOnDone) {
                         sendNotification(topic, "white_check_mark", hostname + ": Cleaning done");
                     }
 
-                    // Returning to base: any -> docking
-                    bool wasDocking = prevUiState.indexOf("DOCKING") >= 0;
-                    if (isDocking && !wasDocking && cfg.ntfyOnDocking) {
-                        sendNotification(topic, "electric_plug", hostname + ": Returning to base");
+                    // Clear tracking flag when leaving docking
+                    if (wasDocking && !isDocking) {
+                        wasCleaningBeforeDock = false;
                     }
                 }
 
                 // Update adaptive interval based on current state
-                setInterval(isActiveState(newState) ? NOTIF_INTERVAL_ACTIVE_MS : NOTIF_INTERVAL_IDLE_MS);
-                prevUiState = newState;
+                bool active = isActiveState(ui);
+                setInterval(active ? NOTIF_INTERVAL_ACTIVE_MS : NOTIF_INTERVAL_IDLE_MS);
+                prevUiState = ui;
+                prevRobotState = rs;
             }
 
             if (errOk) {
@@ -81,8 +99,7 @@ void NotificationManager::checkTransitions() {
 }
 
 bool NotificationManager::isActiveState(const String& uiState) {
-    return uiState.indexOf("CLEANINGRUNNING") >= 0 || uiState.indexOf("SPOTCLEANINGRUNNING") >= 0 ||
-           uiState.indexOf("DOCKING") >= 0;
+    return uiState.indexOf("CLEANINGRUNNING") >= 0 || uiState.indexOf("DOCKING") >= 0;
 }
 
 void NotificationManager::sendNotification(const String& topic, const String& tags, const String& message) {

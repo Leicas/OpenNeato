@@ -95,7 +95,7 @@ public:
     void logWifi(const String& event, const std::vector<Field>& extra = {});
     void logOta(const String& event, const std::vector<Field>& extra = {});
     void logNtp(const String& event, const std::vector<Field>& extra = {});
-    void logSchedule(const String& category, const std::vector<Field>& extra = {});
+    void logGenericEvent(const String& category, const std::vector<Field>& extra = {});
     void logNotification(const String& category, const String& message, bool success);
 
     // Debug mode check — when set and returns true, sensor payloads are
