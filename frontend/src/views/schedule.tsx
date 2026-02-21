@@ -16,13 +16,19 @@ interface DayState {
     on: boolean;
 }
 
+type SchedDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+type SchedHourKey = `sched${SchedDay}Hour`;
+type SchedMinKey = `sched${SchedDay}Min`;
+type SchedOnKey = `sched${SchedDay}On`;
+
 function readDays(s: SettingsData): DayState[] {
     const days: DayState[] = [];
     for (let d = 0; d < 7; d++) {
+        const day = d as SchedDay;
         days.push({
-            hour: (s as Record<string, number>)[`sched${d}Hour`] ?? 0,
-            minute: (s as Record<string, number>)[`sched${d}Min`] ?? 0,
-            on: (s as Record<string, boolean>)[`sched${d}On`] ?? false,
+            hour: s[`sched${day}Hour` as SchedHourKey] ?? 0,
+            minute: s[`sched${day}Min` as SchedMinKey] ?? 0,
+            on: s[`sched${day}On` as SchedOnKey] ?? false,
         });
     }
     return days;

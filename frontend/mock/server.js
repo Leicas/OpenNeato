@@ -213,6 +213,11 @@ const state = {
     brushRpm: 1200,
     vacuumSpeed: 80,
     sideBrushPower: 1500,
+    ntfyTopic: "",
+    ntfyEnabled: true,
+    ntfyOnDone: true,
+    ntfyOnError: true,
+    ntfyOnDocking: true,
     // Schedule (Mon=0..Sun=6)
     scheduleEnabled: true,
     sched0Hour: 9,
@@ -295,7 +300,6 @@ const mockLogContent = [
     '{"t":1700000625,"typ":"command","d":{"cmd":"GetAccel","status":"ok","ms":28,"q":0,"bytes":96}}',
     '{"t":1700000630,"typ":"request","d":{"method":"GET","path":"/api/accel","status":200,"ms":34}}',
     '{"t":1700000700,"typ":"event","d":{"msg":"cleaning_completed","duration":600}}',
-    '{"t":1700000710,"typ":"error","d":{"code":234,"msg":"My Brush is stuck. Please free it from debris"}}',
 ].join("\n");
 
 // --- Derive UI/robot state from current state ---
@@ -627,6 +631,11 @@ const routes = {
             "brushRpm",
             "vacuumSpeed",
             "sideBrushPower",
+            "ntfyTopic",
+            "ntfyEnabled",
+            "ntfyOnDone",
+            "ntfyOnError",
+            "ntfyOnDocking",
             "scheduleEnabled",
         ];
         for (const k of keys) s[k] = state[k];
@@ -636,6 +645,11 @@ const routes = {
             s[`sched${d}On`] = state[`sched${d}On`];
         }
         jsonResponse(res, s);
+    },
+
+    "POST /api/notifications/test": (_req, res, query) => {
+        if (!query.topic) return sendError(res, "missing topic", 400);
+        sendOk(res);
     },
 
     "GET /api/firmware/version": (_req, res) => {
@@ -729,6 +743,11 @@ const handleRequest = async (req, res) => {
             if (data.brushRpm !== undefined) state.brushRpm = data.brushRpm;
             if (data.vacuumSpeed !== undefined) state.vacuumSpeed = data.vacuumSpeed;
             if (data.sideBrushPower !== undefined) state.sideBrushPower = data.sideBrushPower;
+            if (data.ntfyTopic !== undefined) state.ntfyTopic = data.ntfyTopic;
+            if (data.ntfyEnabled !== undefined) state.ntfyEnabled = data.ntfyEnabled;
+            if (data.ntfyOnDone !== undefined) state.ntfyOnDone = data.ntfyOnDone;
+            if (data.ntfyOnError !== undefined) state.ntfyOnError = data.ntfyOnError;
+            if (data.ntfyOnDocking !== undefined) state.ntfyOnDocking = data.ntfyOnDocking;
             if (data.scheduleEnabled !== undefined) state.scheduleEnabled = data.scheduleEnabled;
             for (let d = 0; d < 7; d++) {
                 if (data[`sched${d}Hour`] !== undefined) state[`sched${d}Hour`] = data[`sched${d}Hour`];
@@ -753,6 +772,11 @@ const handleRequest = async (req, res) => {
                 "brushRpm",
                 "vacuumSpeed",
                 "sideBrushPower",
+                "ntfyTopic",
+                "ntfyEnabled",
+                "ntfyOnDone",
+                "ntfyOnError",
+                "ntfyOnDocking",
                 "scheduleEnabled",
             ];
             for (const k of keys) s[k] = state[k];

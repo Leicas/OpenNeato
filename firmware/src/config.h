@@ -99,6 +99,13 @@ enum CommandStatus {
 #define NVS_KEY_MC_VACUUM_PCT "mc_vacuum_pct"
 #define NVS_KEY_MC_SBRUSH_MW "mc_sbrush_mw"
 
+// NVS keys — Notifications
+#define NVS_KEY_NTFY_TOPIC "ntfy_topic"
+#define NVS_KEY_NTFY_ENABLED "ntfy_enabled"
+#define NVS_KEY_NTFY_ON_DONE "ntfy_on_done"
+#define NVS_KEY_NTFY_ON_ERR "ntfy_on_err"
+#define NVS_KEY_NTFY_ON_DOCK "ntfy_on_dock"
+
 // NVS keys — Schedule (ESP32-managed, not robot serial)
 #define NVS_KEY_SCHED_ENABLED "sched_on"
 // Per-day keys use suffix: "s0h","s0m","s0on" .. "s6h","s6m","s6on" (Mon=0..Sun=6)
@@ -106,6 +113,10 @@ enum CommandStatus {
 #define SCHEDULE_DAYS 7
 #define SCHEDULE_CHECK_INTERVAL_MS 30000 // Check schedule against NTP time every 30s
 #define SCHEDULE_WINDOW_MINS 5 // Fire if current time is 0..N minutes after scheduled slot
+
+// Notification manager — adaptive polling intervals
+#define NOTIF_INTERVAL_ACTIVE_MS 3000 // Check state every 3s when robot is active (cleaning/docking)
+#define NOTIF_INTERVAL_IDLE_MS 30000 // Check state every 30s when robot is idle
 
 // Task Watchdog Timer (TWDT) — hardware watchdog that resets the ESP32 if
 // loop() stops running (deadlock, infinite loop, blocking I/O). The main task

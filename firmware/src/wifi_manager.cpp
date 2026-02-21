@@ -1,8 +1,9 @@
 #include "wifi_manager.h"
+#include "data_logger.h"
 #include <esp_wifi.h>
 
-WiFiManager::WiFiManager(Preferences& prefs) :
-    prefs(prefs), menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
+WiFiManager::WiFiManager(Preferences& prefs, DataLogger& logger) :
+    prefs(prefs), dataLogger(logger), menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
 
 void WiFiManager::begin() {
     LOG("WIFI", "Starting WiFi setup...");
@@ -17,23 +18,19 @@ void WiFiManager::begin() {
             LOG("WIFI", "MAC: %s", WiFi.macAddress().c_str());
 
             // Log successful boot connection with diagnostics
-            if (loggerCallback) {
-                loggerCallback("boot_connect", {{"ssid", ssid, FIELD_STRING},
+            dataLogger.logWifi("boot_connect", {{"ssid", ssid, FIELD_STRING},
                                                 {"ip", WiFi.localIP().toString(), FIELD_STRING},
                                                 {"rssi", String(WiFi.RSSI()), FIELD_INT},
                                                 {"channel", String(WiFi.channel()), FIELD_INT},
                                                 {"bssid", WiFi.BSSIDstr(), FIELD_STRING},
                                                 {"txPower", String(WiFi.getTxPower()), FIELD_INT}});
-            }
             return;
         }
         LOG("WIFI", "Failed to connect with saved credentials");
 
         // Log boot connection failure
-        if (loggerCallback) {
-            loggerCallback("boot_connect_fail",
+        dataLogger.logWifi("boot_connect_fail",
                            {{"ssid", ssid, FIELD_STRING}, {"status", String(WiFi.status()), FIELD_INT}});
-        }
     } else {
         LOG("WIFI", "No saved credentials found");
     }
@@ -356,15 +353,13 @@ void WiFiManager::loop() {
         LOG("WIFI", "Reconnected! IP: %s, RSSI: %d, attempt: %lu", WiFi.localIP().toString().c_str(), WiFi.RSSI(),
             reconnectAttemptCount);
 
-        if (loggerCallback) {
-            loggerCallback("reconnect_ok", {{"ssid", ssid, FIELD_STRING},
+        dataLogger.logWifi("reconnect_ok", {{"ssid", ssid, FIELD_STRING},
                                             {"ip", WiFi.localIP().toString(), FIELD_STRING},
                                             {"rssi", String(WiFi.RSSI()), FIELD_INT},
                                             {"channel", String(WiFi.channel()), FIELD_INT},
                                             {"bssid", WiFi.BSSIDstr(), FIELD_STRING},
                                             {"attempt", String(reconnectAttemptCount), FIELD_INT},
                                             {"ms", String(reconnectMs), FIELD_INT}});
-        }
         reconnectBackoff = WIFI_RECONNECT_INTERVAL; // Reset backoff on success
         reconnectAttemptCount = 0;
     } else {
@@ -372,13 +367,11 @@ void WiFiManager::loop() {
         reconnectBackoff = min(reconnectBackoff * 2, static_cast<unsigned long>(WIFI_MAX_RECONNECT_BACKOFF));
         LOG("WIFI", "Reconnect failed (status=%d), next attempt in %lu ms", WiFi.status(), reconnectBackoff);
 
-        if (loggerCallback) {
-            loggerCallback("reconnect_fail", {{"ssid", ssid, FIELD_STRING},
+        dataLogger.logWifi("reconnect_fail", {{"ssid", ssid, FIELD_STRING},
                                               {"status", String(WiFi.status()), FIELD_INT},
                                               {"attempt", String(reconnectAttemptCount), FIELD_INT},
                                               {"backoff", String(reconnectBackoff), FIELD_INT},
                                               {"ms", String(reconnectMs), FIELD_INT}});
-        }
     }
 }
 

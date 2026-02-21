@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api";
 import alertSvg from "../assets/icons/alert.svg?raw";
 import backSvg from "../assets/icons/back.svg?raw";
+import bellSvg from "../assets/icons/bell.svg?raw";
 import calendarSvg from "../assets/icons/calendar.svg?raw";
 import chipSvg from "../assets/icons/chip.svg?raw";
 import clockSvg from "../assets/icons/clock.svg?raw";
@@ -73,6 +74,16 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
         setVacuumSpeed,
         sideBrushPower,
         setSideBrushPower,
+        ntfyTopic,
+        setNtfyTopic,
+        ntfyEnabled,
+        setNtfyEnabled,
+        ntfyOnDone,
+        setNtfyOnDone,
+        ntfyOnError,
+        setNtfyOnError,
+        ntfyOnDocking,
+        setNtfyOnDocking,
         isDirty,
         pinError,
         hostnameError,
@@ -84,6 +95,26 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
         handleSave,
         onSaveClick,
     } = useSettingsForm(errorStack, startRebootFlow);
+
+    // --- Notification test ---
+    const [testingNotif, setTestingNotif] = useState(false);
+    const [notifTestResult, setNotifTestResult] = useState<string | null>(null);
+
+    const handleTestNotification = useCallback(() => {
+        if (!ntfyTopic.trim()) return;
+        setTestingNotif(true);
+        setNotifTestResult(null);
+        api.testNotification(ntfyTopic.trim())
+            .then(() => {
+                setNotifTestResult("Sent");
+                setTimeout(() => setNotifTestResult(null), 2000);
+            })
+            .catch((e: unknown) => {
+                setNotifTestResult(e instanceof Error ? e.message : "Failed");
+                setTimeout(() => setNotifTestResult(null), 3000);
+            })
+            .finally(() => setTestingNotif(false));
+    }, [ntfyTopic]);
 
     // --- Dialogs ---
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -337,6 +368,85 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                             </div>
                             <span class="settings-nav-chevron">&rsaquo;</span>
                         </button>
+                    </div>
+                </SettingsCategory>
+
+                <SettingsCategory title="Notifications" icon={bellSvg}>
+                    <div class="settings-section">
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-label">
+                                <span class="settings-toggle-title">Enable notifications</span>
+                                <span class="settings-toggle-desc">Push alerts via ntfy.sh over plain HTTP</span>
+                            </div>
+                            <button
+                                type="button"
+                                class={`settings-toggle${ntfyEnabled ? " on" : ""}`}
+                                onClick={() => setNtfyEnabled(!ntfyEnabled)}
+                                disabled={saving}
+                                aria-label="Toggle notifications"
+                            />
+                        </div>
+                        {ntfyEnabled && (
+                            <>
+                                <div class="settings-ntfy-row">
+                                    <input
+                                        type="text"
+                                        class="settings-text-input"
+                                        value={ntfyTopic}
+                                        onInput={(e) => setNtfyTopic((e.target as HTMLInputElement).value)}
+                                        disabled={saving}
+                                        placeholder="e.g. my-robot-alerts"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="settings-ntfy-test-btn"
+                                        onClick={handleTestNotification}
+                                        disabled={!ntfyTopic.trim() || testingNotif}
+                                    >
+                                        {testingNotif ? "..." : (notifTestResult ?? "Test")}
+                                    </button>
+                                </div>
+                                <div class="settings-toggle-row">
+                                    <div class="settings-toggle-label">
+                                        <span class="settings-toggle-title">Cleaning done</span>
+                                        <span class="settings-toggle-desc">When a cleaning cycle completes</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class={`settings-toggle${ntfyOnDone ? " on" : ""}`}
+                                        onClick={() => setNtfyOnDone(!ntfyOnDone)}
+                                        disabled={saving}
+                                        aria-label="Toggle cleaning done notification"
+                                    />
+                                </div>
+                                <div class="settings-toggle-row">
+                                    <div class="settings-toggle-label">
+                                        <span class="settings-toggle-title">Robot error</span>
+                                        <span class="settings-toggle-desc">When the robot reports a problem</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class={`settings-toggle${ntfyOnError ? " on" : ""}`}
+                                        onClick={() => setNtfyOnError(!ntfyOnError)}
+                                        disabled={saving}
+                                        aria-label="Toggle error notification"
+                                    />
+                                </div>
+                                <div class="settings-toggle-row">
+                                    <div class="settings-toggle-label">
+                                        <span class="settings-toggle-title">Returning to base</span>
+                                        <span class="settings-toggle-desc">When the robot docks to charge</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class={`settings-toggle${ntfyOnDocking ? " on" : ""}`}
+                                        onClick={() => setNtfyOnDocking(!ntfyOnDocking)}
+                                        disabled={saving}
+                                        aria-label="Toggle docking notification"
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </SettingsCategory>
 

@@ -12,11 +12,12 @@ class SystemManager;
 class FirmwareManager;
 class SettingsManager;
 class ManualCleanManager;
+class NotificationManager;
 
 class WebServer {
 public:
     WebServer(AsyncWebServer& server, NeatoSerial& neato, DataLogger& logger, SystemManager& sys, FirmwareManager& fw,
-              SettingsManager& settings, ManualCleanManager& manual);
+              SettingsManager& settings, ManualCleanManager& manual, NotificationManager& notif);
     void begin();
 
     // Last time any API request was received (millis()). Any module can check
@@ -31,6 +32,7 @@ private:
     FirmwareManager& fwMgr;
     SettingsManager& settingsMgr;
     ManualCleanManager& manualMgr;
+    NotificationManager& notifMgr;
 
     void registerApiRoutes();
     void registerManualRoutes();

@@ -1,5 +1,8 @@
 #include "firmware_manager.h"
+#include "data_logger.h"
 #include <esp_chip_info.h>
+
+FirmwareManager::FirmwareManager(DataLogger& logger) : dataLogger(logger) {}
 
 // ESP32 image extended header byte 12 contains the chip ID.
 // The esp_chip_info model enum uses the same values (CHIP_ESP32=1, CHIP_ESP32S2=2,
@@ -37,9 +40,7 @@ bool FirmwareManager::beginUpdate(const String& md5Hash) {
 
     LOG("FW", "Update started");
     updateInProgress = true;
-    if (loggerCallback) {
-        loggerCallback("start", {});
-    }
+    dataLogger.logOta("start", {});
 
     if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
         StreamString err;
@@ -91,9 +92,7 @@ bool FirmwareManager::endUpdate() {
 
     LOG("FW", "Update successful (%zu bytes)", currentProgress);
 
-    if (loggerCallback) {
-        loggerCallback("end", {{"ok", "true", FIELD_BOOL}});
-    }
+    dataLogger.logOta("end", {{"ok", "true", FIELD_BOOL}});
 
     rebootRequestMs = millis();
     rebootPending = true;

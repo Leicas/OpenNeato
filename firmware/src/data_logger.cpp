@@ -403,10 +403,6 @@ void DataLogger::logEvent(const String& type, const std::vector<Field>& fields) 
     bufferLine(line);
 }
 
-void DataLogger::logError(const String& source, const String& message) {
-    logEvent("error", {{"src", source, FIELD_STRING}, {"msg", message, FIELD_STRING}});
-}
-
 static const char *httpMethodStr(WebRequestMethodComposite method) {
     switch (method) {
         case HTTP_GET:
@@ -445,6 +441,18 @@ void DataLogger::logNtp(const String& event, const std::vector<Field>& extra) {
     std::vector<Field> fields = {{"event", event, FIELD_STRING}};
     fields.insert(fields.end(), extra.begin(), extra.end());
     logEvent("ntp", fields);
+}
+
+void DataLogger::logSchedule(const String& category, const std::vector<Field>& extra) {
+    std::vector<Field> fields = {{"category", category, FIELD_STRING}};
+    fields.insert(fields.end(), extra.begin(), extra.end());
+    logEvent("event", fields);
+}
+
+void DataLogger::logNotification(const String& category, const String& message, bool success) {
+    logEvent("event", {{"category", category, FIELD_STRING},
+                       {"msg", message, FIELD_STRING},
+                       {"status", success ? "ok" : "fail", FIELD_STRING}});
 }
 
 void DataLogger::logBootEvent() {

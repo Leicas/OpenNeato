@@ -12,19 +12,22 @@
 #include "data_logger.h"
 #include "scheduler.h"
 #include "manual_clean_manager.h"
+#include "notification_manager.h"
 
 // Global objects
 Preferences prefs;
 AsyncWebServer server(80);
 NeatoSerial neatoSerial;
-WiFiManager wifiManager(prefs);
-FirmwareManager firmwareManager;
 SystemManager systemManager(prefs);
 SettingsManager settingsManager(prefs);
 DataLogger dataLogger(neatoSerial, systemManager);
-Scheduler scheduler(settingsManager, systemManager, neatoSerial);
+WiFiManager wifiManager(prefs, dataLogger);
+FirmwareManager firmwareManager(dataLogger);
+Scheduler scheduler(settingsManager, systemManager, neatoSerial, dataLogger);
 ManualCleanManager manualClean(neatoSerial);
-WebServer webServer(server, neatoSerial, dataLogger, systemManager, firmwareManager, settingsManager, manualClean);
+NotificationManager notifMgr(neatoSerial, settingsManager, dataLogger);
+WebServer webServer(server, neatoSerial, dataLogger, systemManager, firmwareManager, settingsManager, manualClean,
+                    notifMgr);
 
 // Robot time sync state (managed here, not in SystemManager)
 unsigned long lastRobotSync = 0;
@@ -74,6 +77,9 @@ void setup() {
     manualClean.setVacuumSpeed(s.vacuumSpeed);
     manualClean.setSideBrushPower(s.sideBrushPower);
 
+    // Initialize notification manager
+    notifMgr.begin();
+
     // Initialize Neato UART with configured pins
     LOG("BOOT", "Initializing Neato serial...");
     neatoSerial.begin(s.uartTxPin, s.uartRxPin);
@@ -98,21 +104,6 @@ void setup() {
             default:
                 break;
         }
-    });
-
-    // Wire WiFiManager logger callback (reconnect attempts/results)
-    wifiManager.setLogger(
-            [](const String& event, const std::vector<Field>& extra) { dataLogger.logWifi(event, extra); });
-
-    // Wire firmware update events to data logger
-    firmwareManager.setLogger(
-            [](const String& event, const std::vector<Field>& extra) { dataLogger.logOta(event, extra); });
-
-    // Wire scheduler events to data logger
-    scheduler.setLogger([](const String& event, const std::vector<Field>& extra) {
-        std::vector<Field> fields = {{"event", event, FIELD_STRING}};
-        fields.insert(fields.end(), extra.begin(), extra.end());
-        dataLogger.logEvent("sched", fields);
     });
 
     // Initialize WiFi with provisioning
@@ -269,6 +260,9 @@ void loop() {
         syncRobotClock();
         lastRobotSync = millis();
     }
+
+    // Push notifications (adaptive polling — fast when active, slow when idle)
+    notifMgr.loop();
 
     // ESP32-managed cleaning schedule
     scheduler.loop();

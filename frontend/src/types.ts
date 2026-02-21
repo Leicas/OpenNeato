@@ -50,6 +50,11 @@ export interface SettingsData {
     brushRpm: number; // Main brush RPM (500-1600)
     vacuumSpeed: number; // Vacuum speed % (40-100)
     sideBrushPower: number; // Side brush power in mW (500-1500)
+    ntfyTopic: string; // ntfy.sh topic for push notifications (empty = disabled)
+    ntfyEnabled: boolean; // Global switch — must be on for any notification to fire
+    ntfyOnDone: boolean; // Notify when cleaning completes
+    ntfyOnError: boolean; // Notify on robot error
+    ntfyOnDocking: boolean; // Notify when robot returns to base
     scheduleEnabled: boolean;
     sched0Hour: number;
     sched0Min: number;

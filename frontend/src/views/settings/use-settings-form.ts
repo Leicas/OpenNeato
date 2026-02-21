@@ -17,6 +17,11 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
     const [brushRpm, setBrushRpm] = useState(1200);
     const [vacuumSpeed, setVacuumSpeed] = useState(80);
     const [sideBrushPower, setSideBrushPower] = useState(1500);
+    const [ntfyTopic, setNtfyTopic] = useState("");
+    const [ntfyEnabled, setNtfyEnabled] = useState(false);
+    const [ntfyOnDone, setNtfyOnDone] = useState(true);
+    const [ntfyOnError, setNtfyOnError] = useState(true);
+    const [ntfyOnDocking, setNtfyOnDocking] = useState(true);
 
     // Server-confirmed state — used to compute dirty/needsReboot
     const server = useRef<SettingsData>({ ...DEFAULT_SERVER });
@@ -42,6 +47,11 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             setBrushRpm(fetched.brushRpm);
             setVacuumSpeed(fetched.vacuumSpeed);
             setSideBrushPower(fetched.sideBrushPower);
+            setNtfyTopic(fetched.ntfyTopic ?? "");
+            setNtfyEnabled(fetched.ntfyEnabled ?? false);
+            setNtfyOnDone(fetched.ntfyOnDone ?? true);
+            setNtfyOnError(fetched.ntfyOnError ?? true);
+            setNtfyOnDocking(fetched.ntfyOnDocking ?? true);
             setSettingsLoaded(true);
         }
     }, [fetched]);
@@ -59,7 +69,12 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             stallThreshold !== server.current.stallThreshold ||
             brushRpm !== server.current.brushRpm ||
             vacuumSpeed !== server.current.vacuumSpeed ||
-            sideBrushPower !== server.current.sideBrushPower);
+            sideBrushPower !== server.current.sideBrushPower ||
+            ntfyTopic !== (server.current.ntfyTopic ?? "") ||
+            ntfyEnabled !== (server.current.ntfyEnabled ?? false) ||
+            ntfyOnDone !== (server.current.ntfyOnDone ?? true) ||
+            ntfyOnError !== (server.current.ntfyOnError ?? true) ||
+            ntfyOnDocking !== (server.current.ntfyOnDocking ?? true));
 
     const needsReboot =
         uartTxPin !== server.current.uartTxPin ||
@@ -98,6 +113,11 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         if (brushRpm !== server.current.brushRpm) patch.brushRpm = brushRpm;
         if (vacuumSpeed !== server.current.vacuumSpeed) patch.vacuumSpeed = vacuumSpeed;
         if (sideBrushPower !== server.current.sideBrushPower) patch.sideBrushPower = sideBrushPower;
+        if (ntfyTopic !== (server.current.ntfyTopic ?? "")) patch.ntfyTopic = ntfyTopic;
+        if (ntfyEnabled !== (server.current.ntfyEnabled ?? false)) patch.ntfyEnabled = ntfyEnabled;
+        if (ntfyOnDone !== (server.current.ntfyOnDone ?? true)) patch.ntfyOnDone = ntfyOnDone;
+        if (ntfyOnError !== (server.current.ntfyOnError ?? true)) patch.ntfyOnError = ntfyOnError;
+        if (ntfyOnDocking !== (server.current.ntfyOnDocking ?? true)) patch.ntfyOnDocking = ntfyOnDocking;
         return patch;
     }, [
         tz,
@@ -110,6 +130,11 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         brushRpm,
         vacuumSpeed,
         sideBrushPower,
+        ntfyTopic,
+        ntfyEnabled,
+        ntfyOnDone,
+        ntfyOnError,
+        ntfyOnDocking,
     ]);
 
     const handleSave = useCallback(() => {
@@ -167,6 +192,16 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         setVacuumSpeed,
         sideBrushPower,
         setSideBrushPower,
+        ntfyTopic,
+        setNtfyTopic,
+        ntfyEnabled,
+        setNtfyEnabled,
+        ntfyOnDone,
+        setNtfyOnDone,
+        ntfyOnError,
+        setNtfyOnError,
+        ntfyOnDocking,
+        setNtfyOnDocking,
         // Derived state
         isDirty,
         needsReboot,

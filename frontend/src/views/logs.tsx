@@ -56,8 +56,6 @@ function typeBadge(type: string): TypeBadge {
             return { label: "EVT", color: "pink" };
         case "ota":
             return { label: "OTA", color: "purple" };
-        case "error":
-            return { label: "ERR", color: "red" };
         default:
             return { label: type.toUpperCase().slice(0, 4), color: "dim" };
     }
@@ -89,8 +87,7 @@ interface LogEntry {
 const DETAIL_KEY: Record<string, string> = {
     command: "cmd",
     request: "path",
-    event: "msg",
-    error: "msg",
+    event: "category",
     wifi: "event",
     ntp: "event",
     boot: "reason",
@@ -136,7 +133,7 @@ export function LogsView() {
     const [errors, errorStack] = useErrorStack();
 
     // Detail view state
-    const [logLines, setLogLines] = useState<ReturnType<typeof parseLogLine>[]>([]);
+    const [logLines, setLogLines] = useState<LogEntry[]>([]);
     const [loadingContent, setLoadingContent] = useState(false);
 
     // Filter state: empty set = show all, non-empty = show only selected types
@@ -165,7 +162,7 @@ export function LogsView() {
 
     // Unique types present in the current log, in a stable display order
     const availableTypes = useMemo(() => {
-        const order = ["boot", "wifi", "ntp", "command", "request", "event", "error", "ota"];
+        const order = ["boot", "wifi", "ntp", "command", "request", "event", "ota"];
         const seen = new Set(logLines.map((l) => l.type));
         const sorted = order.filter((t) => seen.has(t));
         for (const t of seen) {

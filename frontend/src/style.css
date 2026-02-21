@@ -927,6 +927,41 @@ body {
     outline: 2px solid var(--accent, #5ac8fa);
 }
 
+/* Notification test (ntfy topic + test button) */
+
+.settings-ntfy-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.settings-ntfy-row .settings-text-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-ntfy-test-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.settings-ntfy-test-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.settings-ntfy-test-btn:not(:disabled):active {
+    opacity: 0.7;
+}
+
 /* Firmware update section */
 
 .fw-info-row {

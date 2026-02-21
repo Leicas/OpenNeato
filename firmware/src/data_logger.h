@@ -91,12 +91,12 @@ public:
     // event handlers). They only append to an in-memory buffer; actual SPIFFS
     // I/O is deferred to loop().
 
-    void logEvent(const String& type, const std::vector<Field>& fields);
-    void logError(const String& source, const String& message);
     void logRequest(WebRequestMethodComposite method, const String& path, int status, unsigned long ms);
     void logWifi(const String& event, const std::vector<Field>& extra = {});
     void logOta(const String& event, const std::vector<Field>& extra = {});
     void logNtp(const String& event, const std::vector<Field>& extra = {});
+    void logSchedule(const String& category, const std::vector<Field>& extra = {});
+    void logNotification(const String& category, const String& message, bool success);
 
     // Debug mode check — when set and returns true, sensor payloads are
     // included in request log entries. Wired by main.cpp to SettingsManager.
@@ -114,6 +114,8 @@ private:
     NeatoSerial& neato;
     SystemManager& sysMgr;
     DebugCheck debugCheck;
+
+    void logEvent(const String& type, const std::vector<Field>& fields);
 
     // SPIFFS state
     bool spiffsReady = false;

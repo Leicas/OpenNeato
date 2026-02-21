@@ -1,0 +1,133 @@
+#include "notification_manager.h"
+#include "neato_serial.h"
+#include "settings_manager.h"
+#include "data_logger.h"
+#include <WiFi.h>
+#include <WiFiClient.h>
+
+#define NTFY_HOST "ntfy.sh"
+#define NTFY_PORT 80
+#define NTFY_CONNECT_TIMEOUT_MS 3000
+
+NotificationManager::NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger) :
+    neato(neato), settings(settings), dataLogger(logger) {}
+
+void NotificationManager::begin() {
+    LOG("NOTIF", "Notification manager initialized");
+}
+
+void NotificationManager::loop() {
+    if (fetchPending)
+        return;
+
+    unsigned long now = millis();
+    if (now - lastCheck < checkInterval)
+        return;
+    lastCheck = now;
+
+    // Skip if notifications disabled, no topic configured, or WiFi not connected
+    const Settings& s = settings.get();
+    if (!s.ntfyEnabled || s.ntfyTopic.isEmpty() || WiFi.status() != WL_CONNECTED)
+        return;
+
+    checkTransitions();
+}
+
+void NotificationManager::checkTransitions() {
+    fetchPending = true;
+
+    // Fetch state first, then error — both return from cache (zero serial cost within TTL)
+    neato.getState([this](bool stateOk, const RobotState& state) {
+        neato.getErr([this, stateOk, state](bool errOk, const ErrorData& err) {
+            fetchPending = false;
+
+            const Settings& cfg = settings.get();
+            const String& topic = cfg.ntfyTopic;
+            const String& hostname = cfg.hostname;
+
+            if (stateOk) {
+                const String& newState = state.uiState;
+
+                // Detect transitions
+                if (!prevUiState.isEmpty()) {
+                    bool wasCleaning = prevUiState.indexOf("CLEANINGRUNNING") >= 0;
+                    bool isIdle = newState == "UIMGR_STATE_IDLE";
+                    bool isDocking = newState.indexOf("DOCKING") >= 0;
+
+                    // Cleaning completed: was running -> now idle
+                    if (wasCleaning && isIdle && cfg.ntfyOnDone) {
+                        sendNotification(topic, "white_check_mark", hostname + ": Cleaning done");
+                    }
+
+                    // Returning to base: any -> docking
+                    bool wasDocking = prevUiState.indexOf("DOCKING") >= 0;
+                    if (isDocking && !wasDocking && cfg.ntfyOnDocking) {
+                        sendNotification(topic, "electric_plug", hostname + ": Returning to base");
+                    }
+                }
+
+                // Update adaptive interval based on current state
+                checkInterval = isActiveState(newState) ? NOTIF_INTERVAL_ACTIVE_MS : NOTIF_INTERVAL_IDLE_MS;
+                prevUiState = newState;
+            }
+
+            if (errOk) {
+                // New error detected: was no error -> now has error
+                if (err.hasError && (!prevHasError || err.errorCode != prevErrorCode) && cfg.ntfyOnError) {
+                    sendNotification(topic, "warning", hostname + ": " + err.errorMessage);
+                }
+                prevHasError = err.hasError;
+                prevErrorCode = err.errorCode;
+            }
+        });
+    });
+}
+
+bool NotificationManager::isActiveState(const String& uiState) {
+    return uiState.indexOf("CLEANINGRUNNING") >= 0 || uiState.indexOf("SPOTCLEANINGRUNNING") >= 0 ||
+           uiState.indexOf("DOCKING") >= 0;
+}
+
+void NotificationManager::sendNotification(const String& topic, const String& tags, const String& message) {
+    LOG("NOTIF", "Sending: [%s] %s", tags.c_str(), message.c_str());
+
+    WiFiClient client;
+    client.setTimeout(NTFY_CONNECT_TIMEOUT_MS);
+
+    if (!client.connect(NTFY_HOST, NTFY_PORT)) {
+        LOG("NOTIF", "Connect to %s:%d failed", NTFY_HOST, NTFY_PORT);
+        dataLogger.logNotification("notif_send_fail", message, false);
+        return;
+    }
+
+    // Build minimal HTTP/1.1 POST request
+    client.print("POST /" + topic + " HTTP/1.1\r\n");
+    client.print("Host: " NTFY_HOST "\r\n");
+    client.print("Content-Type: text/plain\r\n");
+    client.print("Tags: " + tags + "\r\n");
+    client.print("Content-Length: " + String(message.length()) + "\r\n");
+    client.print("Connection: close\r\n");
+    client.print("\r\n");
+    client.print(message);
+
+    // Read just the HTTP status line (e.g. "HTTP/1.1 200 OK\r\n")
+    bool ok = false;
+    String statusLine = client.readStringUntil('\n');
+    if (statusLine.length() > 0) {
+        int spaceIdx = statusLine.indexOf(' ');
+        if (spaceIdx > 0) {
+            int code = statusLine.substring(spaceIdx + 1, spaceIdx + 4).toInt();
+            ok = (code >= 200 && code < 300);
+            LOG("NOTIF", "Response: %d %s", code, ok ? "OK" : "FAIL");
+        }
+    }
+
+    client.stop();
+
+    dataLogger.logNotification("notif_sent", message, ok);
+}
+
+void NotificationManager::sendTestNotification(const String& topic) {
+    const String& hostname = settings.get().hostname;
+    sendNotification(topic, "bell", hostname + ": Test notification");
+}

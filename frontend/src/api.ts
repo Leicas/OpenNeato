@@ -98,6 +98,7 @@ export const api = {
     lidarRotate: (enable: boolean) => post(`/api/lidar/rotate?enable=${enable ? 1 : 0}`),
     getSettings: () => get<SettingsData>("/api/settings"),
     updateSettings: (patch: Partial<SettingsData>) => put<SettingsData>("/api/settings", patch),
+    testNotification: (topic: string) => post(`/api/notifications/test?topic=${encodeURIComponent(topic)}`),
     playSound: (id: number) => post(`/api/sound?id=${id}`),
     restart: () => post("/api/system/restart"),
     factoryReset: () => post("/api/system/reset"),

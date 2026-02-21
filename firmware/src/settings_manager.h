@@ -28,6 +28,13 @@ struct Settings : public JsonSerializable {
     int vacuumSpeed = MANUAL_VACUUM_SPEED_PCT; // Vacuum speed % (40-100)
     int sideBrushPower = MANUAL_SIDE_BRUSH_POWER_MW; // Side brush power in mW (500-1500)
 
+    // Notifications (ntfy.sh)
+    String ntfyTopic; // Empty = disabled
+    bool ntfyEnabled = false; // Global switch — must be on for any notification to fire
+    bool ntfyOnDone = true; // Notify when cleaning completes
+    bool ntfyOnError = true; // Notify on robot error
+    bool ntfyOnDocking = true; // Notify when robot returns to base
+
     // Schedule (ESP32-managed, not robot serial)
     bool scheduleEnabled = false;
     SchedDay sched[SCHEDULE_DAYS]; // Sun=0 .. Sat=6

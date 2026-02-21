@@ -4,13 +4,14 @@
 #include <Arduino.h>
 #include <Update.h>
 #include <StreamString.h>
-#include <functional>
-#include <vector>
 #include "config.h"
-#include "json_fields.h"
+
+class DataLogger;
 
 class FirmwareManager {
 public:
+    explicit FirmwareManager(DataLogger& logger);
+
     void loop();
 
     // Version info
@@ -27,11 +28,9 @@ public:
     size_t getProgress() const { return currentProgress; }
     const String& getError() const { return updateError; }
 
-    // Logger callback: (event, extra_fields)
-    using LogCallback = std::function<void(const String&, const std::vector<Field>&)>;
-    void setLogger(LogCallback logger) { loggerCallback = logger; }
-
 private:
+    DataLogger& dataLogger;
+
     bool validateChip(uint8_t *data, size_t len);
 
     bool updateInProgress = false;
@@ -40,7 +39,6 @@ private:
     unsigned long rebootRequestMs = 0;
     size_t currentProgress = 0;
     String updateError;
-    LogCallback loggerCallback;
 };
 
 #endif // FIRMWARE_MANAGER_H

@@ -6,13 +6,16 @@
 #include "settings_manager.h"
 #include "firmware_manager.h"
 #include "manual_clean_manager.h"
+#include "notification_manager.h"
 #include <SPIFFS.h>
 
 unsigned long WebServer::lastApiActivity = 0;
 
 WebServer::WebServer(AsyncWebServer& server, NeatoSerial& neato, DataLogger& logger, SystemManager& sys,
-                     FirmwareManager& fw, SettingsManager& settings, ManualCleanManager& manual) :
-    server(server), neato(neato), logger(logger), sysMgr(sys), fwMgr(fw), settingsMgr(settings), manualMgr(manual) {}
+                     FirmwareManager& fw, SettingsManager& settings, ManualCleanManager& manual,
+                     NotificationManager& notif) :
+    server(server), neato(neato), logger(logger), sysMgr(sys), fwMgr(fw), settingsMgr(settings), manualMgr(manual),
+    notifMgr(notif) {}
 
 void WebServer::loggedRoute(const char *path, WebRequestMethodComposite httpMethod, SyncHandler handler) {
     server.on(path, httpMethod, [this, handler](AsyncWebServerRequest *request) {
@@ -237,6 +240,22 @@ void WebServer::registerSettingsRoutes() {
                         request->send(200, "application/json", settingsMgr.get().toJson());
                         return 200;
                     });
+
+    // POST /api/notifications/test?topic=<topic> — send a test notification
+    loggedRoute("/api/notifications/test", HTTP_POST, [this](AsyncWebServerRequest *request) -> int {
+        if (!request->hasParam("topic")) {
+            sendError(request, 400, "missing topic");
+            return 400;
+        }
+        String topic = request->getParam("topic")->value();
+        if (topic.isEmpty()) {
+            sendError(request, 400, "topic cannot be empty");
+            return 400;
+        }
+        notifMgr.sendTestNotification(topic);
+        sendOk(request);
+        return 200;
+    });
 
     LOG("WEB", "Settings routes registered");
 }

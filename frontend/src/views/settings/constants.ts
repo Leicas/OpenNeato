@@ -108,4 +108,9 @@ export const DEFAULT_SERVER: SettingsData = {
     brushRpm: 1200,
     vacuumSpeed: 80,
     sideBrushPower: 1500,
+    ntfyTopic: "",
+    ntfyEnabled: false,
+    ntfyOnDone: true,
+    ntfyOnError: true,
+    ntfyOnDocking: true,
 } as SettingsData;

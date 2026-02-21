@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "vite",
-    "build": "biome check && vite build && node scripts/embed_frontend.js",
+    "build": "biome check && tsc --noEmit && vite build && node scripts/embed_frontend.js",
     "preview": "vite preview",
     "check": "biome check",
     "fix": "biome check --write",

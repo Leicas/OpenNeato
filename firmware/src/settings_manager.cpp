@@ -32,6 +32,11 @@ void SettingsManager::load() {
     current.brushRpm = prefs.getInt(NVS_KEY_MC_BRUSH_RPM, MANUAL_BRUSH_RPM);
     current.vacuumSpeed = prefs.getInt(NVS_KEY_MC_VACUUM_PCT, MANUAL_VACUUM_SPEED_PCT);
     current.sideBrushPower = prefs.getInt(NVS_KEY_MC_SBRUSH_MW, MANUAL_SIDE_BRUSH_POWER_MW);
+    current.ntfyTopic = prefs.getString(NVS_KEY_NTFY_TOPIC, "");
+    current.ntfyEnabled = prefs.getBool(NVS_KEY_NTFY_ENABLED, false);
+    current.ntfyOnDone = prefs.getBool(NVS_KEY_NTFY_ON_DONE, true);
+    current.ntfyOnError = prefs.getBool(NVS_KEY_NTFY_ON_ERR, true);
+    current.ntfyOnDocking = prefs.getBool(NVS_KEY_NTFY_ON_DOCK, true);
     current.scheduleEnabled = prefs.getBool(NVS_KEY_SCHED_ENABLED, false);
     for (int d = 0; d < SCHEDULE_DAYS; d++) {
         current.sched[d].hour = prefs.getInt(schedKey(d, "h").c_str(), 0);
@@ -51,6 +56,11 @@ void SettingsManager::save() {
     prefs.putInt(NVS_KEY_MC_BRUSH_RPM, current.brushRpm);
     prefs.putInt(NVS_KEY_MC_VACUUM_PCT, current.vacuumSpeed);
     prefs.putInt(NVS_KEY_MC_SBRUSH_MW, current.sideBrushPower);
+    prefs.putString(NVS_KEY_NTFY_TOPIC, current.ntfyTopic);
+    prefs.putBool(NVS_KEY_NTFY_ENABLED, current.ntfyEnabled);
+    prefs.putBool(NVS_KEY_NTFY_ON_DONE, current.ntfyOnDone);
+    prefs.putBool(NVS_KEY_NTFY_ON_ERR, current.ntfyOnError);
+    prefs.putBool(NVS_KEY_NTFY_ON_DOCK, current.ntfyOnDocking);
     prefs.putBool(NVS_KEY_SCHED_ENABLED, current.scheduleEnabled);
     for (int d = 0; d < SCHEDULE_DAYS; d++) {
         prefs.putInt(schedKey(d, "h").c_str(), current.sched[d].hour);
@@ -159,6 +169,33 @@ ApplyResult SettingsManager::apply(const String& json) {
         LOG("SETTINGS", "Side brush power -> %d mW", current.sideBrushPower);
     }
 
+    if (incoming.ntfyTopic != current.ntfyTopic) {
+        current.ntfyTopic = incoming.ntfyTopic;
+        changed = true;
+        LOG("SETTINGS", "ntfy topic -> %s", current.ntfyTopic.isEmpty() ? "(disabled)" : current.ntfyTopic.c_str());
+    }
+
+    if (incoming.ntfyEnabled != current.ntfyEnabled) {
+        current.ntfyEnabled = incoming.ntfyEnabled;
+        changed = true;
+        LOG("SETTINGS", "ntfy enabled -> %s", current.ntfyEnabled ? "on" : "off");
+    }
+    if (incoming.ntfyOnDone != current.ntfyOnDone) {
+        current.ntfyOnDone = incoming.ntfyOnDone;
+        changed = true;
+        LOG("SETTINGS", "ntfy on done -> %s", current.ntfyOnDone ? "on" : "off");
+    }
+    if (incoming.ntfyOnError != current.ntfyOnError) {
+        current.ntfyOnError = incoming.ntfyOnError;
+        changed = true;
+        LOG("SETTINGS", "ntfy on error -> %s", current.ntfyOnError ? "on" : "off");
+    }
+    if (incoming.ntfyOnDocking != current.ntfyOnDocking) {
+        current.ntfyOnDocking = incoming.ntfyOnDocking;
+        changed = true;
+        LOG("SETTINGS", "ntfy on docking -> %s", current.ntfyOnDocking ? "on" : "off");
+    }
+
     if (incoming.scheduleEnabled != current.scheduleEnabled) {
         current.scheduleEnabled = incoming.scheduleEnabled;
         changed = true;
@@ -204,6 +241,11 @@ std::vector<Field> Settings::toFields() const {
             {"brushRpm", String(brushRpm), FIELD_INT},
             {"vacuumSpeed", String(vacuumSpeed), FIELD_INT},
             {"sideBrushPower", String(sideBrushPower), FIELD_INT},
+            {"ntfyTopic", ntfyTopic, FIELD_STRING},
+            {"ntfyEnabled", ntfyEnabled ? "true" : "false", FIELD_BOOL},
+            {"ntfyOnDone", ntfyOnDone ? "true" : "false", FIELD_BOOL},
+            {"ntfyOnError", ntfyOnError ? "true" : "false", FIELD_BOOL},
+            {"ntfyOnDocking", ntfyOnDocking ? "true" : "false", FIELD_BOOL},
             {"scheduleEnabled", scheduleEnabled ? "true" : "false", FIELD_BOOL},
     };
     for (int d = 0; d < SCHEDULE_DAYS; d++) {
@@ -257,6 +299,26 @@ bool Settings::fromFields(const std::vector<Field>& fields) {
     }
     if ((f = findField(fields, "sideBrushPower")) && f->type == FIELD_INT) {
         sideBrushPower = f->value.toInt();
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyTopic")) && f->type == FIELD_STRING) {
+        ntfyTopic = f->value;
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyEnabled")) && f->type == FIELD_BOOL) {
+        ntfyEnabled = (f->value == "true");
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyOnDone")) && f->type == FIELD_BOOL) {
+        ntfyOnDone = (f->value == "true");
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyOnError")) && f->type == FIELD_BOOL) {
+        ntfyOnError = (f->value == "true");
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyOnDocking")) && f->type == FIELD_BOOL) {
+        ntfyOnDocking = (f->value == "true");
         applied = true;
     }
     if ((f = findField(fields, "scheduleEnabled")) && f->type == FIELD_BOOL) {

@@ -3,15 +3,14 @@
 
 #include <WiFi.h>
 #include <Preferences.h>
-#include <functional>
-#include <vector>
 #include "config.h"
-#include "json_fields.h"
 #include "serial_menu.h"
+
+class DataLogger;
 
 class WiFiManager {
 public:
-    explicit WiFiManager(Preferences& prefs);
+    WiFiManager(Preferences& prefs, DataLogger& logger);
 
     void begin();
     void loop();
@@ -28,12 +27,9 @@ public:
     // Apply TX power setting (0.25 dBm units). Safe to call at any time.
     void setTxPower(int quarterDbm);
 
-    // Logger callback: (event, extra_fields) — wired to DataLogger in main.cpp
-    using LogCallback = std::function<void(const String&, const std::vector<Field>&)>;
-    void setLogger(LogCallback logger) { loggerCallback = logger; }
-
 private:
     Preferences& prefs;
+    DataLogger& dataLogger;
     String hostname = DEFAULT_HOSTNAME;
     SerialMenu menu;
     SerialMenu networkMenu;
@@ -41,7 +37,6 @@ private:
     bool inNetworkSelection = false;
     String selectedSSID = "";
     int scannedNetworkCount = 0;
-    LogCallback loggerCallback;
 
     // Apply TX power from NVS (called after WiFi.begin and after reconnect)
     void applyTxPower();

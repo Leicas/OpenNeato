@@ -34,6 +34,7 @@ firmware through REST API. Everything runs on the device itself.
 12. **WiFi modem sleep** — `WIFI_PS_MIN_MODEM` for ~15-20mA idle
 13. **Task Watchdog** — Hardware TWDT resets ESP32 if loop() hangs
 14. **Manual clean** — Full-stack manual driving: firmware backend (TestMode lifecycle, motor commands, safety polling, stall detection, client timeout), configurable motor settings (brush RPM, vacuum speed, side brush power, stall threshold) with NVS persistence and preset dropdowns in settings UI
+15. **Push notifications** — Fire-and-forget HTTP POST to ntfy.sh, adaptive polling (3s active / 30s idle), triggers on cleaning done, error, and return-to-base, configurable topic in settings with test button
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 
@@ -50,9 +51,6 @@ Browser fetches releases API, downloads .bin, uploads to device.
 **Return to base** — Experiment with `Clean Persistent MinCharge 99` during an
 active clean to see if the robot forces a recharge dock return. If it works,
 add a "Return to Base" button on the dashboard while cleaning is in progress.
-
-**Push notifications via ntfy.sh** — Fire-and-forget HTTP POST to configurable ntfy topic.
-Piggybacks on existing sensor polling for event detection.
 
 ### Neato Serial Protocol
 - **Baud rate**: 115200
@@ -594,14 +592,36 @@ Two top-level directories: `firmware/` for ESP32 code, `frontend/` for the web U
 | `system_manager` | NTP sync, system health, deferred reboot, heap/task watchdogs |
 | `data_logger` | SPIFFS JSON-lines logging, heatshrink compression, log management |
 | `manual_clean_manager` | Manual clean lifecycle, safety polling, obstacle blocking |
+| `notification_manager` | ntfy.sh push notifications, adaptive polling, state transition detection |
 | `json_fields` | Lightweight field-based JSON serialization (no ArduinoJson) |
 | `serial_menu` | Interactive serial menu for USB debug console |
 
 **Key patterns:**
-- Dependency injection via constructor refs (shared `Preferences&`, manager refs)
-- Callback wiring in `main.cpp` (logger hooks, NTP sync, timezone changes)
+- Dependency injection via constructor refs (shared `Preferences&`, `DataLogger&`, manager refs)
+- Callback wiring in `main.cpp` (NTP sync, timezone changes, debug check)
 - Non-blocking loop: all managers tick in `loop()`, no blocking I/O
 - Web server is a thin route layer — delegates to managers, no business logic
+
+**Data logging requirement:** All significant events must be logged via `DataLogger`.
+`DataLogger` is injected by reference into managers that need it — no `setLogger()` callbacks.
+Use the appropriate typed helper; `logEvent` is private. Current public helpers:
+
+| Method | Type written | Key field | Used by |
+|--------|-------------|-----------|---------|
+| `logRequest(method, path, status, ms)` | `request` | `path` | web_server |
+| `logWifi(event, extra)` | `wifi` | `event` | wifi_manager |
+| `logOta(event, extra)` | `ota` | `event` | firmware_manager |
+| `logNtp(event, extra)` | `ntp` | `event` | system_manager |
+| `logSchedule(category, extra)` | `event` | `category` | scheduler |
+| `logNotification(category, message, success)` | `event` | `category` | notification_manager |
+
+When adding a new manager that needs logging, add a typed helper to `DataLogger`
+(following the pattern above) rather than exposing `logEvent` or adding a callback.
+Log both success and failure outcomes so issues are diagnosable from the log files.
+
+**`event` type entries** (scheduler + notifications) use `category` as the drill-down
+discriminator in the frontend. Scheduler categories are prefixed `scheduler_*`;
+notification categories are prefixed `notif_*`.
 
 ### Frontend (`frontend/src/`)
 
@@ -670,6 +690,7 @@ Frontend is part of the firmware binary — single OTA update covers both.
 | GET | `/api/manual/status` | Manual clean status (safety, motors, stall) |
 | POST | `/api/manual/move?left=N&right=N&speed=N` | Manual clean movement (safety-checked) |
 | POST | `/api/manual/motors?brush=0\|1&vacuum=0\|1&sideBrush=0\|1` | Motor control |
+| POST | `/api/notifications/test?topic=<topic>` | Send test notification via ntfy.sh |
 
 ## Build Commands
 
