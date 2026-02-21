@@ -5,6 +5,7 @@
 #include <functional>
 #include "config.h"
 #include "json_fields.h"
+#include "loop_task.h"
 #include "neato_serial.h"
 
 // Manages the manual clean lifecycle: TestMode entry/exit, LDS rotation,
@@ -30,7 +31,7 @@
 // are the ground truth for collision detection. LIDAR data is still available
 // for the frontend map visualization via GET /api/lidar.
 
-class ManualCleanManager {
+class ManualCleanManager : public LoopTask {
 public:
     ManualCleanManager(NeatoSerial& serial);
 
@@ -47,9 +48,6 @@ public:
     // Control cleaning motors (brush, vacuum, side brush).
     // Returns false immediately if not active (caller gets 503).
     bool setMotors(bool brush, bool vacuum, bool sideBrush, std::function<void(bool)> callback);
-
-    // Must be called from loop() — drives safety polling and watchdog
-    void loop();
 
     bool isActive() const { return active; }
 
@@ -84,9 +82,11 @@ private:
     bool stallFront = false; // Stall while moving forward → blocks forward
     bool stallRear = false; // Stall while moving backward → blocks backward
 
-    // Polling timers
-    unsigned long lastSafetyPoll = 0;
-    unsigned long lastStallPoll = 0;
+    void tick() override; // Called every loop() iteration (intervalMs = 0)
+
+    // Polling tickers (independent sub-timers inside tick())
+    Ticker safetyTicker; // MANUAL_SAFETY_POLL_MS
+    Ticker stallTicker; // MANUAL_STALL_POLL_MS
     bool watchdogStopped = false; // True if watchdog already sent stop
 
     // Runtime motor/safety settings (defaults from config.h, updated by SettingsManager)

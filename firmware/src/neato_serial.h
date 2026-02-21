@@ -5,6 +5,7 @@
 #include <functional>
 #include <vector>
 #include "config.h"
+#include "loop_task.h"
 #include "neato_commands.h"
 #include "async_cache.h"
 
@@ -24,11 +25,10 @@ enum CommandPriority : uint8_t {
 
 enum QueueState { QUEUE_IDLE, QUEUE_SENDING, QUEUE_WAITING_RESPONSE, QUEUE_INTER_DELAY };
 
-class NeatoSerial {
+class NeatoSerial : public LoopTask {
 public:
     NeatoSerial();
     void begin(int txPin, int rxPin);
-    void loop();
 
     // -- Sensor queries (typed callbacks) ------------------------------------
     // These are transparently cached: concurrent requests are coalesced,
@@ -47,6 +47,7 @@ public:
     void getLdsScan(std::function<void(bool, const LdsScanData&)> callback);
     void getAccel(std::function<void(bool, const AccelData&)> callback);
     void getButtons(std::function<void(bool, const ButtonData&)> callback);
+    void getRobotPos(bool smooth, std::function<void(bool, const RobotPosData&)> callback);
     // -- Action commands (fire-and-forget by default) ------------------------
 
     bool clean(const String& action, std::function<void(bool)> callback = nullptr);
@@ -88,6 +89,8 @@ public:
     int queueDepth() const { return static_cast<int>(queue.size()); }
 
 private:
+    void tick() override; // Called every loop() iteration (intervalMs = 0 — UART state machine)
+
     HardwareSerial& uart = Serial1;
     std::vector<CommandEntry> queue;
     QueueState state = QUEUE_IDLE;
@@ -136,6 +139,8 @@ private:
     AsyncCache<AccelData> accelCache;
     AsyncCache<ButtonData> buttonCache;
     AsyncCache<LdsScanData> ldsCache;
+    AsyncCache<RobotPosData> robotPosRawCache;
+    AsyncCache<RobotPosData> robotPosSmoothCache;
 
     // Raw (uncached) fetch methods — enqueue the command and parse response
     void fetchVersion(std::function<void(bool, const VersionData&)> callback);
@@ -150,6 +155,7 @@ private:
     void fetchAccel(std::function<void(bool, const AccelData&)> callback);
     void fetchButtons(std::function<void(bool, const ButtonData&)> callback);
     void fetchLdsScan(std::function<void(bool, const LdsScanData&)> callback);
+    void fetchRobotPos(const char *cmd, std::function<void(bool, const RobotPosData&)> callback);
 };
 
 #endif // NEATO_SERIAL_H

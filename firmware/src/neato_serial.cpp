@@ -12,9 +12,9 @@
     }
 
 NeatoSerial::NeatoSerial() :
-    versionCache(
-            CACHE_TTL_VERSION, [this](AsyncCache<VersionData>::Callback cb) { fetchVersion(cb); },
-            CACHE_HIT(CMD_GET_VERSION)),
+    LoopTask(0), versionCache(
+                         CACHE_TTL_VERSION, [this](AsyncCache<VersionData>::Callback cb) { fetchVersion(cb); },
+                         CACHE_HIT(CMD_GET_VERSION)),
     chargerCache(
             CACHE_TTL_CHARGER, [this](AsyncCache<ChargerData>::Callback cb) { fetchCharger(cb); },
             CACHE_HIT(CMD_GET_CHARGER)),
@@ -38,7 +38,17 @@ NeatoSerial::NeatoSerial() :
             CACHE_HIT(CMD_GET_BUTTONS)),
     ldsCache(
             CACHE_TTL_LDS, [this](AsyncCache<LdsScanData>::Callback cb) { fetchLdsScan(cb); },
-            CACHE_HIT(CMD_GET_LDS_SCAN)) {}
+            CACHE_HIT(CMD_GET_LDS_SCAN)),
+    robotPosRawCache(
+            CACHE_TTL_SENSORS,
+            [this](AsyncCache<RobotPosData>::Callback cb) { fetchRobotPos(CMD_GET_ROBOT_POS_RAW, cb); },
+            CACHE_HIT(CMD_GET_ROBOT_POS_RAW)),
+    robotPosSmoothCache(
+            CACHE_TTL_SENSORS,
+            [this](AsyncCache<RobotPosData>::Callback cb) { fetchRobotPos(CMD_GET_ROBOT_POS_SMOOTH, cb); },
+            CACHE_HIT(CMD_GET_ROBOT_POS_SMOOTH)) {
+    TaskRegistry::add(this);
+}
 
 #undef CACHE_HIT
 
@@ -48,7 +58,7 @@ void NeatoSerial::begin(int txPin, int rxPin) {
     LOG("NEATO", "UART initialized (TX=GPIO%d, RX=GPIO%d, baud=%d)", txPin, rxPin, NEATO_BAUD_RATE);
 }
 
-void NeatoSerial::loop() {
+void NeatoSerial::tick() {
     switch (state) {
         case QUEUE_IDLE:
             if (!queue.empty()) {
@@ -324,6 +334,10 @@ void NeatoSerial::getButtons(std::function<void(bool, const ButtonData&)> callba
     buttonCache.get(callback);
 }
 
+void NeatoSerial::getRobotPos(bool smooth, std::function<void(bool, const RobotPosData&)> callback) {
+    (smooth ? robotPosSmoothCache : robotPosRawCache).get(callback);
+}
+
 // -- Raw fetch methods (enqueue serial command, parse response) ---------------
 
 void NeatoSerial::fetchVersion(std::function<void(bool, const VersionData&)> callback) {
@@ -423,6 +437,16 @@ void NeatoSerial::fetchLdsScan(std::function<void(bool, const LdsScanData&)> cal
     });
 }
 
+void NeatoSerial::fetchRobotPos(const char *cmd, std::function<void(bool, const RobotPosData&)> callback) {
+    enqueue(cmd, [callback](bool ok, const String& raw) {
+        RobotPosData data;
+        if (ok)
+            ok = parseRobotPosData(raw, data);
+        if (callback)
+            callback(ok, data);
+    });
+}
+
 void NeatoSerial::fetchAccel(std::function<void(bool, const AccelData&)> callback) {
     enqueue(CMD_GET_ACCEL, [callback](bool ok, const String& raw) {
         AccelData data;
@@ -461,6 +485,8 @@ void NeatoSerial::invalidateAll() {
     accelCache.invalidate();
     buttonCache.invalidate();
     ldsCache.invalidate();
+    robotPosRawCache.invalidate();
+    robotPosSmoothCache.invalidate();
 }
 
 // -- Action command convenience methods --------------------------------------

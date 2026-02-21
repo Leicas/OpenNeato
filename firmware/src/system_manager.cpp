@@ -3,7 +3,9 @@
 #include <WiFi.h>
 #include <ctime>
 
-SystemManager::SystemManager(Preferences& prefs) : prefs(prefs) {}
+SystemManager::SystemManager(Preferences& prefs) : LoopTask(5000), prefs(prefs) {
+    TaskRegistry::add(this);
+}
 
 // -- Lifecycle ---------------------------------------------------------------
 
@@ -26,7 +28,7 @@ void SystemManager::feedTaskWdt() {
     esp_task_wdt_reset();
 }
 
-void SystemManager::loop() {
+void SystemManager::tick() {
     // Detect NTP sync transition
     if (!ntpSynced) {
         time_t t = time(nullptr);

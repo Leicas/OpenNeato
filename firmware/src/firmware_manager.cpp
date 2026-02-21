@@ -2,7 +2,7 @@
 #include "data_logger.h"
 #include <esp_chip_info.h>
 
-FirmwareManager::FirmwareManager(DataLogger& logger) : dataLogger(logger) {}
+FirmwareManager::FirmwareManager(DataLogger& logger) : LoopTask(250), dataLogger(logger) {}
 
 // ESP32 image extended header byte 12 contains the chip ID.
 // The esp_chip_info model enum uses the same values (CHIP_ESP32=1, CHIP_ESP32S2=2,
@@ -99,7 +99,7 @@ bool FirmwareManager::endUpdate() {
     return true;
 }
 
-void FirmwareManager::loop() {
+void FirmwareManager::tick() {
     if (rebootPending && millis() - rebootRequestMs > 2000) {
         LOG("FW", "Rebooting...");
         ESP.restart();

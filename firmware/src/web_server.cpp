@@ -76,25 +76,35 @@ void WebServer::begin() {
 void WebServer::registerApiRoutes() {
     // -- Sensor query endpoints ----------------------------------------------
 
-    registerSensorRoute<NeatoSerial, VersionData>("/api/version", neato, &NeatoSerial::getVersion);
-    registerSensorRoute<NeatoSerial, ChargerData>("/api/charger", neato, &NeatoSerial::getCharger);
-    registerSensorRoute<NeatoSerial, AnalogSensorData>("/api/sensors/analog", neato, &NeatoSerial::getAnalogSensors);
-    registerSensorRoute<NeatoSerial, DigitalSensorData>("/api/sensors/digital", neato, &NeatoSerial::getDigitalSensors);
-    registerSensorRoute<NeatoSerial, MotorData>("/api/motors", neato, &NeatoSerial::getMotors);
-    registerSensorRoute<NeatoSerial, RobotState>("/api/state", neato, &NeatoSerial::getState);
-    registerSensorRoute<NeatoSerial, ErrorData>("/api/error", neato, &NeatoSerial::getErr);
-    registerSensorRoute<NeatoSerial, AccelData>("/api/accel", neato, &NeatoSerial::getAccel);
-    registerSensorRoute<NeatoSerial, ButtonData>("/api/buttons", neato, &NeatoSerial::getButtons);
-    registerSensorRoute<NeatoSerial, LdsScanData>("/api/lidar", neato, &NeatoSerial::getLdsScan);
+    registerGetRoute("/api/version", neato, &NeatoSerial::getVersion, {});
+    registerGetRoute("/api/charger", neato, &NeatoSerial::getCharger, {});
+    registerGetRoute("/api/sensors/analog", neato, &NeatoSerial::getAnalogSensors, {});
+    registerGetRoute("/api/sensors/digital", neato,
+                     static_cast<void (NeatoSerial::*)(std::function<void(bool, const DigitalSensorData&)>)>(
+                             &NeatoSerial::getDigitalSensors),
+                     {});
+    registerGetRoute(
+            "/api/motors", neato,
+            static_cast<void (NeatoSerial::*)(std::function<void(bool, const MotorData&)>)>(&NeatoSerial::getMotors),
+            {});
+    registerGetRoute("/api/state", neato, &NeatoSerial::getState, {});
+    registerGetRoute("/api/error", neato, &NeatoSerial::getErr, {});
+    registerGetRoute("/api/accel", neato, &NeatoSerial::getAccel, {});
+    registerGetRoute("/api/buttons", neato, &NeatoSerial::getButtons, {});
+    registerGetRoute("/api/lidar", neato, &NeatoSerial::getLdsScan, {});
+
+    // -- Exploration endpoints (temporary — response format unknown) ----------
+
+    registerGetRoute("/api/robotpos", neato, &NeatoSerial::getRobotPos, {"smooth"});
 
     // -- Action endpoints ----------------------------------------------------
     // All parameterized actions use query strings: resource URL identifies the
     // command, query params carry arguments (mirrors Neato serial protocol).
 
-    registerActionRoute("/api/clean", neato, &NeatoSerial::clean, "action", "house");
-    registerActionRoute("/api/sound", neato, &NeatoSerial::playSound, "id");
-    registerActionRoute("/api/testmode", neato, &NeatoSerial::testMode, "enable");
-    registerActionRoute("/api/lidar/rotate", neato, &NeatoSerial::setLdsRotation, "enable");
+    registerPostRoute("/api/clean", neato, &NeatoSerial::clean, {"action"});
+    registerPostRoute("/api/sound", neato, &NeatoSerial::playSound, {"id"});
+    registerPostRoute("/api/testmode", neato, &NeatoSerial::testMode, {"enable"});
+    registerPostRoute("/api/lidar/rotate", neato, &NeatoSerial::setLdsRotation, {"enable"});
 
     LOG("WEB", "API routes registered");
 }
@@ -108,10 +118,10 @@ void WebServer::registerManualRoutes() {
         request->send(200, "application/json", manualMgr.getStatusJson());
         return 200;
     });
-    registerActionRoute("/api/manual/move", manualMgr, &ManualCleanManager::move, "left", "right", "speed");
-    registerActionRoute("/api/manual/motors", manualMgr, &ManualCleanManager::setMotors, "brush", "vacuum",
-                        "sideBrush");
-    registerActionRoute("/api/manual", manualMgr, &ManualCleanManager::enable, "enable");
+    registerPostRoute("/api/manual/move", manualMgr, &ManualCleanManager::move, {"left", "right", "speed"});
+    registerPostRoute("/api/manual/motors", manualMgr, &ManualCleanManager::setMotors,
+                      {"brush", "vacuum", "sideBrush"});
+    registerPostRoute("/api/manual", manualMgr, &ManualCleanManager::enable, {"enable"});
 
     LOG("WEB", "Manual clean routes registered");
 }

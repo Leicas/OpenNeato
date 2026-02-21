@@ -13,6 +13,7 @@
 #include "scheduler.h"
 #include "manual_clean_manager.h"
 #include "notification_manager.h"
+#include "loop_task.h"
 
 // Global objects
 Preferences prefs;
@@ -243,27 +244,14 @@ void loop() {
         }
     }
 
-    // Pump Neato serial command queue
-    neatoSerial.loop();
-
-    // Manual clean safety polling and watchdog
-    manualClean.loop();
-
-    // System manager housekeeping (NTP detection)
-    systemManager.loop();
-
-    // Data logger housekeeping (flush buffer, compression, bulk delete)
-    dataLogger.loop();
+    // Tick all unconditionally-polled managers (registered via TaskRegistry::add in
+    // each constructor): NeatoSerial, ManualCleanManager, SystemManager, DataLogger,
+    // NotificationManager, Scheduler. Each respects its own LoopTask interval.
+    TaskRegistry::tickAll();
 
     // Periodic robot time re-sync from NTP (every 4 hours)
     if (systemManager.isNtpSynced() && millis() - lastRobotSync >= ROBOT_TIME_SYNC_INTERVAL_MS) {
         syncRobotClock();
         lastRobotSync = millis();
     }
-
-    // Push notifications (adaptive polling — fast when active, slow when idle)
-    notifMgr.loop();
-
-    // ESP32-managed cleaning schedule
-    scheduler.loop();
 }

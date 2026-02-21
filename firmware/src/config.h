@@ -132,7 +132,7 @@ enum CommandStatus {
 // Prevents the device from becoming unresponsive when memory is exhausted
 // (e.g. by runaway async connections after a UART desync cascade).
 #define HEAP_WATCHDOG_THRESHOLD 16384 // 16 KB — below this is critical
-#define HEAP_WATCHDOG_DURATION_MS 10000 // Must stay low for 10s to trigger
+#define HEAP_WATCHDOG_DURATION_MS 30000 // Must stay low for 30s to trigger
 
 // NTP / time sync
 #define NTP_SERVER_1 "pool.ntp.org"

@@ -35,6 +35,8 @@
 #define CMD_SET_UI_ERROR_SET_ALERT "SetUIError setalert UI_ALERT_OLD_ERROR"
 #define CMD_SET_UI_ERROR_CLEAR_ALERT "SetUIError clearalert UI_ALERT_OLD_ERROR"
 #define CMD_SET_MOTOR "SetMotor"
+#define CMD_GET_ROBOT_POS_RAW "GetRobotPos Raw"
+#define CMD_GET_ROBOT_POS_SMOOTH "GetRobotPos Smooth"
 
 // -- Sound IDs ---------------------------------------------------------------
 
@@ -209,6 +211,14 @@ struct LdsScanData {
     String toJson() const;
 };
 
+// Robot position — hidden command, response format unknown.
+// Returns the raw response verbatim for inspection on real hardware.
+struct RobotPosData : public JsonSerializable {
+    String raw; // Full raw response — parse once format is known
+
+    std::vector<Field> toFields() const override;
+};
+
 // -- Response parsers --------------------------------------------------------
 
 bool parseVersionData(const String& raw, VersionData& out);
@@ -222,5 +232,6 @@ bool parseAccelData(const String& raw, AccelData& out);
 bool parseButtonData(const String& raw, ButtonData& out);
 bool parseLdsScanData(const String& raw, LdsScanData& out);
 bool parseTimeData(const String& raw, TimeData& out);
+bool parseRobotPosData(const String& raw, RobotPosData& out);
 
 #endif // NEATO_COMMANDS_H

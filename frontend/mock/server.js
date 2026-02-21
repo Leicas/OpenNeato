@@ -477,6 +477,15 @@ const routes = {
         jsonResponse(res, scan);
     },
 
+    "GET /api/robotpos/raw": (_req, res) => {
+        // Exploration endpoint — response format unknown on real hardware.
+        jsonResponse(res, { raw: "GetRobotPos Raw\r\nX,Y,Theta\r\n150.3,220.7,45.2\r\n" });
+    },
+
+    "GET /api/robotpos/smooth": (_req, res) => {
+        jsonResponse(res, { raw: "GetRobotPos Smooth\r\nX,Y,Theta\r\n150.3,220.7,45.2\r\n" });
+    },
+
     // Action routes — parameterized via query string
     "POST /api/clean": (_req, res, query) => {
         if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);

@@ -2,7 +2,9 @@
 #include "data_logger.h"
 
 Scheduler::Scheduler(SettingsManager& settings, SystemManager& system, NeatoSerial& serial, DataLogger& logger) :
-    settings(settings), system(system), serial(serial), dataLogger(logger) {}
+    LoopTask(SCHEDULE_CHECK_INTERVAL_MS), settings(settings), system(system), serial(serial), dataLogger(logger) {
+    TaskRegistry::add(this);
+}
 
 // C library: Sun=0, Mon=1 .. Sat=6
 // Our schedule: Mon=0, Tue=1 .. Sun=6
@@ -10,13 +12,7 @@ int Scheduler::toSchedDay(int tmWday) {
     return (tmWday + 6) % 7;
 }
 
-void Scheduler::loop() {
-    // Throttle checks
-    unsigned long now = millis();
-    if (now - lastCheck < SCHEDULE_CHECK_INTERVAL_MS)
-        return;
-    lastCheck = now;
-
+void Scheduler::tick() {
     const Settings& s = settings.get();
     if (!s.scheduleEnabled)
         return;

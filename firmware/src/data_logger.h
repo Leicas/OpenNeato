@@ -11,6 +11,7 @@
 #include <heatshrink_decoder.h>
 #include "config.h"
 #include "json_fields.h"
+#include "loop_task.h"
 
 class NeatoSerial;
 class SystemManager;
@@ -79,12 +80,11 @@ struct CompressedLogReader : public LogReader {
     size_t read(uint8_t *buffer, size_t maxLen) override;
 };
 
-class DataLogger {
+class DataLogger : public LoopTask {
 public:
     DataLogger(NeatoSerial& neato, SystemManager& sys);
 
     void begin();
-    void loop();
 
     // -- Public logging methods (called by other modules) --------------------
     // These are safe to call from any context (request handlers, callbacks,
@@ -111,6 +111,8 @@ public:
     void deleteAllLogs();
 
 private:
+    void tick() override; // Runs every 50ms — flush buffer, compression step, limit enforcement
+
     NeatoSerial& neato;
     SystemManager& sysMgr;
     DebugCheck debugCheck;

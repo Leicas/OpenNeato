@@ -10,20 +10,17 @@
 #define NTFY_CONNECT_TIMEOUT_MS 3000
 
 NotificationManager::NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger) :
-    neato(neato), settings(settings), dataLogger(logger) {}
+    LoopTask(NOTIF_INTERVAL_IDLE_MS), neato(neato), settings(settings), dataLogger(logger) {
+    TaskRegistry::add(this);
+}
 
 void NotificationManager::begin() {
     LOG("NOTIF", "Notification manager initialized");
 }
 
-void NotificationManager::loop() {
+void NotificationManager::tick() {
     if (fetchPending)
         return;
-
-    unsigned long now = millis();
-    if (now - lastCheck < checkInterval)
-        return;
-    lastCheck = now;
 
     // Skip if notifications disabled, no topic configured, or WiFi not connected
     const Settings& s = settings.get();
@@ -67,7 +64,7 @@ void NotificationManager::checkTransitions() {
                 }
 
                 // Update adaptive interval based on current state
-                checkInterval = isActiveState(newState) ? NOTIF_INTERVAL_ACTIVE_MS : NOTIF_INTERVAL_IDLE_MS;
+                setInterval(isActiveState(newState) ? NOTIF_INTERVAL_ACTIVE_MS : NOTIF_INTERVAL_IDLE_MS);
                 prevUiState = newState;
             }
 

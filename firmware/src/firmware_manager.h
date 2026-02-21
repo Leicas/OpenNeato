@@ -5,14 +5,13 @@
 #include <Update.h>
 #include <StreamString.h>
 #include "config.h"
+#include "loop_task.h"
 
 class DataLogger;
 
-class FirmwareManager {
+class FirmwareManager : public LoopTask {
 public:
     explicit FirmwareManager(DataLogger& logger);
-
-    void loop();
 
     // Version info
     const char *getFirmwareVersion() const { return FIRMWARE_VERSION; }
@@ -29,6 +28,8 @@ public:
     const String& getError() const { return updateError; }
 
 private:
+    void tick() override; // Runs every 250ms — checks rebootPending flag
+
     DataLogger& dataLogger;
 
     bool validateChip(uint8_t *data, size_t len);

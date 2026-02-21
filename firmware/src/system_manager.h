@@ -7,6 +7,7 @@
 #include <functional>
 #include "config.h"
 #include "json_fields.h"
+#include "loop_task.h"
 
 // System health snapshot — returned by SystemManager, serialized by caller
 struct SystemHealth : public JsonSerializable {
@@ -24,12 +25,11 @@ struct SystemHealth : public JsonSerializable {
     std::vector<Field> toFields() const override;
 };
 
-class SystemManager {
+class SystemManager : public LoopTask {
 public:
     explicit SystemManager(Preferences& prefs);
 
     void begin();
-    void loop();
 
     // Task Watchdog Timer — must be called from setup() after all slow init,
     // and feedTaskWdt() from every loop() iteration to prevent TWDT reset.
@@ -69,6 +69,8 @@ public:
     void onNtpSync(NtpSyncCallback cb) { ntpSyncCallback = cb; }
 
 private:
+    void tick() override; // Runs every 5000ms — NTP sync detection + heap watchdog
+
     Preferences& prefs;
     bool ntpSynced = false;
     bool fallbackSet = false;

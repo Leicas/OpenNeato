@@ -5,6 +5,7 @@
 #include <vector>
 #include "config.h"
 #include "json_fields.h"
+#include "loop_task.h"
 #include "settings_manager.h"
 #include "system_manager.h"
 #include "neato_serial.h"
@@ -16,19 +17,16 @@ class DataLogger;
 // and issues Clean House via NeatoSerial when a scheduled time is reached.
 // Uses SystemManager::now() for time (NTP preferred, robot fallback).
 // Runs entirely on the ESP32 — does not use robot serial schedule commands.
-class Scheduler {
+class Scheduler : public LoopTask {
 public:
     Scheduler(SettingsManager& settings, SystemManager& system, NeatoSerial& serial, DataLogger& logger);
 
-    void loop();
-
 private:
+    void tick() override; // Called every SCHEDULE_CHECK_INTERVAL_MS
     SettingsManager& settings;
     SystemManager& system;
     NeatoSerial& serial;
     DataLogger& dataLogger;
-
-    unsigned long lastCheck = 0;
 
     // Duplicate trigger guard: remember the last slot we fired
     int firedDay = -1;

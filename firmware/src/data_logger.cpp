@@ -98,7 +98,9 @@ std::vector<Field> LogFileInfo::toFields() const {
 
 // -- Constructor -------------------------------------------------------------
 
-DataLogger::DataLogger(NeatoSerial& neato, SystemManager& sys) : neato(neato), sysMgr(sys) {}
+DataLogger::DataLogger(NeatoSerial& neato, SystemManager& sys) : LoopTask(50), neato(neato), sysMgr(sys) {
+    TaskRegistry::add(this);
+}
 
 // -- Lifecycle ---------------------------------------------------------------
 
@@ -138,7 +140,7 @@ void DataLogger::begin() {
     lastFlushMs = millis();
 }
 
-void DataLogger::loop() {
+void DataLogger::tick() {
     // Flush write buffer to SPIFFS when interval elapsed or buffer full
     if (!writeBuffer.empty()) {
         bool intervalElapsed = millis() - lastFlushMs >= LOG_FLUSH_INTERVAL_MS;

@@ -1,7 +1,9 @@
 #include "manual_clean_manager.h"
 #include "web_server.h"
 
-ManualCleanManager::ManualCleanManager(NeatoSerial& serial) : serial(serial) {}
+ManualCleanManager::ManualCleanManager(NeatoSerial& serial) : LoopTask(0), serial(serial) {
+    TaskRegistry::add(this);
+}
 
 // -- Enable/disable lifecycle ------------------------------------------------
 
@@ -41,7 +43,8 @@ bool ManualCleanManager::enable(bool doEnable, std::function<void(bool)> callbac
                 enabling = false;
                 active = true;
                 serial.setManualCleanActive(true);
-                lastSafetyPoll = 0; // Force immediate poll
+                safetyTicker.reset(); // Force immediate first poll
+                stallTicker.reset();
                 watchdogStopped = false;
 
                 // Reset safety state
@@ -194,26 +197,23 @@ bool ManualCleanManager::setMotors(bool brush, bool vacuum, bool sideBrush, std:
 
 // -- Loop (safety polling + watchdog) ----------------------------------------
 
-void ManualCleanManager::loop() {
+void ManualCleanManager::tick() {
     if (!active)
         return;
 
-    unsigned long now = millis();
-
     // Safety polling — bumpers
-    if (now - lastSafetyPoll >= MANUAL_SAFETY_POLL_MS) {
-        lastSafetyPoll = now;
+    if (safetyTicker.elapsed(MANUAL_SAFETY_POLL_MS)) {
         pollBumpers();
     }
 
     // Stall detection — poll motor odometry while wheels are moving
-    if (wheelsMoving && now - lastStallPoll >= MANUAL_STALL_POLL_MS) {
-        lastStallPoll = now;
+    if (wheelsMoving && stallTicker.elapsed(MANUAL_STALL_POLL_MS)) {
         pollStall();
     }
 
     // Client watchdog — stop wheels if frontend goes silent (any API request resets the timer)
     unsigned long lastActivity = WebServer::lastApiActivity;
+    unsigned long now = millis();
     if (!watchdogStopped && lastActivity > 0 && now - lastActivity >= MANUAL_CLIENT_TIMEOUT_MS) {
         LOG("MANUAL", "Client watchdog: no API activity for %lu ms, stopping wheels",
             (unsigned long) MANUAL_CLIENT_TIMEOUT_MS);

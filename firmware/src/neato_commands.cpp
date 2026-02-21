@@ -617,3 +617,18 @@ bool parseTimeData(const String& raw, TimeData& out) {
     out.second = s;
     return true;
 }
+
+// -- Robot position ----------------------------------------------------------
+
+std::vector<Field> RobotPosData::toFields() const {
+    return {
+            {"raw", raw, FIELD_STRING},
+    };
+}
+
+bool parseRobotPosData(const String& raw, RobotPosData& out) {
+    // Response format unknown — just capture the raw response verbatim.
+    out.raw = raw;
+    out.raw.trim();
+    return out.raw.length() > 0;
+}

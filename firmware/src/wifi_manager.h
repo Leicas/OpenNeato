@@ -4,16 +4,16 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include "config.h"
+#include "loop_task.h"
 #include "serial_menu.h"
 
 class DataLogger;
 
-class WiFiManager {
+class WiFiManager : public LoopTask {
 public:
     WiFiManager(Preferences& prefs, DataLogger& logger);
 
     void begin();
-    void loop();
 
     void showMenu();
 
@@ -38,12 +38,13 @@ private:
     String selectedSSID = "";
     int scannedNetworkCount = 0;
 
+    void tick() override; // Called by LoopTask::loop() at WIFI_RECONNECT_INTERVAL cadence
+
     // Apply TX power from NVS (called after WiFi.begin and after reconnect)
     void applyTxPower();
 
     // Auto-reconnect state
     bool wasConnected = false;
-    unsigned long lastReconnectAttempt = 0;
     unsigned long reconnectBackoff = WIFI_RECONNECT_INTERVAL;
     unsigned long reconnectAttemptCount = 0;
 

@@ -3,22 +3,24 @@
 
 #include <Arduino.h>
 #include "config.h"
+#include "loop_task.h"
 
 class NeatoSerial;
 class SettingsManager;
 class DataLogger;
 
-class NotificationManager {
+class NotificationManager : public LoopTask {
 public:
     NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger);
 
     void begin();
-    void loop();
 
     // Send a test notification to the given topic (called from web server)
     void sendTestNotification(const String& topic);
 
 private:
+    void tick() override; // Called by LoopTask; skipped while fetchPending
+
     NeatoSerial& neato;
     SettingsManager& settings;
     DataLogger& dataLogger;
@@ -27,10 +29,6 @@ private:
     String prevUiState;
     bool prevHasError = false;
     int prevErrorCode = 200; // UI_ALERT_INVALID = no error
-
-    // Adaptive polling timer
-    unsigned long lastCheck = 0;
-    unsigned long checkInterval = NOTIF_INTERVAL_IDLE_MS;
 
     // Pending state fetch tracking
     bool fetchPending = false;

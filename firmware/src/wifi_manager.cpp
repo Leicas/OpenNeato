@@ -3,7 +3,8 @@
 #include <esp_wifi.h>
 
 WiFiManager::WiFiManager(Preferences& prefs, DataLogger& logger) :
-    prefs(prefs), dataLogger(logger), menu("WiFi Configuration Menu"), networkMenu("Available WiFi Networks") {}
+    LoopTask(WIFI_RECONNECT_INTERVAL), prefs(prefs), dataLogger(logger), menu("WiFi Configuration Menu"),
+    networkMenu("Available WiFi Networks") {}
 
 void WiFiManager::begin() {
     LOG("WIFI", "Starting WiFi setup...");
@@ -317,17 +318,12 @@ void WiFiManager::setTxPower(int quarterDbm) {
     LOG("WIFI", "TX power updated to %.1f dBm", quarterDbm * 0.25f);
 }
 
-void WiFiManager::loop() {
+void WiFiManager::tick() {
     // Only attempt auto-reconnect if we were previously connected and are not
     // in config mode (user is actively setting up WiFi through the serial menu)
     if (inConfigMode || !wasConnected || WiFi.status() == WL_CONNECTED)
         return;
 
-    unsigned long now = millis();
-    if (now - lastReconnectAttempt < reconnectBackoff)
-        return;
-
-    lastReconnectAttempt = now;
     reconnectAttemptCount++;
     LOG("WIFI", "Connection lost — reconnecting (attempt %lu, backoff %lu ms)...", reconnectAttemptCount,
         reconnectBackoff);
@@ -361,10 +357,12 @@ void WiFiManager::loop() {
                                             {"attempt", String(reconnectAttemptCount), FIELD_INT},
                                             {"ms", String(reconnectMs), FIELD_INT}});
         reconnectBackoff = WIFI_RECONNECT_INTERVAL; // Reset backoff on success
+        setInterval(reconnectBackoff);
         reconnectAttemptCount = 0;
     } else {
         // Exponential backoff: 5s -> 10s -> 20s -> 30s (capped)
         reconnectBackoff = min(reconnectBackoff * 2, static_cast<unsigned long>(WIFI_MAX_RECONNECT_BACKOFF));
+        setInterval(reconnectBackoff);
         LOG("WIFI", "Reconnect failed (status=%d), next attempt in %lu ms", WiFi.status(), reconnectBackoff);
 
         dataLogger.logWifi("reconnect_fail", {{"ssid", ssid, FIELD_STRING},
