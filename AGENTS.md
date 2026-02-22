@@ -53,9 +53,12 @@ versions with release notes in settings. User clicks download link which opens t
 `.bin` asset in a new tab (normal navigation, no CORS issue), then uploads via the
 existing firmware upload file picker. Two-click flow, zero infrastructure.
 
-**Return to base** — Experiment with `Clean Persistent MinCharge 99` during an
-active clean to see if the robot forces a recharge dock return. If it works,
-add a "Return to Base" button on the dashboard while cleaning is in progress.
+**Return to base** — Experimental `POST /api/clean?action=dock` sends
+`Clean MinCharge 99` during an active clean to force a recharge dock return
+(setting MinCharge to 99% means the robot thinks it must recharge). API
+endpoint exists but has no UI button yet — needs testing on real hardware.
+If it works, add a "Return to Base" button on the dashboard while cleaning
+is in progress.
 
 ### Neato Serial Protocol
 - **Baud rate**: 115200
@@ -621,7 +624,7 @@ D8/D9/D10 NOT supported (different board, password-locked serial).
 - LIDAR scan responses are large; line-by-line reading recommended
 - Serial commands must be queued (no overlapping)
 - In TestMode, GetState always returns `UIMGR_STATE_TESTMODE`
-- No known serial command to return to dock
+- No dedicated serial command to return to dock (`Clean MinCharge 99` workaround untested)
 - Commands cannot have leading spaces
 - Communication parameters (Baud, start/stop bits, parity) are unimportant for USB
   (they apply only to real COM ports, not USB CDC)
@@ -838,7 +841,7 @@ OTA update covers both.
 | GET | `/api/state` | Robot UI state |
 | GET | `/api/error` | Robot error/alert |
 | GET | `/api/lidar` | LIDAR scan data |
-| POST | `/api/clean?action=house\|spot\|stop` | Cleaning control |
+| POST | `/api/clean?action=house\|spot\|stop\|dock` | Cleaning control |
 | POST | `/api/sound?id=N` | Play sound |
 | POST | `/api/testmode?enable=1\|0` | Test mode toggle |
 | POST | `/api/lidar/rotate?enable=1\|0` | LIDAR rotation toggle |

@@ -448,6 +448,15 @@ bool NeatoSerial::clean(const String& action, std::function<void(bool)> callback
     // To match button behavior, we use bare "Clean" for house start and resume,
     // and "Clean Spot" for spot start and resume (matches ESPHome community integrations).
 
+    if (action == "dock") {
+        // Experimental: send "Clean MinCharge 99" during an active clean to force
+        // the robot to return to the charging dock.  Setting MinCharge to 99% means
+        // the robot thinks it needs to recharge (battery is almost certainly <99%).
+        // Only meaningful while a clean is in progress.
+        invalidateState();
+        return enqueue(CMD_CLEAN_DOCK, wrapAction(callback));
+    }
+
     if (action == "stop") {
         // Check cached state BEFORE invalidating — invalidate() clears hasCached().
         bool isRunning = stateCache.hasCached() && stateCache.getCached().uiState.indexOf("CLEANINGRUNNING") >= 0;

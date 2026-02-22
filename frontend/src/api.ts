@@ -99,6 +99,7 @@ export const api = {
     cleanHouse: () => post("/api/clean?action=house"),
     cleanSpot: () => post("/api/clean?action=spot"),
     cleanStop: () => post("/api/clean?action=stop"),
+    cleanDock: () => post("/api/clean?action=dock"),
     manual: (enable: boolean) => post(`/api/manual?enable=${enable ? 1 : 0}`),
     manualMove: (left: number, right: number, speed: number) =>
         post(`/api/manual/move?left=${left}&right=${right}&speed=${speed}`),

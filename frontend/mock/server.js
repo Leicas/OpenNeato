@@ -181,6 +181,7 @@ const state = {
     extPwrPresent: false,
     cleaning: false,
     spotCleaning: false,
+    docking: false,
     paused: false,
     uiState: "UIMGR_STATE_IDLE",
     robotState: "ST_C_Idle",
@@ -354,6 +355,9 @@ const deriveStates = () => {
     } else if (state.testMode) {
         state.uiState = "UIMGR_STATE_TESTMODE";
         state.robotState = "ST_C_TestMode";
+    } else if (state.docking) {
+        state.uiState = "UIMGR_STATE_DOCKINGRUNNING";
+        state.robotState = "ST_C_Docking";
     } else if (state.cleaning && !state.paused) {
         state.uiState = "UIMGR_STATE_HOUSECLEANINGRUNNING";
         state.robotState = "ST_C_HouseCleaning";
@@ -468,21 +472,31 @@ const routes = {
     "POST /api/clean": (_req, res, query) => {
         if (faults.actions) return sendError(res, "UART timeout: robot not responding", 500);
         const action = query.action || "house";
-        if (action === "stop") {
-            if ((state.cleaning || state.spotCleaning) && !state.paused) {
+        if (action === "dock") {
+            if (state.cleaning || state.spotCleaning) {
+                state.docking = true; // Simulate return-to-base
+                state.cleaning = false;
+                state.spotCleaning = false;
+                state.paused = false;
+            }
+        } else if (action === "stop") {
+            if ((state.cleaning || state.spotCleaning || state.docking) && !state.paused) {
                 state.paused = true; // Running -> Paused
             } else {
                 state.cleaning = false; // Paused -> Idle
                 state.spotCleaning = false;
+                state.docking = false;
                 state.paused = false;
             }
         } else if (action === "spot") {
             state.spotCleaning = true;
             state.cleaning = false;
+            state.docking = false;
             state.paused = false;
         } else {
             state.cleaning = true;
             state.spotCleaning = false;
+            state.docking = false;
             state.paused = false;
         }
         deriveStates();

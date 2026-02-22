@@ -24,6 +24,7 @@
 #define CMD_CLEAN_HOUSE "Clean House"
 #define CMD_CLEAN_SPOT "Clean Spot"
 #define CMD_CLEAN_STOP "Clean Stop"
+#define CMD_CLEAN_DOCK "Clean MinCharge 99"
 #define CMD_TEST_MODE_ON "TestMode On"
 #define CMD_TEST_MODE_OFF "TestMode Off"
 #define CMD_SET_LDS_ROTATION_ON "SetLDSRotation On"
