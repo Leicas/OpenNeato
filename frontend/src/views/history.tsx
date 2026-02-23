@@ -21,11 +21,15 @@ export function HistoryView() {
     const selectedRecording = selectedFile?.recording === true;
     const hasRecording = files.some((f) => f.recording);
 
+    // Sort sessions by date descending (newest first)
+    const sortByDateDesc = (list: HistoryFileInfo[]) =>
+        list.sort((a, b) => (b.session?.time ?? 0) - (a.session?.time ?? 0));
+
     // Load file list only (no full session data)
     useEffect(() => {
         setLoading(true);
         api.getHistoryList()
-            .then((fileList) => setFiles(fileList))
+            .then((fileList) => setFiles(sortByDateDesc(fileList)))
             .catch((e: unknown) => {
                 errorStack.push(e instanceof Error ? e.message : "Failed to load map data");
             })
@@ -38,7 +42,7 @@ export function HistoryView() {
         const interval = setInterval(async () => {
             try {
                 const fileList = await api.getHistoryList();
-                setFiles(fileList);
+                setFiles(sortByDateDesc(fileList));
 
                 // If the detail view shows the recording session, refresh its map
                 if (selectedIdx !== null) {
@@ -89,7 +93,7 @@ export function HistoryView() {
             api.deleteHistorySession(file.name)
                 .then(() => api.getHistoryList())
                 .then((fileList) => {
-                    setFiles(fileList);
+                    setFiles(sortByDateDesc(fileList));
                     setSelectedIdx(null);
                     setSelectedMap(null);
                 })
