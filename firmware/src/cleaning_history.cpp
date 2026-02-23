@@ -56,8 +56,13 @@ void CleaningHistory::checkState() {
 }
 
 bool CleaningHistory::isCleaningState(const String& uiState) {
-    return uiState.indexOf("HOUSECLEANINGRUNNING") >= 0 || uiState.indexOf("SPOTCLEANINGRUNNING") >= 0 ||
+    return uiState.indexOf("HOUSECLEANINGRUNNING") >= 0 || uiState.indexOf("HOUSECLEANINGPAUSED") >= 0 ||
+           uiState.indexOf("SPOTCLEANINGRUNNING") >= 0 || uiState.indexOf("SPOTCLEANINGPAUSED") >= 0 ||
            uiState.indexOf("MANUALCLEANING") >= 0;
+}
+
+bool CleaningHistory::isPausedState(const String& uiState) {
+    return uiState.indexOf("CLEANINGPAUSED") >= 0;
 }
 
 bool CleaningHistory::isDockingState(const String& uiState) {
@@ -349,6 +354,12 @@ void CleaningHistory::collectSnapshot() {
             if (!isCleaning && !isDocking) {
                 fetchPending = false;
                 stopCollection();
+                return;
+            }
+
+            // Paused — keep session open but skip snapshot collection
+            if (isPausedState(state.uiState)) {
+                fetchPending = false;
                 return;
             }
         }

@@ -53,12 +53,14 @@ versions with release notes in settings. User clicks download link which opens t
 `.bin` asset in a new tab (normal navigation, no CORS issue), then uploads via the
 existing firmware upload file picker. Two-click flow, zero infrastructure.
 
-**Return to base** — Experimental `POST /api/clean?action=dock` sends
-`Clean MinCharge 99` during an active clean to force a recharge dock return
-(setting MinCharge to 99% means the robot thinks it must recharge). API
-endpoint exists but has no UI button yet — needs testing on real hardware.
-If it works, add a "Return to Base" button on the dashboard while cleaning
-is in progress.
+**Return to base** — Tested on D7 (firmware 4.6.0): `Clean MinCharge 99`
+does NOT trigger a return-to-base. It just stops the robot and desyncs the
+UI state machine (reports HOUSECLEANINGRUNNING while robot is in ST_C_Standby).
+Worse, MinCharge is sticky (range 5-100, `-1` is rejected) — once set to 99
+the robot refuses to start any clean until battery reaches 99%. The current
+`POST /api/clean?action=dock` implementation is broken and should not be used.
+Needs a completely different approach — possibly no serial command exists for
+this on D3-D7 robots.
 
 ### Neato Serial Protocol
 - **Baud rate**: 115200
@@ -270,7 +272,7 @@ Robot GND -> ESP GND. The robot provides 3.3V to power the ESP.
   - `Width <cm>` — Spot width 100-400cm (-1 = default)
   - `Height <cm>` — Spot height 100-400cm (-1 = default)
   - `AutoCycle` — Auto cycle mode (cleared by shutdown or Clean Stop, not with Spot)
-  - `MinCharge <percent>` — Min charge to trigger recharge (-1 = default 50%)
+  - `MinCharge <percent>` — Min charge to trigger recharge (range 5-100, -1 rejected; default 50%; sticky — persists across cleans)
   - `NavTest` — Navigation test mode
   - `CleaningEnable` — Enable brush and vacuum during cleaning
   - `CleaningDisable` — Disable brush and vacuum during cleaning
@@ -624,7 +626,7 @@ D8/D9/D10 NOT supported (different board, password-locked serial).
 - LIDAR scan responses are large; line-by-line reading recommended
 - Serial commands must be queued (no overlapping)
 - In TestMode, GetState always returns `UIMGR_STATE_TESTMODE`
-- No dedicated serial command to return to dock (`Clean MinCharge 99` workaround untested)
+- No dedicated serial command to return to dock (`Clean MinCharge 99` tested: does not dock, just stops robot and sticky MinCharge traps future cleans)
 - Commands cannot have leading spaces
 - Communication parameters (Baud, start/stop bits, parity) are unimportant for USB
   (they apply only to real COM ports, not USB CDC)
@@ -864,6 +866,7 @@ OTA update covers both.
 | GET | `/api/history/{filename}` | Download session JSONL |
 | DELETE | `/api/history/{filename}` | Delete session file |
 | DELETE | `/api/history` | Delete all history |
+| POST | `/api/serial?cmd=<command>` | Temporary debug: send raw serial command, returns plain text response |
 
 ## Build Commands
 

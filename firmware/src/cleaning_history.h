@@ -116,6 +116,7 @@ private:
     static void readFirstLastLines(const String& path, bool compressed, String& firstLine, String& lastLine);
 
     static bool isCleaningState(const String& uiState);
+    static bool isPausedState(const String& uiState);
     static bool isDockingState(const String& uiState);
     static String cleanModeFromState(const String& uiState);
 };

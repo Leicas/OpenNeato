@@ -97,6 +97,42 @@ void WebServer::registerApiRoutes() {
     registerPostRoute("/api/testmode", neato, &NeatoSerial::testMode, {"enable"});
     registerPostRoute("/api/lidar/rotate", neato, &NeatoSerial::setLdsRotation, {"enable"});
 
+    // Temporary debug endpoint — send arbitrary serial command, returns raw response
+    server.on("/api/serial", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        lastApiActivity = millis();
+        unsigned long startMs = lastApiActivity;
+
+        if (!request->hasParam("cmd")) {
+            logger.logRequest(HTTP_POST, "/api/serial", 400, millis() - startMs);
+            sendError(request, 400, "missing cmd");
+            return;
+        }
+        String cmd = request->getParam("cmd")->value();
+        if (cmd.isEmpty()) {
+            logger.logRequest(HTTP_POST, "/api/serial", 400, millis() - startMs);
+            sendError(request, 400, "empty cmd");
+            return;
+        }
+
+        auto weak = request->pause();
+        bool ok = neato.sendRaw(cmd, [this, weak, startMs](bool success, const String& response) {
+            if (auto req = weak.lock()) {
+                unsigned long elapsed = millis() - startMs;
+                if (!success) {
+                    logger.logRequest(HTTP_POST, "/api/serial", 504, elapsed);
+                    sendError(req.get(), 504, "timeout");
+                    return;
+                }
+                logger.logRequest(HTTP_POST, "/api/serial", 200, elapsed);
+                req->send(200, "text/plain", response);
+            }
+        });
+        if (!ok) {
+            logger.logRequest(HTTP_POST, "/api/serial", 503, millis() - startMs);
+            sendError(request, 503, "unavailable");
+        }
+    });
+
     LOG("WEB", "API routes registered");
 }
 

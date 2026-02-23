@@ -598,3 +598,9 @@ bool NeatoSerial::setTime(int dayOfWeek, int hour, int min, int sec, std::functi
                  " Sec " + String(sec);
     return enqueue(cmd, wrapAction(callback));
 }
+
+bool NeatoSerial::sendRaw(const String& cmd, std::function<void(bool, const String&)> callback) {
+    if (cmd.isEmpty())
+        return false;
+    return enqueue(cmd, callback);
+}
