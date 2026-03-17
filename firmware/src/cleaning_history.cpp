@@ -433,6 +433,15 @@ void CleaningHistory::updateAccumulators(float x, float y, float theta) {
 }
 
 void CleaningHistory::writeSnapshot(float x, float y, float theta, float time) {
+    // Localization resets to origin right before session ends — drop if the
+    // robot was far from origin (genuine return-to-base passes through gradually)
+    if (hasPrevPose && fabsf(x) < 0.001f && fabsf(y) < 0.001f && fabsf(theta) < 0.1f) {
+        float prevDist = sqrtf(prevX * prevX + prevY * prevY);
+        if (prevDist > 1.0f) {
+            return;
+        }
+    }
+
     String line = "{\"x\":" + String(x, 3) + ",\"y\":" + String(y, 3) + ",\"t\":" + String(theta, 1) +
                   ",\"ts\":" + String(time, 1) + "}";
 

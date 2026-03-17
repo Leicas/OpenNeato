@@ -96,6 +96,7 @@ const _randf = (min, max, decimals = 2) => parseFloat((Math.random() * (max - mi
 //   fpc  — Polling fault: GET /api/charger
 //   fpe  — Polling fault: GET /api/error
 //   fp   — All polling faults (state + charger + error)
+//   fhc  — History corruption (inject corrupted pose lines in session data)
 //   fal  — All faults combined
 const SCENARIO = "ok";
 
@@ -138,6 +139,7 @@ const SCENARIOS = {
     fpc: { faults: { pollCharger: true } },
     fpe: { faults: { pollError: true } },
     fp: { faults: { pollState: true, pollCharger: true, pollError: true } },
+    fhc: { faults: { historyCorrupt: true } },
     fal: {
         faults: {
             actions: true,
@@ -147,6 +149,7 @@ const SCENARIOS = {
             pollState: true,
             pollCharger: true,
             pollError: true,
+            historyCorrupt: true,
         },
     },
 };
@@ -171,6 +174,7 @@ const faults = {
     pollState: false,
     pollCharger: false,
     pollError: false,
+    historyCorrupt: false,
     ...(merged.faults || {}),
 };
 
@@ -679,6 +683,29 @@ const handleRequest = async (req, res) => {
     const query = Object.fromEntries(parsed.searchParams);
 
     // Match history routes: GET /api/history, GET/DELETE /api/history/{filename}
+    // Inject corrupted pose lines to test frontend repair logic (simulates
+    // heatshrink decompression artifacts: '.' -> ':', '.' -> '"', digit -> letter)
+    const injectCorruptedPoses = (lines) => {
+        const corruptions = [
+            '{"x":-0.798,"y":3.459,"t":100:5,"ts":8203.4}',
+            '{"x":-0.785,"y":4.192,"t":100:3,"ts":8208.1}',
+            '{"x":-1.286,"y":4.007,"t":177:5,"ts":8215.6}',
+            '{"x":-1.8"3,"y":2.254,"t":181.0,"ts":8288.6}',
+            '{"x":-1.946,"y":2.0"3,"t":181.9,"ts":8312.8}',
+            '{"x":-4.793,"y":-1.6t2,"t":356.5,"ts":9182.5}',
+            '{"x":-1.740,"y":3.510,"t":1.6,"ts":8242:0}',
+        ];
+        const result = [lines[0]];
+        for (let i = 1; i < lines.length; i++) {
+            result.push(lines[i]);
+            // Sprinkle corrupted lines at ~5% rate among pose lines
+            if (!lines[i].includes('"type"') && i % 20 === 0) {
+                result.push(corruptions[i % corruptions.length]);
+            }
+        }
+        return result;
+    };
+
     if (path === "/api/history" && req.method === "GET") {
         // List sessions from in-memory store with embedded session/summary metadata
         const list = [...historySessions.entries()].map(([name, lines]) => {
@@ -720,7 +747,8 @@ const handleRequest = async (req, res) => {
         if (req.method === "GET") {
             const lines = historySessions.get(filename);
             if (!lines) return sendError(res, "session not found", 404);
-            const raw = `${lines.join("\n")}\n`;
+            const served = faults.historyCorrupt ? injectCorruptedPoses(lines) : lines;
+            const raw = `${served.join("\n")}\n`;
             res.writeHead(200, {
                 "Content-Type": "application/x-ndjson",
                 "Content-Length": Buffer.byteLength(raw),

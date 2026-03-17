@@ -13,6 +13,34 @@ interface RawPose {
     ts: number;
 }
 
+// Pose line structure: {"x":NUM,"y":NUM,"t":NUM,"ts":NUM}
+// Heatshrink decompression can corrupt single bytes in numeric tokens
+// (e.g. '.' -> ':' or '.' -> '"'). Try to recover by matching the structural
+// skeleton permissively and replacing non-numeric garbage with '.'.
+const POSE_RE =
+    /^\{.x.:\s*(-?[\d.eE:"\w-]+)\s*,.y.:\s*(-?[\d.eE:"\w-]+)\s*,.t.:\s*([\d.eE:"\w-]+)\s*,.ts.:\s*([\d.eE:"\w-]+)\s*\}$/;
+
+function repairNumber(raw: string): number {
+    // Replace any character that isn't digit, dot, minus, or 'e'/'E' with '.'
+    const cleaned = raw.replace(/[^0-9.eE-]/g, ".");
+    // Collapse multiple dots — keep only the first as the decimal point
+    const parts = cleaned.split(".");
+    const fixed = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : cleaned;
+    const n = Number(fixed);
+    return Number.isFinite(n) ? n : Number.NaN;
+}
+
+function tryRepairPoseLine(line: string): RawPose | null {
+    const m = line.match(POSE_RE);
+    if (!m) return null;
+    const x = repairNumber(m[1]);
+    const y = repairNumber(m[2]);
+    const t = repairNumber(m[3]);
+    const ts = repairNumber(m[4]);
+    if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(t) || Number.isNaN(ts)) return null;
+    return { x, y, t, ts };
+}
+
 /** Parse raw JSONL text (possibly multiple sessions) into MapData[] */
 export function parseMapData(raw: string): MapData[] {
     const lines = raw
@@ -36,17 +64,38 @@ export function parseMapData(raw: string): MapData[] {
     return chunks.map(buildSession).filter((m) => m.path.length > 0);
 }
 
-function buildSession(lines: string[]): MapData {
-    const parsed = lines.map((l) => JSON.parse(l));
+// Union of all line types that can appear in a session JSONL
+type SessionLine = MapSession | MapSummary | RawPose | (MapRechargePoint & { type: "recharge" });
 
-    const session: MapSession | null = parsed.find((l) => l.type === "session") ?? null;
-    const summary: MapSummary | null = parsed.find((l) => l.type === "summary") ?? null;
-    const poses: RawPose[] = parsed.filter(
-        (l: Record<string, unknown>) => l.x !== undefined && !l.type && (l.x !== 0 || l.y !== 0 || l.t !== 0),
-    );
-    const recharges: MapRechargePoint[] = parsed
-        .filter((l: Record<string, unknown>) => l.type === "recharge")
-        .map((l: Record<string, number>) => ({ x: l.x, y: l.y }));
+function isSession(l: SessionLine): l is MapSession {
+    return "type" in l && (l as MapSession).type === "session";
+}
+function isSummary(l: SessionLine): l is MapSummary {
+    return "type" in l && (l as MapSummary).type === "summary";
+}
+function isRecharge(l: SessionLine): l is MapRechargePoint & { type: "recharge" } {
+    return "type" in l && (l as { type: string }).type === "recharge";
+}
+function isPose(l: SessionLine): l is RawPose {
+    return "x" in l && !("type" in l);
+}
+
+function buildSession(lines: string[]): MapData {
+    const parsed: SessionLine[] = [];
+    for (const l of lines) {
+        try {
+            parsed.push(JSON.parse(l));
+        } catch {
+            // Attempt to recover corrupted pose lines before dropping
+            const repaired = tryRepairPoseLine(l);
+            if (repaired) parsed.push(repaired);
+        }
+    }
+
+    const session: MapSession | null = parsed.find(isSession) ?? null;
+    const summary: MapSummary | null = parsed.find(isSummary) ?? null;
+    const poses: RawPose[] = parsed.filter(isPose).filter((l) => l.x !== 0 || l.y !== 0 || l.t !== 0);
+    const recharges: MapRechargePoint[] = parsed.filter(isRecharge).map((l) => ({ x: l.x, y: l.y }));
 
     if (poses.length === 0) {
         return { session, summary, path: [], coverage: [], recharges, bounds: null, cellSize: CELL_SIZE_M };
