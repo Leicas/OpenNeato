@@ -11,12 +11,12 @@
         "fix:unsafe": "biome check --write --unsafe"
     },
     "dependencies": {
-        "preact": "^10.25.4"
+        "preact": "10.29.0"
     },
     "devDependencies": {
-        "@biomejs/biome": "^2.3.15",
-        "@preact/preset-vite": "^2.9.4",
-        "typescript": "^5.7.3",
-        "vite": "^7.3.1"
+        "@biomejs/biome": "2.4.7",
+        "@preact/preset-vite": "2.10.3",
+        "typescript": "5.9.3",
+        "vite": "7.3.1"
     }
 }
