@@ -111,6 +111,7 @@ private:
     void resetSession();
     bool replayLine(const String& line);
     bool recoverCollection(const String& uiState);
+    void finalizeOrphanSessions();
 
     // Storage enforcement — delete oldest sessions when budget exceeded
     void enforceLimits();

@@ -71,7 +71,7 @@ const _randf = (min, max, decimals = 2) => parseFloat((Math.random() * (max - mi
 //   chg  — Charging, 62%              ch2 — Charging, 25%
 //   ful  — Full, on dock              mid — Battery 45%
 //   low  — Battery 12%                ded — Battery 0%
-//   err  — Brush stuck error
+//   err  — Brush stuck error          alrt — Alert only (brush change)
 //
 // Manual clean (combine with each other or fault scenarios):
 //   man  — Manual mode active (no safety issues)
@@ -115,9 +115,18 @@ const SCENARIOS = {
     ded: { fuelPercent: 0 },
     err: {
         hasError: true,
+        kind: "error",
         errorCode: 265,
         errorMessage:
-            "(UI_ERROR_BRUSH_STUCK)\r\nAlert\r\n205 -  (UI_ALERT_DUST_BIN_FULL)\r\nUSB state \r\n NOT connected",
+            "Error\r\n265 -  (UI_ERROR_BRUSH_STUCK)\r\nAlert\r\n205 -  (UI_ALERT_DUST_BIN_FULL)\r\nUSB state \r\n NOT connected",
+        displayMessage: "Main brush is stuck",
+    },
+    alrt: {
+        hasError: true,
+        kind: "warning",
+        errorCode: 229,
+        errorMessage: "Error\r\n200 -  (UI_ALERT_INVALID)\r\nAlert\r\n229 -  (UI_ALERT_BRUSH_CHANGE)",
+        displayMessage: "Time to replace the brush",
     },
     // Manual clean scenarios
     man: { manualClean: true },
@@ -191,8 +200,10 @@ const state = {
     uiState: "UIMGR_STATE_IDLE",
     robotState: "ST_C_Idle",
     hasError: false,
+    kind: "",
     errorCode: 200,
     errorMessage: "",
+    displayMessage: "",
     testMode: false,
     manualClean: false,
     // Manual clean motor + safety state
@@ -449,8 +460,10 @@ const routes = {
         if (faults.pollError) return sendError(res, "UART timeout reading error", 500);
         jsonResponse(res, {
             hasError: state.hasError,
+            kind: state.kind,
             errorCode: state.errorCode,
             errorMessage: state.errorMessage,
+            displayMessage: state.displayMessage,
         });
     },
 

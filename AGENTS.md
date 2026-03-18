@@ -39,6 +39,7 @@ firmware through REST API. Everything runs on the device itself.
 17. **API cleanup** — Removed diagnostic-only endpoints (robotpos, buttons, accel, analog/digital sensors) and unused serial/command plumbing; kept internal consumers (ManualCleanManager, CleaningHistory)
 18. **Mock server in-memory history** — Replaced file-based mock history with in-memory Map, rolling-window recording simulation, no runtime file I/O
 19. **View file splitting** — Split monolithic logs and history views into list/item/helpers submodules
+20. **Error/alert presentation** — Firmware-side error normalization (`kind`, `displayMessage`), amber warning banners for alerts vs red for errors, ntfy tag differentiation, boot-time orphan history session finalization
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 

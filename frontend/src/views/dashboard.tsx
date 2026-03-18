@@ -176,11 +176,11 @@ export function DashboardView({ firmware, state, isManual }: DashboardViewProps)
     const isPaused = state.data?.uiState?.includes("CLEANINGPAUSED") ?? false;
     const isCleaning = isRunning || isPaused;
     const isSpot = state.data?.uiState?.includes("SPOT") ?? false;
-    const hasRobotError = error.data?.hasError ?? false;
+    const robotError = normalizeRobotError(error.data);
+    const hasRobotError = robotError?.kind === "error";
     const charging = charger.data?.chargingActive ?? false;
     const docked = charger.data?.extPwrPresent ?? false;
     const pct = charger.data?.fuelPercent ?? 0;
-    const robotError = normalizeRobotError(error.data);
     const bc = charger.data ? battColor(pct) : charger.error ? "red" : "amber";
     const modeErr = (!state.data && state.error) || (!charger.data && charger.error);
     const mi = modeErr
@@ -248,8 +248,10 @@ export function DashboardView({ firmware, state, isManual }: DashboardViewProps)
                 </div>
             )}
 
-            {/* Robot error — fixed, clears automatically when robot resolves it */}
-            {robotError && <ErrorBanner title={robotError.title} message={robotError.message} />}
+            {/* Robot error/warning — fixed, clears automatically when robot resolves it */}
+            {robotError && (
+                <ErrorBanner title={robotError.title} message={robotError.message} variant={robotError.kind} />
+            )}
             {!error.data && error.error && <ErrorBanner title="Warning" message={error.error} />}
 
             {/* Action errors — dismissible, stackable */}

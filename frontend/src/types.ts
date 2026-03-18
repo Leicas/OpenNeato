@@ -21,8 +21,10 @@ export interface ChargerData {
 
 export interface ErrorData {
     hasError: boolean;
+    kind: "error" | "warning";
     errorCode: number;
     errorMessage: string;
+    displayMessage: string;
 }
 
 export interface SystemData {

@@ -138,8 +138,10 @@ struct RobotState : public JsonSerializable {
 
 struct ErrorData : public JsonSerializable {
     bool hasError = false;
+    String kind; // "error" (codes 243+) or "warning" (codes 201-242)
     int errorCode = 200; // 200 = UI_ALERT_INVALID = no error
-    String errorMessage;
+    String errorMessage; // Full raw response (for diagnostics/logging)
+    String displayMessage; // Human-readable message for UI and notifications
 
     std::vector<Field> toFields() const override;
 };

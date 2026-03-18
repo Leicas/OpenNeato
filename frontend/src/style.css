@@ -393,6 +393,21 @@ body {
     opacity: 1;
 }
 
+.error-banner.warning {
+    background: rgba(229, 151, 42, 0.08);
+    border-color: rgba(229, 151, 42, 0.15);
+}
+.error-banner.warning .error-banner-icon {
+    color: var(--amber);
+}
+.error-banner.warning .error-banner-title {
+    color: var(--amber);
+}
+.error-banner.warning .error-banner-dismiss {
+    background: rgba(229, 151, 42, 0.1);
+    color: var(--amber);
+}
+
 .error-banner-stack {
     display: flex;
     flex-direction: column;

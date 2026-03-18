@@ -48,6 +48,13 @@ void CleaningHistory::checkState() {
         bool wasCleaning = isCleaningState(prevUiState);
         bool nowCleaning = isCleaningState(state.uiState);
 
+        // First poll after boot: if the robot is idle, finalize any orphan sessions
+        // left by a previous crash/reboot so they don't get merged into the next clean
+        if (prevUiState.isEmpty() && !nowCleaning && !recoveryAttempted) {
+            recoveryAttempted = true;
+            finalizeOrphanSessions();
+        }
+
         if (!wasCleaning && nowCleaning && !recoverCollection(state.uiState)) {
             startCollection(state.uiState);
         }
@@ -488,6 +495,109 @@ bool CleaningHistory::recoverCollection(const String& uiState) {
         writeSessionHeader();
     }
     return true;
+}
+
+void CleaningHistory::finalizeOrphanSessions() {
+    // Called once at boot when the robot is idle. Finds orphan .jsonl files
+    // (no summary line, no compressed counterpart) and finalizes them: replay
+    // to compute summary stats, append summary line, then start compression.
+    File root = SPIFFS.open(HISTORY_DIR);
+    if (!root || !root.isDirectory())
+        return;
+
+    std::vector<String> allFiles;
+    File entry = root.openNextFile();
+    while (entry) {
+        String path = String(entry.path());
+        if (path.endsWith(".jsonl") || path.endsWith(".jsonl.hs"))
+            allFiles.push_back(path);
+        entry = root.openNextFile();
+    }
+
+    std::sort(allFiles.begin(), allFiles.end(), [](const String& a, const String& b) { return a > b; });
+
+    std::vector<String> orphans;
+    for (const auto& path: allFiles) {
+        if (path.endsWith(".jsonl.hs"))
+            break; // Completed session boundary
+        if (SPIFFS.exists(path + ".hs")) {
+            SPIFFS.remove(path);
+            continue;
+        }
+        String firstLine, lastLine;
+        readFirstLastLines(path, false, firstLine, lastLine);
+        if (lastLine.indexOf("\"type\":\"summary\"") >= 0)
+            continue;
+        orphans.push_back(path);
+    }
+
+    if (orphans.empty())
+        return;
+
+    // Finalize each orphan: replay to rebuild stats, write summary, compress
+    for (const auto& orphanPath: orphans) {
+        resetSession();
+
+        // Replay to rebuild accumulators
+        File f = SPIFFS.open(orphanPath, FILE_READ);
+        if (!f)
+            continue;
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            line.trim();
+            if (line.isEmpty())
+                continue;
+            replayLine(line);
+        }
+        f.close();
+
+        // Extract start time from filename if not found in header
+        if (sessionStartTime <= 0) {
+            String name = orphanPath;
+            int slash = name.lastIndexOf('/');
+            if (slash >= 0)
+                name = name.substring(slash + 1);
+            int dot = name.indexOf('.');
+            if (dot > 0)
+                sessionStartTime = static_cast<time_t>(name.substring(0, dot).toInt());
+        }
+
+        // Open for append and write summary
+        activeFilePath = orphanPath;
+        activeFile = SPIFFS.open(orphanPath, FILE_APPEND);
+        if (!activeFile)
+            continue;
+
+        writeSessionSummary(-1); // Battery end unknown for interrupted sessions
+        activeFile.close();
+
+        LOG("HIST", "Finalized orphan: %s (%u snapshots)", orphanPath.c_str(), snapshotCount);
+        dataLogger.logGenericEvent("history_finalize", {{"path", orphanPath, FIELD_STRING},
+                                                        {"snapshots", String(snapshotCount), FIELD_INT}});
+
+        // Queue compression (only one at a time — first orphan wins, rest will
+        // be picked up on next boot or left as uncompressed)
+        if (!compressing) {
+            compressSrcPath = orphanPath;
+            compressDstPath = orphanPath + ".hs";
+            compressSrc = SPIFFS.open(compressSrcPath, FILE_READ);
+            compressDst = SPIFFS.open(compressDstPath, FILE_WRITE);
+            if (compressSrc && compressDst) {
+                heatshrink_encoder_reset(&compressEncoder);
+                compressInputDone = false;
+                compressing = true;
+                setInterval(HISTORY_COMPRESS_INTERVAL_MS);
+            } else {
+                if (compressSrc)
+                    compressSrc.close();
+                if (compressDst)
+                    compressDst.close();
+            }
+        }
+    }
+
+    activeFilePath = "";
+    activeFile = File();
 }
 
 void CleaningHistory::collectSnapshot() {

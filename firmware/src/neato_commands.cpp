@@ -1,6 +1,68 @@
 #include "neato_commands.h"
 #include "config.h"
 
+// -- Human-readable error/alert messages -------------------------------------
+
+struct ErrorMessage {
+    const char *token;
+    const char *message;
+};
+
+// Errors (UI_ERROR_*) — action required
+static const ErrorMessage ERROR_MESSAGES[] = {
+        {"UI_ERROR_PICKED_UP", "Robot is picked up or tilted"},
+        {"UI_ERROR_DUST_BIN_MISSING", "Dust bin is missing"},
+        {"UI_ERROR_DUST_BIN_FULL", "Dust bin is full"},
+        {"UI_ERROR_DUST_BIN_EMPTIED", "Dust bin removed during cleaning"},
+        {"UI_ERROR_BUMPER_STUCK", "Bumper is stuck"},
+        {"UI_ERROR_LWHEEL_STUCK", "Left wheel is stuck"},
+        {"UI_ERROR_RWHEEL_STUCK", "Right wheel is stuck"},
+        {"UI_ERROR_BRUSH_STUCK", "Main brush is stuck"},
+        {"UI_ERROR_BRUSH_OVERLOAD", "Main brush is overloaded"},
+        {"UI_ERROR_VACUUM_STUCK", "Vacuum motor is stuck"},
+        {"UI_ERROR_VACUUM_SLIP", "Vacuum motor is slipping"},
+        {"UI_ERROR_LDS_JAMMED", "LIDAR turret is jammed"},
+        {"UI_ERROR_LDS_DISCONNECTED", "LIDAR is disconnected"},
+        {"UI_ERROR_UNABLE_TO_RETURN_TO_BASE", "Could not return to base"},
+        {"UI_ERROR_BATTERY_CRITICAL", "Battery critically low"},
+        {"UI_ERROR_BATTERY_OVERTEMP", "Battery is too hot"},
+        {"UI_ERROR_DECK_DEBRIS", "Clear debris from brush deck"},
+        {"UI_ERROR_RDROP_STUCK", "Right drop sensor is stuck"},
+        {"UI_ERROR_LDROP_STUCK", "Left drop sensor is stuck"},
+        {"UI_ERROR_UNABLE_TO_SEE", "Navigation sensors blocked"},
+        {"UI_ERROR_NAVIGATION_Falling", "Robot detected a cliff"},
+        {"UI_ERROR_NAVIGATION_NoProgress", "Robot is stuck"},
+};
+
+// Alerts (UI_ALERT_*) — informational
+static const ErrorMessage ALERT_MESSAGES[] = {
+        {"UI_ALERT_DUST_BIN_FULL", "Dust bin full"},
+        {"UI_ALERT_RETURN_TO_BASE", "Returning to base"},
+        {"UI_ALERT_RETURN_TO_CHARGE", "Returning to charge"},
+        {"UI_ALERT_CONNECT_CHRG_CABLE", "Connect charging cable"},
+        {"UI_ALERT_TIME_NOT_SET", "Clock is not set"},
+        {"UI_ALERT_BRUSH_CHANGE", "Time to replace the brush"},
+        {"UI_ALERT_FILTER_CHANGE", "Time to replace the filter"},
+        {"UI_ALERT_BUSY_CHARGING", "Busy charging"},
+        {"UI_ALERT_RECOVERING_LOCATION", "Recovering location"},
+};
+
+// Look up a human-readable message for a UI_ERROR_* or UI_ALERT_* token.
+// Returns empty string if not found.
+static String lookupDisplayMessage(const String& raw) {
+    // Search for all known error tokens first (higher priority)
+    for (const auto& entry: ERROR_MESSAGES) {
+        if (raw.indexOf(entry.token) >= 0)
+            return entry.message;
+    }
+    // Then alert tokens
+    for (const auto& entry: ALERT_MESSAGES) {
+        if (raw.indexOf(entry.token) >= 0)
+            return entry.message;
+    }
+    return "";
+}
+
 // -- CSV parsing helpers -----------------------------------------------------
 
 // Find value for a given label in "Label,Value\r\n" formatted response.
@@ -108,9 +170,9 @@ std::vector<Field> RobotState::toFields() const {
 
 std::vector<Field> ErrorData::toFields() const {
     return {
-            {"hasError", hasError ? "true" : "false", FIELD_BOOL},
-            {"errorCode", String(errorCode), FIELD_INT},
-            {"errorMessage", errorMessage, FIELD_STRING},
+            {"hasError", hasError ? "true" : "false", FIELD_BOOL}, {"kind", kind, FIELD_STRING},
+            {"errorCode", String(errorCode), FIELD_INT},           {"errorMessage", errorMessage, FIELD_STRING},
+            {"displayMessage", displayMessage, FIELD_STRING},
     };
 }
 
@@ -308,11 +370,15 @@ bool parseErrorData(const String& raw, ErrorData& out) {
         return true;
     }
     // Look for error/alert code lines (e.g. "200 -  (UI_ALERT_INVALID)")
-    // The response may contain multiple lines; scan for the first numeric code.
-    out.errorMessage = trimmed;
-    out.hasError = true;
+    // The response may contain Error and Alert sections, each with a numeric code.
+    // Code 200 = UI_ALERT_INVALID = no error; skip it and keep scanning for real codes.
+    // Return the first non-200 code found, with the full raw response as errorMessage
+    // so the frontend can extract all UI_ERROR_*/UI_ALERT_* tokens.
+    out.hasError = false;
+    out.errorCode = 200;
+    out.errorMessage = "";
 
-    // Search all lines for a code pattern "NNN - ..."
+    // Search all lines for code patterns "NNN - ..."
     int searchFrom = 0;
     while (searchFrom < static_cast<int>(trimmed.length())) {
         int dashPos = trimmed.indexOf(" - ", searchFrom);
@@ -327,17 +393,16 @@ bool parseErrorData(const String& raw, ErrorData& out) {
 
         if (numStart < dashPos) {
             int code = trimmed.substring(numStart, dashPos).toInt();
-            if (code > 0) {
+            if (code > 0 && code != 200) {
+                out.hasError = true;
                 out.errorCode = code;
-                // Code 200 = UI_ALERT_INVALID = no error
-                if (code == 200) {
-                    out.hasError = false;
-                    out.errorMessage = "";
-                } else {
-                    out.errorMessage = trimmed.substring(dashPos + 3);
-                    out.errorMessage.trim();
+                out.kind = (code >= 201 && code <= 242) ? "warning" : "error";
+                out.errorMessage = trimmed;
+                out.displayMessage = lookupDisplayMessage(trimmed);
+                if (out.displayMessage.isEmpty()) {
+                    out.displayMessage = "Robot reported error " + String(code);
                 }
-                break;
+                return true;
             }
         }
         searchFrom = dashPos + 3;

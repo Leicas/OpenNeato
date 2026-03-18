@@ -89,7 +89,8 @@ void NotificationManager::checkTransitions() {
             if (errOk) {
                 // New error detected: was no error -> now has error
                 if (err.hasError && (!prevHasError || err.errorCode != prevErrorCode) && cfg.ntfyOnError) {
-                    sendNotification(topic, "warning", hostname + ": " + err.errorMessage);
+                    String tag = err.kind == "warning" ? "information_source" : "warning";
+                    sendNotification(topic, tag, hostname + ": " + err.displayMessage);
                 }
                 prevHasError = err.hasError;
                 prevErrorCode = err.errorCode;
