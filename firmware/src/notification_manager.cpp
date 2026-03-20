@@ -87,10 +87,14 @@ void NotificationManager::checkTransitions() {
             }
 
             if (errOk) {
-                // New error detected: was no error -> now has error
-                if (err.hasError && (!prevHasError || err.errorCode != prevErrorCode) && cfg.ntfyOnError) {
-                    String tag = err.kind == "warning" ? "information_source" : "warning";
-                    sendNotification(topic, tag, hostname + ": " + err.displayMessage);
+                // New error or alert detected: was no error -> now has error, or code changed
+                if (err.hasError && (!prevHasError || err.errorCode != prevErrorCode)) {
+                    bool isAlert = (err.kind == "warning"); // UI_ALERT_* (201-242)
+                    bool allowed = isAlert ? cfg.ntfyOnAlert : cfg.ntfyOnError;
+                    if (allowed) {
+                        String tag = isAlert ? "information_source" : "warning";
+                        sendNotification(topic, tag, hostname + ": " + err.displayMessage);
+                    }
                 }
                 prevHasError = err.hasError;
                 prevErrorCode = err.errorCode;

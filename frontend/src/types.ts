@@ -55,7 +55,8 @@ export interface SettingsData {
     ntfyTopic: string; // ntfy.sh topic for push notifications (empty = disabled)
     ntfyEnabled: boolean; // Global switch — must be on for any notification to fire
     ntfyOnDone: boolean; // Notify when cleaning completes
-    ntfyOnError: boolean; // Notify on robot error
+    ntfyOnError: boolean; // Notify on robot error (UI_ERROR_*, code 243+)
+    ntfyOnAlert: boolean; // Notify on robot alert (UI_ALERT_*, code 201-242)
     ntfyOnDocking: boolean; // Notify when robot returns to base
     scheduleEnabled: boolean;
     sched0Hour: number;

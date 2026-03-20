@@ -82,6 +82,8 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
         setNtfyOnDone,
         ntfyOnError,
         setNtfyOnError,
+        ntfyOnAlert,
+        setNtfyOnAlert,
         ntfyOnDocking,
         setNtfyOnDocking,
         isDirty,
@@ -442,7 +444,7 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                                 <div class="settings-toggle-row">
                                     <div class="settings-toggle-label">
                                         <span class="settings-toggle-title">Robot error</span>
-                                        <span class="settings-toggle-desc">When the robot reports a problem</span>
+                                        <span class="settings-toggle-desc">Stuck brush, wheel, or other failures</span>
                                     </div>
                                     <button
                                         type="button"
@@ -450,6 +452,19 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                                         onClick={() => setNtfyOnError(!ntfyOnError)}
                                         disabled={saving}
                                         aria-label="Toggle error notification"
+                                    />
+                                </div>
+                                <div class="settings-toggle-row">
+                                    <div class="settings-toggle-label">
+                                        <span class="settings-toggle-title">Robot alert</span>
+                                        <span class="settings-toggle-desc">Brush or filter replacement reminders</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class={`settings-toggle${ntfyOnAlert ? " on" : ""}`}
+                                        onClick={() => setNtfyOnAlert(!ntfyOnAlert)}
+                                        disabled={saving}
+                                        aria-label="Toggle alert notification"
                                     />
                                 </div>
                                 <div class="settings-toggle-row">

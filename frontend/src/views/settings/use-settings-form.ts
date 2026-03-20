@@ -21,6 +21,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
     const [ntfyEnabled, setNtfyEnabled] = useState(false);
     const [ntfyOnDone, setNtfyOnDone] = useState(true);
     const [ntfyOnError, setNtfyOnError] = useState(true);
+    const [ntfyOnAlert, setNtfyOnAlert] = useState(true);
     const [ntfyOnDocking, setNtfyOnDocking] = useState(true);
 
     // Server-confirmed state — used to compute dirty/needsReboot
@@ -51,6 +52,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             setNtfyEnabled(fetched.ntfyEnabled ?? false);
             setNtfyOnDone(fetched.ntfyOnDone ?? true);
             setNtfyOnError(fetched.ntfyOnError ?? true);
+            setNtfyOnAlert(fetched.ntfyOnAlert ?? true);
             setNtfyOnDocking(fetched.ntfyOnDocking ?? true);
             setSettingsLoaded(true);
         }
@@ -74,6 +76,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             ntfyEnabled !== (server.current.ntfyEnabled ?? false) ||
             ntfyOnDone !== (server.current.ntfyOnDone ?? true) ||
             ntfyOnError !== (server.current.ntfyOnError ?? true) ||
+            ntfyOnAlert !== (server.current.ntfyOnAlert ?? true) ||
             ntfyOnDocking !== (server.current.ntfyOnDocking ?? true));
 
     const needsReboot =
@@ -117,6 +120,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         if (ntfyEnabled !== (server.current.ntfyEnabled ?? false)) patch.ntfyEnabled = ntfyEnabled;
         if (ntfyOnDone !== (server.current.ntfyOnDone ?? true)) patch.ntfyOnDone = ntfyOnDone;
         if (ntfyOnError !== (server.current.ntfyOnError ?? true)) patch.ntfyOnError = ntfyOnError;
+        if (ntfyOnAlert !== (server.current.ntfyOnAlert ?? true)) patch.ntfyOnAlert = ntfyOnAlert;
         if (ntfyOnDocking !== (server.current.ntfyOnDocking ?? true)) patch.ntfyOnDocking = ntfyOnDocking;
         return patch;
     }, [
@@ -134,6 +138,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         ntfyEnabled,
         ntfyOnDone,
         ntfyOnError,
+        ntfyOnAlert,
         ntfyOnDocking,
     ]);
 
@@ -200,6 +205,8 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         setNtfyOnDone,
         ntfyOnError,
         setNtfyOnError,
+        ntfyOnAlert,
+        setNtfyOnAlert,
         ntfyOnDocking,
         setNtfyOnDocking,
         // Derived state

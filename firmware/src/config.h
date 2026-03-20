@@ -103,6 +103,7 @@ enum CommandStatus {
 #define NVS_KEY_NTFY_ENABLED "ntfy_enabled"
 #define NVS_KEY_NTFY_ON_DONE "ntfy_on_done"
 #define NVS_KEY_NTFY_ON_ERR "ntfy_on_err"
+#define NVS_KEY_NTFY_ON_ALERT "ntfy_on_alrt"
 #define NVS_KEY_NTFY_ON_DOCK "ntfy_on_dock"
 
 // NVS keys — Schedule (ESP32-managed, not robot serial)

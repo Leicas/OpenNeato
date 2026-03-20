@@ -112,5 +112,6 @@ export const DEFAULT_SERVER: SettingsData = {
     ntfyEnabled: false,
     ntfyOnDone: true,
     ntfyOnError: true,
+    ntfyOnAlert: true,
     ntfyOnDocking: true,
 } as SettingsData;

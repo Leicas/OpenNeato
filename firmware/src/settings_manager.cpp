@@ -36,6 +36,7 @@ void SettingsManager::load() {
     current.ntfyEnabled = prefs.getBool(NVS_KEY_NTFY_ENABLED, false);
     current.ntfyOnDone = prefs.getBool(NVS_KEY_NTFY_ON_DONE, true);
     current.ntfyOnError = prefs.getBool(NVS_KEY_NTFY_ON_ERR, true);
+    current.ntfyOnAlert = prefs.getBool(NVS_KEY_NTFY_ON_ALERT, true);
     current.ntfyOnDocking = prefs.getBool(NVS_KEY_NTFY_ON_DOCK, true);
     current.scheduleEnabled = prefs.getBool(NVS_KEY_SCHED_ENABLED, false);
     for (int d = 0; d < SCHEDULE_DAYS; d++) {
@@ -60,6 +61,7 @@ void SettingsManager::save() {
     prefs.putBool(NVS_KEY_NTFY_ENABLED, current.ntfyEnabled);
     prefs.putBool(NVS_KEY_NTFY_ON_DONE, current.ntfyOnDone);
     prefs.putBool(NVS_KEY_NTFY_ON_ERR, current.ntfyOnError);
+    prefs.putBool(NVS_KEY_NTFY_ON_ALERT, current.ntfyOnAlert);
     prefs.putBool(NVS_KEY_NTFY_ON_DOCK, current.ntfyOnDocking);
     prefs.putBool(NVS_KEY_SCHED_ENABLED, current.scheduleEnabled);
     for (int d = 0; d < SCHEDULE_DAYS; d++) {
@@ -190,6 +192,11 @@ ApplyResult SettingsManager::apply(const String& json) {
         changed = true;
         LOG("SETTINGS", "ntfy on error -> %s", current.ntfyOnError ? "on" : "off");
     }
+    if (incoming.ntfyOnAlert != current.ntfyOnAlert) {
+        current.ntfyOnAlert = incoming.ntfyOnAlert;
+        changed = true;
+        LOG("SETTINGS", "ntfy on alert -> %s", current.ntfyOnAlert ? "on" : "off");
+    }
     if (incoming.ntfyOnDocking != current.ntfyOnDocking) {
         current.ntfyOnDocking = incoming.ntfyOnDocking;
         changed = true;
@@ -245,6 +252,7 @@ std::vector<Field> Settings::toFields() const {
             {"ntfyEnabled", ntfyEnabled ? "true" : "false", FIELD_BOOL},
             {"ntfyOnDone", ntfyOnDone ? "true" : "false", FIELD_BOOL},
             {"ntfyOnError", ntfyOnError ? "true" : "false", FIELD_BOOL},
+            {"ntfyOnAlert", ntfyOnAlert ? "true" : "false", FIELD_BOOL},
             {"ntfyOnDocking", ntfyOnDocking ? "true" : "false", FIELD_BOOL},
             {"scheduleEnabled", scheduleEnabled ? "true" : "false", FIELD_BOOL},
     };
@@ -315,6 +323,10 @@ bool Settings::fromFields(const std::vector<Field>& fields) {
     }
     if ((f = findField(fields, "ntfyOnError")) && f->type == FIELD_BOOL) {
         ntfyOnError = (f->value == "true");
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyOnAlert")) && f->type == FIELD_BOOL) {
+        ntfyOnAlert = (f->value == "true");
         applied = true;
     }
     if ((f = findField(fields, "ntfyOnDocking")) && f->type == FIELD_BOOL) {

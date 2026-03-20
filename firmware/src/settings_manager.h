@@ -32,7 +32,8 @@ struct Settings : public JsonSerializable {
     String ntfyTopic; // Empty = disabled
     bool ntfyEnabled = false; // Global switch — must be on for any notification to fire
     bool ntfyOnDone = true; // Notify when cleaning completes
-    bool ntfyOnError = true; // Notify on robot error
+    bool ntfyOnError = true; // Notify on robot error (UI_ERROR_*, code 243+)
+    bool ntfyOnAlert = true; // Notify on robot alert (UI_ALERT_*, code 201-242)
     bool ntfyOnDocking = true; // Notify when robot returns to base
 
     // Schedule (ESP32-managed, not robot serial)
