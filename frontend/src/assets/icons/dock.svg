@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+  <!-- Rounded base platform -->
+  <path d="M4 19a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1H4v-1z"/>
+  <!-- Down arrow above base -->
+  <path d="M10 3h4v7h4l-6 6-6-6h4z"/>
+</svg>

@@ -41,15 +41,12 @@ firmware through REST API. Everything runs on the device itself.
 19. **View file splitting** — Split monolithic logs and history views into list/item/helpers submodules
 20. **Error/alert presentation** — Firmware-side error normalization (`kind`, `displayMessage`), amber warning banners for alerts vs red for errors, ntfy tag differentiation, boot-time orphan history session finalization
 21. **SetEvent cleaning control** — Replaced `Clean Stop`/`Clean`/`SetButton start` with authenticated `SetEvent` commands (SKey from robot serial via RC4). True in-place pause/resume preserving map/localization, working return-to-base via `UIMGR_EVENT_SMARTAPP_SEND_TO_BASE`
+22. **Notification alert/error split** — Separate `ntfyOnError` (UI_ERROR_*, code 243+) and `ntfyOnAlert` (UI_ALERT_*, code 201-242) toggles in settings, independent notification control for errors vs alerts
+23. **Dock & cleaning control UI** — 3-button action bar with state-aware layout (idle: House/Spot/Manual, cleaning: Pause/Dock/Stop, docking: House/Spot/Stop), separate `pause` and `stop` API actions mapped directly to SetEvent commands
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 
 ### Planned / in-progress
-
-**Notification alert/error split** — Currently `ntfyOnError` fires for both alerts
-(UI_ALERT_*, kind=warning, tag=information_source) and errors (UI_ERROR_*, kind=error,
-tag=warning). Settings UI only says "Robot error". Need separate toggles or relabel
-so users can control alert vs error notifications independently.
 
 **Mid-clean recharge continuity** — Verify the firmware correctly handles the
 autonomous mid-clean recharge cycle (robot docks to charge, then resumes cleaning).
@@ -57,8 +54,6 @@ The cleaning history session must stay open during recharge so map collection
 continues seamlessly. The notification manager should detect this as a recharge
 pause (not cleaning completion) via the `ST_M1_Charging_Cleaning` robot state.
 Needs live testing with a partially-charged battery to trigger the recharge cycle.
-
-**Robot error/alert presentation** — Split normalized robot `UI_ERROR_*` vs `UI_ALERT_*` handling in the frontend so warnings use distinct amber styling and iconography instead of sharing the same red error banner treatment.
 
 **OTA via GitHub Releases** — Browser-side only (ESP32 makes no outbound connections).
 Browser fetches `api.github.com` releases list (CORS allowed), displays available
@@ -808,9 +803,8 @@ categories are prefixed `notif_*`.
 
 | Module | Role |
 |--------|------|
-| `app.tsx` | Root shell: theme, polling, routing, global state |
+| `app.tsx` | Root shell: theme, polling, routing, global state, unsupported robot screen |
 | `api.ts` | Typed fetch wrappers for all REST endpoints |
-| `robot-error.ts` | Normalizes raw firmware error/alert strings into human-readable messages |
 | `types.ts` | TypeScript interfaces for API data |
 | `history-data.ts` | JSONL parser, coverage map generation, path/bounding-box extraction |
 | `style.css` | Single CSS file, CSS variables for theming, responsive breakpoints |
@@ -835,8 +829,9 @@ Stateful Node.js dev server (Vite plugin). Edit `SCENARIO` constant for quick
 state switching (e.g. `"ok"`, `"err"`, `"chg"`, fault injection codes).
 Supports pipe-separated compound scenarios (e.g. `"err|fa"`, `"man|llq"`).
 Includes LIDAR quality scenarios (`llq`, `lsl`, `lno`), manual clean scenarios
-(`man`, `mlf`, `mbf`, `mbs`, `msf`, `msr`), and in-memory history simulation
-with mapdata JSONL fixtures. Reset to `"ok"` before committing.
+(`man`, `mlf`, `mbf`, `mbs`, `msf`, `msr`), docking scenarios (`dock`, `rchg`),
+and in-memory history simulation with mapdata JSONL fixtures. Reset to `"ok"`
+before committing.
 
 ### Frontend build pipeline
 
@@ -858,7 +853,7 @@ OTA update covers both.
 | GET | `/api/state` | Robot UI state |
 | GET | `/api/error` | Robot error/alert |
 | GET | `/api/lidar` | LIDAR scan data |
-| POST | `/api/clean?action=house\|spot\|stop\|dock` | Cleaning control |
+| POST | `/api/clean?action=house\|spot\|pause\|stop\|dock` | Cleaning control |
 | POST | `/api/sound?id=N` | Play sound |
 | POST | `/api/testmode?enable=1\|0` | Test mode toggle |
 | POST | `/api/lidar/rotate?enable=1\|0` | LIDAR rotation toggle |

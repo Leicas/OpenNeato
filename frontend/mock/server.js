@@ -68,10 +68,11 @@ const _randf = (min, max, decimals = 2) => parseFloat((Math.random() * (max - mi
 // Robot state:
 //   ok   — Idle, battery 85%          off  — Device unreachable
 //   unsup — Unsupported robot model
-//   cls  — House cleaning             spt — Spot cleaning
-//   chg  — Charging, 62%              ch2 — Charging, 25%
-//   ful  — Full, on dock              mid — Battery 45%
-//   low  — Battery 12%                ded — Battery 0%
+//   cls  — House cleaning             spt  — Spot cleaning
+//   dock — Docking (return to base)   rchg — Mid-clean recharge (on dock, charging)
+//   chg  — Charging, 62%              ch2  — Charging, 25%
+//   ful  — Full, on dock              mid  — Battery 45%
+//   low  — Battery 12%                ded  — Battery 0%
 //   err  — Brush stuck error          alrt — Alert only (brush change)
 //
 // Manual clean (combine with each other or fault scenarios):
@@ -99,7 +100,7 @@ const _randf = (min, max, decimals = 2) => parseFloat((Math.random() * (max - mi
 //   fp   — All polling faults (state + charger + error)
 //   fhc  — History corruption (inject corrupted pose lines in session data)
 //   fal  — All faults combined
-const SCENARIO = "unsup";
+const SCENARIO = "ok";
 
 // --- Robot state ---
 
@@ -129,20 +130,25 @@ const SCENARIOS = {
         errorMessage: "Error\r\n200 -  (UI_ALERT_INVALID)\r\nAlert\r\n229 -  (UI_ALERT_BRUSH_CHANGE)",
         displayMessage: "Time to replace the brush",
     },
-    // Manual clean scenarios
+    dock: { docking: true, cleaning: false },
+    rchg: {
+        docking: true,
+        cleaning: false,
+        midCleanRecharge: true,
+        fuelPercent: 15,
+        chargingActive: true,
+        extPwrPresent: true,
+    },
     man: { manualClean: true },
     mlf: { manualClean: true, manualLifted: true },
     mbf: { manualClean: true, manualBumperFrontLeft: true },
     mbs: { manualClean: true, manualBumperSideRight: true },
     msf: { manualClean: true, manualStallFront: true },
     msr: { manualClean: true, manualStallRear: true },
-    // Robot model
-    unsup: { unsupported: true }, // Unsupported robot model (no SKey)
-    // LIDAR quality scenarios
-    llq: { lidarLowQuality: true }, // Few valid points (<90)
-    lsl: { lidarSlowRotation: true }, // Slow LDS rotation (<4 Hz)
-    lno: { lidarUnavailable: true }, // LIDAR unavailable (error response)
-    // Fault scenarios
+    unsup: { unsupported: true },
+    llq: { lidarLowQuality: true },
+    lsl: { lidarSlowRotation: true },
+    lno: { lidarUnavailable: true },
     fa: { faults: { actions: true } },
     fs: { faults: { settings: true } },
     flr: { faults: { logsRead: true } },
@@ -220,6 +226,8 @@ const state = {
     manualBumperSideRight: false,
     manualStallFront: false,
     manualStallRear: false,
+    // Mid-clean recharge (docking to charge, then resume)
+    midCleanRecharge: false,
     // Robot model
     unsupported: false,
     // LIDAR quality overrides
@@ -239,6 +247,7 @@ const state = {
     ntfyEnabled: true,
     ntfyOnDone: true,
     ntfyOnError: true,
+    ntfyOnAlert: true,
     ntfyOnDocking: true,
     // Schedule (Mon=0..Sun=6)
     scheduleEnabled: true,
@@ -378,7 +387,7 @@ const deriveStates = () => {
         state.robotState = "ST_C_TestMode";
     } else if (state.docking) {
         state.uiState = "UIMGR_STATE_DOCKINGRUNNING";
-        state.robotState = "ST_C_Docking";
+        state.robotState = state.midCleanRecharge ? "ST_M1_Charging_Cleaning" : "ST_C_Docking";
     } else if (state.cleaning && !state.paused) {
         state.uiState = "UIMGR_STATE_HOUSECLEANINGRUNNING";
         state.robotState = "ST_C_HouseCleaning";
@@ -502,15 +511,15 @@ const routes = {
                 state.spotCleaning = false;
                 state.paused = false;
             }
-        } else if (action === "stop") {
-            if ((state.cleaning || state.spotCleaning || state.docking) && !state.paused) {
+        } else if (action === "pause") {
+            if ((state.cleaning || state.spotCleaning) && !state.paused) {
                 state.paused = true; // Running -> Paused
-            } else {
-                state.cleaning = false; // Paused -> Idle
-                state.spotCleaning = false;
-                state.docking = false;
-                state.paused = false;
             }
+        } else if (action === "stop") {
+            state.cleaning = false;
+            state.spotCleaning = false;
+            state.docking = false;
+            state.paused = false;
         } else if (action === "spot") {
             state.spotCleaning = true;
             state.cleaning = false;
@@ -666,6 +675,7 @@ const routes = {
             "ntfyEnabled",
             "ntfyOnDone",
             "ntfyOnError",
+            "ntfyOnAlert",
             "ntfyOnDocking",
             "scheduleEnabled",
         ];
@@ -858,6 +868,7 @@ const handleRequest = async (req, res) => {
             if (data.ntfyEnabled !== undefined) state.ntfyEnabled = data.ntfyEnabled;
             if (data.ntfyOnDone !== undefined) state.ntfyOnDone = data.ntfyOnDone;
             if (data.ntfyOnError !== undefined) state.ntfyOnError = data.ntfyOnError;
+            if (data.ntfyOnAlert !== undefined) state.ntfyOnAlert = data.ntfyOnAlert;
             if (data.ntfyOnDocking !== undefined) state.ntfyOnDocking = data.ntfyOnDocking;
             if (data.scheduleEnabled !== undefined) state.scheduleEnabled = data.scheduleEnabled;
             for (let d = 0; d < 7; d++) {

@@ -5,6 +5,7 @@ import boltSvg from "../assets/icons/bolt.svg?raw";
 import checkSvg from "../assets/icons/check.svg?raw";
 import clockSvg from "../assets/icons/clock.svg?raw";
 import databaseSvg from "../assets/icons/database.svg?raw";
+import dockSvg from "../assets/icons/dock.svg?raw";
 import gearSvg from "../assets/icons/gear.svg?raw";
 import historySvg from "../assets/icons/history.svg?raw";
 import houseSvg from "../assets/icons/house.svg?raw";
@@ -173,6 +174,7 @@ export function DashboardView({ firmware, state, isManual }: DashboardViewProps)
 
     const isRunning = state.data?.uiState?.includes("CLEANINGRUNNING") ?? false;
     const isPaused = state.data?.uiState?.includes("CLEANINGPAUSED") ?? false;
+    const isDocking = state.data?.uiState?.includes("DOCKING") ?? false;
     const isCleaning = isRunning || isPaused;
     const isSpot = state.data?.uiState?.includes("SPOT") ?? false;
     const robotError = error.data?.hasError
@@ -310,59 +312,83 @@ export function DashboardView({ firmware, state, isManual }: DashboardViewProps)
                 </div>
             )}
 
-            {/* Bottom action bar */}
+            {/* Bottom action bar — always 3 buttons */}
             <div class="action-bar">
                 <div class="action-bar-row">
-                    <button
-                        type="button"
-                        class={`action-btn primary${pending ? " pending" : ""}`}
-                        onClick={() => handleAction(api.cleanHouse)}
-                        disabled={
-                            offline ||
-                            (isCleaning && !isPaused) ||
-                            isManual ||
-                            pending ||
-                            hasRobotError ||
-                            (isPaused && isSpot)
-                        }
-                    >
-                        <Icon svg={isPaused && !isSpot ? playSvg : houseSvg} />
-                        {isPaused && !isSpot ? "Resume" : "House"}
-                    </button>
-                    <button
-                        type="button"
-                        class={`action-btn${pending ? " pending" : ""}`}
-                        onClick={() => handleAction(api.cleanSpot)}
-                        disabled={
-                            offline ||
-                            (isCleaning && !isPaused) ||
-                            isManual ||
-                            pending ||
-                            hasRobotError ||
-                            (isPaused && !isSpot)
-                        }
-                    >
-                        <Icon svg={isPaused && isSpot ? playSvg : spotSvg} />
-                        {isPaused && isSpot ? "Resume" : "Spot"}
-                    </button>
-                    <button
-                        type="button"
-                        class={`action-btn${pending ? " pending" : ""}`}
-                        onClick={() =>
-                            isCleaning
-                                ? handleAction(api.cleanStop)
-                                : isManual
-                                  ? navigate("/manual")
-                                  : handleAction(() => {
-                                        pendingManual.current = true;
-                                        return api.manual(true);
-                                    })
-                        }
-                        disabled={offline || (pending && !isManual) || (hasRobotError && !isCleaning && !isManual)}
-                    >
-                        <Icon svg={isCleaning ? (isPaused ? stopSvg : pauseSvg) : manualSvg} />
-                        {isCleaning ? (isPaused ? "Stop" : "Pause") : "Manual"}
-                    </button>
+                    {isCleaning ? (
+                        <>
+                            {/* Cleaning: Pause/Resume, Dock, Stop */}
+                            <button
+                                type="button"
+                                class={`action-btn primary${pending ? " pending" : ""}`}
+                                onClick={() => handleAction(isPaused ? api.cleanHouse : api.cleanPause)}
+                                disabled={offline || pending}
+                            >
+                                <Icon svg={isPaused ? playSvg : pauseSvg} />
+                                {isPaused ? "Resume" : "Pause"}
+                            </button>
+                            <button
+                                type="button"
+                                class={`action-btn${pending ? " pending" : ""}`}
+                                onClick={() => handleAction(api.cleanDock)}
+                                disabled={offline || pending}
+                            >
+                                <Icon svg={dockSvg} />
+                                Dock
+                            </button>
+                            <button
+                                type="button"
+                                class={`action-btn${pending ? " pending" : ""}`}
+                                onClick={() => handleAction(api.cleanStop)}
+                                disabled={offline || pending}
+                            >
+                                <Icon svg={stopSvg} />
+                                Stop
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            {/* Idle / Docking / Manual: House, Spot, Manual/Stop */}
+                            <button
+                                type="button"
+                                class={`action-btn primary${pending ? " pending" : ""}`}
+                                onClick={() => handleAction(api.cleanHouse)}
+                                disabled={offline || isDocking || isManual || pending || hasRobotError}
+                            >
+                                <Icon svg={houseSvg} />
+                                House
+                            </button>
+                            <button
+                                type="button"
+                                class={`action-btn${pending ? " pending" : ""}`}
+                                onClick={() => handleAction(api.cleanSpot)}
+                                disabled={offline || isDocking || isManual || pending || hasRobotError}
+                            >
+                                <Icon svg={spotSvg} />
+                                Spot
+                            </button>
+                            <button
+                                type="button"
+                                class={`action-btn${pending ? " pending" : ""}`}
+                                onClick={() =>
+                                    isDocking
+                                        ? handleAction(api.cleanStop)
+                                        : isManual
+                                          ? navigate("/manual")
+                                          : handleAction(() => {
+                                                pendingManual.current = true;
+                                                return api.manual(true);
+                                            })
+                                }
+                                disabled={
+                                    offline || (pending && !isManual) || (hasRobotError && !isManual && !isDocking)
+                                }
+                            >
+                                <Icon svg={isDocking ? stopSvg : manualSvg} />
+                                {isDocking ? "Stop" : "Manual"}
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </>

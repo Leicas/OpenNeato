@@ -477,15 +477,13 @@ bool NeatoSerial::clean(const String& action, std::function<void(bool)> callback
         return enqueue(buildSetEvent(EVT_SEND_TO_BASE), wrapAction(callback), PRIORITY_HIGH);
     }
 
-    if (action == "stop") {
-        bool isRunning = stateCache.hasCached() && stateCache.getCached().uiState.indexOf("CLEANINGRUNNING") >= 0;
+    if (action == "pause") {
         invalidateState();
+        return enqueue(buildSetEvent(EVT_PAUSE), wrapAction(callback), PRIORITY_HIGH);
+    }
 
-        if (isRunning) {
-            // Pause (RUNNING -> PAUSED)
-            return enqueue(buildSetEvent(EVT_PAUSE), wrapAction(callback), PRIORITY_HIGH);
-        }
-        // Stop (PAUSED -> IDLE)
+    if (action == "stop") {
+        invalidateState();
         return enqueue(buildSetEvent(EVT_STOP), wrapAction(callback), PRIORITY_HIGH);
     }
 

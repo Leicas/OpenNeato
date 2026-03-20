@@ -104,6 +104,7 @@ export const api = {
     getFirmwareVersion: () => get<FirmwareVersion>("/api/firmware/version"),
     cleanHouse: () => post("/api/clean?action=house"),
     cleanSpot: () => post("/api/clean?action=spot"),
+    cleanPause: () => post("/api/clean?action=pause"),
     cleanStop: () => post("/api/clean?action=stop"),
     cleanDock: () => post("/api/clean?action=dock"),
     manual: (enable: boolean) => post(`/api/manual?enable=${enable ? 1 : 0}`),
