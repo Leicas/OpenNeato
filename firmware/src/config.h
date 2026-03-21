@@ -6,6 +6,11 @@
 #define FIRMWARE_VERSION "0.0"
 #endif
 
+// Chip model — passed via build flag (-DCHIP_MODEL=...) from board section in platformio.ini
+#ifndef CHIP_MODEL
+#error "CHIP_MODEL must be defined (e.g. -DCHIP_MODEL=\\\"ESP32-C3\\\")"
+#endif
+
 // WiFi Configuration
 #define DEFAULT_HOSTNAME "neato"
 #define WIFI_DEFAULT_TX_POWER                                                                                          \

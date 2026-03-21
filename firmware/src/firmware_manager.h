@@ -15,7 +15,7 @@ public:
 
     // Version info
     const char *getFirmwareVersion() const { return FIRMWARE_VERSION; }
-    String getChipModel() const { return ESP.getChipModel(); }
+    const char *getChipModel() const { return CHIP_MODEL; }
 
     // Update lifecycle
     bool beginUpdate(const String& md5Hash = "");

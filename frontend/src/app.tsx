@@ -76,12 +76,14 @@ export function App() {
         if (!version || updateChecked.current) return;
         updateChecked.current = true;
 
+        const chip = firmware.data?.chip;
+
         // Read any previously stored result immediately
-        setUpdateInfo(getAvailableUpdate(version));
+        setUpdateInfo(getAvailableUpdate(version, chip));
 
         // Fire-and-forget check (respects 6h interval internally)
         checkForUpdate(version).then(() => {
-            setUpdateInfo(getAvailableUpdate(version));
+            setUpdateInfo(getAvailableUpdate(version, chip));
         });
     }, [firmware.data?.version]);
 

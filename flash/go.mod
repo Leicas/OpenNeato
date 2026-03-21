@@ -1,4 +1,4 @@
-module github.com/renjfk/OpenNeato/tools/flash
+module github.com/renjfk/OpenNeato/flash
 
 go 1.26.1
 

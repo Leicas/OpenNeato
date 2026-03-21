@@ -1,10 +1,13 @@
 // openneato-flash flashes OpenNeato firmware to an ESP32 and opens
 // a serial monitor for first-time WiFi configuration.
 //
-// The complete flash images and their offsets are embedded in this binary.
-// Just plug in the device and run:
+// Plug in the device and run:
 //
 //	openneato-flash
+//
+// The tool auto-detects the chip type, downloads the matching firmware
+// from the latest GitHub release, flashes it, and opens a serial monitor
+// for WiFi setup.
 package main
 
 import (
@@ -15,12 +18,19 @@ import (
 
 func main() {
 	port := flag.String("port", "", "Serial port (auto-detected if not set)")
+	chip := flag.String("chip", "", "Chip type (auto-detected, e.g. esp32-c3, esp32-s3)")
+	firmwarePack := flag.String("firmware", "", "Path to local firmware pack .tar.gz (skips download)")
 	listPorts := flag.Bool("list", false, "List available serial ports")
 	noMonitor := flag.Bool("no-monitor", false, "Skip serial monitor after flashing")
 	monitorOnly := flag.Bool("monitor", false, "Open serial monitor without flashing")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "openneato-flash - Flash and configure OpenNeato firmware\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n")
+		fmt.Fprintf(os.Stderr, "  openneato-flash                    Auto-detect chip, download and flash latest firmware\n")
+		fmt.Fprintf(os.Stderr, "  openneato-flash -chip esp32-c3     Skip chip detection, use specified chip\n")
+		fmt.Fprintf(os.Stderr, "  openneato-flash -firmware pack.tar.gz  Flash from local firmware pack\n")
+		fmt.Fprintf(os.Stderr, "  openneato-flash -monitor           Open serial monitor only\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 	}
@@ -56,22 +66,42 @@ func main() {
 
 	// Flash (unless monitor-only)
 	if !*monitorOnly {
-		esptoolPath, err := findEsptool()
+		// Ensure esptool is available
+		esptoolPath, err := ensureEsptool()
 		if err != nil {
-			fmt.Println("esptool not found in PATH.")
-			fmt.Print("Download it from GitHub? [Y/n] ")
-			var answer string
-			_, _ = fmt.Scanln(&answer)
-			if answer != "" && answer != "y" && answer != "Y" {
-				fatal("Install esptool manually: pip install esptool")
-			}
-			esptoolPath, err = downloadEsptool()
-			if err != nil {
-				fatal("Failed to download esptool: %v", err)
-			}
+			fatal("%v", err)
 		}
 
-		if err := flashFirmware(portName, esptoolPath); err != nil {
+		// Resolve firmware directory
+		var fwDir string
+		if *firmwarePack != "" {
+			// Extract local tarball
+			fwDir, err = extractLocalPack(*firmwarePack)
+			if err != nil {
+				fatal("Extract firmware pack: %v", err)
+			}
+			defer func() { _ = os.RemoveAll(fwDir) }()
+		} else {
+			// Need to know the chip to download firmware
+			chipName := *chip
+			if chipName == "" {
+				fmt.Println("Detecting chip type...")
+				chipName, err = detectChip(esptoolPath, portName)
+				if err != nil {
+					fatal("%v\nUse -chip to specify manually (e.g. -chip esp32-c3)", err)
+				}
+				fmt.Printf("Detected chip: %s\n", chipName)
+			}
+
+			// Download firmware pack from latest release
+			fwDir, err = downloadFirmwarePack(chipName)
+			if err != nil {
+				fatal("%v", err)
+			}
+			defer func() { _ = os.RemoveAll(fwDir) }()
+		}
+
+		if err := flashFirmware(portName, esptoolPath, fwDir); err != nil {
 			fatal("%v", err)
 		}
 		fmt.Println("Flash complete!")

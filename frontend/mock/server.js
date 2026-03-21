@@ -954,6 +954,14 @@ const handleRequest = async (req, res) => {
 function mockApiPlugin() {
     return {
         name: "mock-api",
+        // Clear update localStorage when not in upd scenario
+        transformIndexHtml(html) {
+            if (SCENARIO.split("|").includes("upd")) return html;
+            return html.replace(
+                "</head>",
+                `<script>localStorage.removeItem("update_latest_version");localStorage.removeItem("update_last_check");</script></head>`,
+            );
+        },
         configureServer(server) {
             viteLogger = server.config.logger;
             server.middlewares.use(async (req, res, next) => {

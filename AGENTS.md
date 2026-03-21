@@ -44,7 +44,7 @@ firmware through REST API. Everything runs on the device itself.
 22. **Notification alert/error split** — Separate `ntfyOnError` (UI_ERROR_*, code 243+) and `ntfyOnAlert` (UI_ALERT_*, code 201-242) toggles in settings, independent notification control for errors vs alerts
 23. **Dock & cleaning control UI** — 3-button action bar with state-aware layout (idle: House/Spot/Manual, cleaning: Pause/Dock/Stop, docking: House/Spot/Stop), separate `pause` and `stop` API actions mapped directly to SetEvent commands
 24. **Update notification** — Browser-side GitHub releases check (6h interval, localStorage state), X.Y version comparison, dashboard banner linking to release page
-25. **Release tooling** — Go flash tool (`flash/`) with esptool subprocess, USB port auto-detection, embedded flash images + offsets from PlatformIO `idedata.json`, serial monitor with boot garbage filtering; GoReleaser config for cross-platform builds; `prepare_flash_embed.sh` CI script; composable `platformio.ini` with `[board_*]` + `[mode_*]` sections; user-facing boot banner via `SerialMenu::printBanner`
+25. **Release tooling** — Go flash tool (`flash/`) with esptool subprocess, USB port auto-detection, runtime firmware download from GitHub releases, serial monitor with boot garbage filtering; GoReleaser config for cross-platform builds; `prepare_flash_embed.sh` CI script for release artifacts; composable `platformio.ini` with `[board_*]` + `[mode_*]` sections; user-facing boot banner via `SerialMenu::printBanner`
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 
@@ -52,8 +52,9 @@ firmware through REST API. Everything runs on the device itself.
 
 **GitHub Actions — Release workflow** — Triggered on version tags. Steps:
 build frontend (`npm run build`), build firmware (`pio run -e c3-release`),
-run `prepare_flash_embed.sh` to populate Go embed dir from `idedata.json`,
-GoReleaser builds flash tool for all platforms and creates GitHub release.
+run `prepare_flash_embed.sh` to create firmware packs in `release/`,
+GoReleaser builds flash tool for all platforms and creates GitHub release
+with firmware packs attached as extra files.
 
 **GitHub Actions — PR CI workflow** — Triggered on pull requests. Steps:
 firmware build + `pio check` (clang-tidy), frontend lint + type check + build,
@@ -840,22 +841,22 @@ categories are prefixed `notif_*`.
 
 Go CLI for first-time firmware flashing and WiFi configuration. Cross-compiled
 for macOS, Linux, and Windows via GoReleaser. Uses `esptool` as a subprocess
-for the actual flash protocol (auto-detected in PATH or downloaded from GitHub).
+for the actual flash protocol (auto-detected in PATH or downloaded from GitHub
+releases).
 
 | File | Role |
 |------|------|
 | `main.go` | CLI entry, flags, esptool discovery, orchestration |
-| `flash.go` | Embedded flash images + offsets, esptool invocation, download/extract |
+| `flash.go` | Esptool invocation, firmware download/extract, chip detection |
 | `detect.go` | USB serial port enumeration, ESP device auto-detection by VID/PID |
 | `terminal.go` | Interactive serial monitor (raw terminal, bidirectional relay, boot garbage filter) |
-| `embed/` | Build artifacts populated by `prepare_flash_embed.sh` (gitignored) |
 | `.golangci.yml` | Go linter config |
 
 **Key patterns:**
-- Flash images (bootloader, partitions, boot_app0, firmware) and their offsets
-  are embedded in the Go binary at build time — user downloads one file
-- Offsets come from PlatformIO's `idedata.json` via `prepare_flash_embed.sh` —
-  no hardcoded chip-specific addresses
+- Flash tool downloads firmware pack at runtime from GitHub releases —
+  auto-detects chip via esptool, fetches matching `openneato-{chip}-full.tar.gz`
+- Firmware version and esptool version injected via ldflags at build time by
+  GoReleaser; dev builds resolve latest from GitHub API
 - esptool auto-detects chip type, handles DTR/RTS reset sequence
 - Serial monitor filters non-printable bytes and skips pre-first-newline ROM
   bootloader garbage
@@ -869,6 +870,14 @@ Includes LIDAR quality scenarios (`llq`, `lsl`, `lno`), manual clean scenarios
 (`man`, `mlf`, `mbf`, `mbs`, `msf`, `msr`), docking scenarios (`dock`, `rchg`),
 update notification scenario (`upd`), and in-memory history simulation with
 mapdata JSONL fixtures. The mock intercepts GitHub releases API requests
+(`/repos/renjfk/OpenNeato/releases/latest`) via `__GITHUB_API_BASE__` build-time
+define that redirects to the dev server host. When not in `upd` scenario,
+a `transformIndexHtml` hook clears update-related localStorage keys to prevent
+stale banners. Reset to `"ok"` before committing.
+
+### Mock server (`frontend/mock/server.js`) (continued)
+
+The mock also intercepts GitHub releases API requests
 (`/repos/renjfk/OpenNeato/releases/latest`) via `__GITHUB_API_BASE__` build-time
 define that redirects to the dev server host. Reset to `"ok"` before committing.
 
@@ -885,14 +894,16 @@ CI builds firmware and flash tool in sequence:
 
 1. `npm run build` — frontend assets into `web_assets.h`
 2. `FIRMWARE_VERSION=$TAG pio run -e c3-release` — firmware binary
-3. `prepare_flash_embed.sh .pio/build/c3-release` — reads `idedata.json`, copies
-   binaries + generates `offsets.json` into `flash/embed/`
-4. `goreleaser release` — cross-compiles Go flash tool (with embedded images)
-   for all platforms, creates GitHub release
+3. `prepare_flash_embed.sh esp32-c3 .pio/build/c3-release` — reads `idedata.json`,
+   creates `openneato-esp32-c3-firmware.bin` + `openneato-esp32-c3-full.tar.gz`
+   in `release/`
+4. `goreleaser release` — cross-compiles Go flash tool for all platforms,
+   attaches firmware packs from `release/` as extra files, creates GitHub release
 
-Release assets per version: `openneato-flash-{os}-{arch}.tar.gz` (6 platforms).
-Each archive contains a single binary with firmware embedded — user downloads
-one file, plugs in ESP32, runs it.
+Release assets per version:
+- `openneato-esp32-c3-firmware.bin` — OTA update binary (upload via web UI)
+- `openneato-esp32-c3-full.tar.gz` — full flash pack (downloaded by flash tool)
+- `openneato-flash-{os}-{arch}.tar.gz` (6 platforms) — flash tool binary
 
 ### Current API routes
 
@@ -977,12 +988,14 @@ go build -o openneato-flash .             # Build flash tool
 golangci-lint run ./...                    # Lint
 ```
 
-The flash tool requires `flash/embed/` to be populated before building.
-Use the CI script or manually:
+The flash tool requires `esptool` as a subprocess for the actual flash
+protocol. It auto-detects chip type and downloads the matching firmware
+pack from GitHub releases at runtime. Use the CI script to create release
+artifacts:
 
 ```bash
-scripts/prepare_flash_embed.sh .pio/build/c3-release  # Populate embed dir
-goreleaser build --snapshot --clean                     # Cross-compile all platforms
+scripts/prepare_flash_embed.sh esp32-c3 .pio/build/c3-release  # Create firmware packs
+goreleaser build --snapshot --clean                              # Cross-compile all platforms
 ```
 
 Set `PIO_BUILD_DIR` env var when running through GoReleaser:

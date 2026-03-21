@@ -258,10 +258,10 @@ export function DashboardView({ firmware, state, isManual, updateInfo }: Dashboa
             )}
 
             {/* Update notification */}
-            {updateInfo && (
-                <a class="update-banner" href={updateInfo.url} target="_blank" rel="noopener noreferrer">
+            {updateInfo?.firmwareUrl && (
+                <a class="update-banner" href={updateInfo.firmwareUrl} download>
                     <Icon svg={tagSvg} />
-                    Update available: v{updateInfo.version}
+                    Update available: v{updateInfo.version} — tap to download
                 </a>
             )}
 
