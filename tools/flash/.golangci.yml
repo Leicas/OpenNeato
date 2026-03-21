@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    # unused code
+    - unparam
+    - unused
+
+    # bugs & correctness
+    - bodyclose
+    - nilerr
+    - reassign
+
+    # duplication & complexity
+    - dupl
+    - gocyclo
+
+    # misc
+    - misspell
+    - unconvert
+    - wastedassign
+
+  settings:
+    dupl:
+      threshold: 100
+    gocyclo:
+      min-complexity: 20
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/renjfk/OpenNeato

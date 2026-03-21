@@ -39,6 +39,9 @@ public:
 
     void promptConfirmation(const String& prompt, std::function<void(bool)> callback);
 
+    // Boot banner
+    static void printBanner(const String& name, const String& version, const String& status, const String& hint = "");
+
     // Message helpers
     void printStatus(const String& message);
 

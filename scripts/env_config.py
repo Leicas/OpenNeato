@@ -5,17 +5,17 @@ Supported variables:
     FIRMWARE_VERSION  — injected as -DFIRMWARE_VERSION build flag
                         If not set, auto-generates "0.0-<git-hash>"
                         (final fallback in config.h: "0.0")
-    OTA_HOST          — sets OTA upload target host (required for OTA env)
+    OTA_HOST          — sets OTA upload target host (required for *-ota envs)
 
 Set BUILD_FRONTEND=1 to run the frontend build (npm run build) before
 compiling firmware, ensuring web_assets.h is up to date.
 
 Usage:
-    pio run -e Debug                                  # auto version: 0.0-a1b2c3d
-    FIRMWARE_VERSION=1.2 pio run -e Debug             # explicit version: 1.2
-    OTA_HOST=10.10.10.15 pio run -e OTA -t upload
-    BUILD_FRONTEND=1 pio run -e Debug                 # builds frontend + firmware
-    BUILD_FRONTEND=1 OTA_HOST=10.10.10.15 pio run -e OTA -t upload
+    pio run -e c3-debug                                  # auto version: 0.0-a1b2c3d
+    FIRMWARE_VERSION=1.2 pio run -e c3-debug             # explicit version: 1.2
+    OTA_HOST=10.10.10.15 pio run -e c3-ota -t upload
+    BUILD_FRONTEND=1 pio run -e c3-debug                 # builds frontend + firmware
+    BUILD_FRONTEND=1 OTA_HOST=10.10.10.15 pio run -e c3-ota -t upload
 """
 
 import os
@@ -61,8 +61,8 @@ if version:
 host = os.environ.get("OTA_HOST")
 if host:
     env.Replace(UPLOAD_PORT=host)
-elif env["PIOENV"] == "OTA" and "upload" in COMMAND_LINE_TARGETS:
+elif env["PIOENV"].endswith("-ota") and "upload" in COMMAND_LINE_TARGETS:
     sys.exit(
         "Error: OTA_HOST is required for OTA uploads. "
-        "Usage: OTA_HOST=<ip> pio run -e OTA -t upload"
+        "Usage: OTA_HOST=<ip> pio run -e <board>-ota -t upload"
     )

@@ -44,10 +44,27 @@ firmware through REST API. Everything runs on the device itself.
 22. **Notification alert/error split** — Separate `ntfyOnError` (UI_ERROR_*, code 243+) and `ntfyOnAlert` (UI_ALERT_*, code 201-242) toggles in settings, independent notification control for errors vs alerts
 23. **Dock & cleaning control UI** — 3-button action bar with state-aware layout (idle: House/Spot/Manual, cleaning: Pause/Dock/Stop, docking: House/Spot/Stop), separate `pause` and `stop` API actions mapped directly to SetEvent commands
 24. **Update notification** — Browser-side GitHub releases check (6h interval, localStorage state), X.Y version comparison, dashboard banner linking to release page
+25. **Release tooling** — Go flash tool (`tools/flash/`) with esptool subprocess, USB port auto-detection, embedded flash images + offsets from PlatformIO `idedata.json`, serial monitor with boot garbage filtering; GoReleaser config for cross-platform builds; `prepare_flash_embed.sh` CI script; composable `platformio.ini` with `[board_*]` + `[mode_*]` sections; user-facing boot banner via `SerialMenu::printBanner`
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 
 ### Planned / in-progress
+
+**GitHub Actions — Release workflow** — Triggered on version tags. Steps:
+build frontend (`npm run build`), build firmware (`pio run -e c3-release`),
+run `prepare_flash_embed.sh` to populate Go embed dir from `idedata.json`,
+GoReleaser builds flash tool for all platforms and creates GitHub release.
+
+**GitHub Actions — PR CI workflow** — Triggered on pull requests. Steps:
+firmware build + `pio check` (clang-tidy), frontend lint + type check + build,
+Go lint (`golangci-lint`) + build for flash tool.
+
+**Project README** — Write `README.md` with project description, screenshots,
+feature list, quick start guide, and links to installation docs and releases.
+
+**Installation guide** — Write `docs/installation.md` covering required materials
+(ESP32-C3 board, jumper wires, debug port pinout), hardware assembly with photos,
+flashing with the flash tool, and first-time WiFi configuration walkthrough.
 
 **Mid-clean recharge continuity** — Verify the firmware correctly handles the
 autonomous mid-clean recharge cycle (robot docks to charge, then resumes cleaning).
@@ -55,11 +72,6 @@ The cleaning history session must stay open during recharge so map collection
 continues seamlessly. The notification manager should detect this as a recharge
 pause (not cleaning completion) via the `ST_M1_Charging_Cleaning` robot state.
 Needs live testing with a partially-charged battery to trigger the recharge cycle.
-
-**OTA via GitHub Releases** — Browser-side only (ESP32 makes no outbound connections).
-User downloads `.bin` from GitHub releases, then uploads via the existing firmware
-upload file picker in settings. The update notification banner on the dashboard
-links to the release page when a newer version is available.
 
 ### Neato Serial Protocol
 - **Baud rate**: 115200
@@ -824,6 +836,30 @@ categories are prefixed `notif_*`.
 - Mobile-first responsive (breakpoints: 400px, 600px, 900px)
 - Consumer-facing UI, not a debug tool
 
+### Flash tool (`tools/flash/`)
+
+Go CLI for first-time firmware flashing and WiFi configuration. Cross-compiled
+for macOS, Linux, and Windows via GoReleaser. Uses `esptool` as a subprocess
+for the actual flash protocol (auto-detected in PATH or downloaded from GitHub).
+
+| File | Role |
+|------|------|
+| `main.go` | CLI entry, flags, esptool discovery, orchestration |
+| `flash.go` | Embedded flash images + offsets, esptool invocation, download/extract |
+| `detect.go` | USB serial port enumeration, ESP device auto-detection by VID/PID |
+| `terminal.go` | Interactive serial monitor (raw terminal, bidirectional relay, boot garbage filter) |
+| `embed/` | Build artifacts populated by `prepare_flash_embed.sh` (gitignored) |
+| `.golangci.yml` | Go linter config |
+
+**Key patterns:**
+- Flash images (bootloader, partitions, boot_app0, firmware) and their offsets
+  are embedded in the Go binary at build time — user downloads one file
+- Offsets come from PlatformIO's `idedata.json` via `prepare_flash_embed.sh` —
+  no hardcoded chip-specific addresses
+- esptool auto-detects chip type, handles DTR/RTS reset sequence
+- Serial monitor filters non-printable bytes and skips pre-first-newline ROM
+  bootloader garbage
+
 ### Mock server (`frontend/mock/server.js`)
 
 Stateful Node.js dev server (Vite plugin). Edit `SCENARIO` constant for quick
@@ -842,6 +878,21 @@ define that redirects to the dev server host. Reset to `"ok"` before committing.
 `embed_frontend.js` gzips dist/ files and generates `web_assets.h` -> firmware
 compiles with assets in PROGMEM. Frontend is part of the firmware binary — single
 OTA update covers both.
+
+### Release pipeline
+
+CI builds firmware and flash tool in sequence:
+
+1. `npm run build` — frontend assets into `web_assets.h`
+2. `FIRMWARE_VERSION=$TAG pio run -e c3-release` — firmware binary
+3. `prepare_flash_embed.sh .pio/build/c3-release` — reads `idedata.json`, copies
+   binaries + generates `offsets.json` into `tools/flash/embed/`
+4. `goreleaser release` — cross-compiles Go flash tool (with embedded images)
+   for all platforms, creates GitHub release
+
+Release assets per version: `openneato-flash-{os}-{arch}.tar.gz` (6 platforms).
+Each archive contains a single binary with firmware embedded — user downloads
+one file, plugs in ESP32, runs it.
 
 ### Current API routes
 
@@ -885,22 +936,25 @@ OTA update covers both.
 
 ### Firmware
 
+Environment names follow `<board>-<mode>` convention (`c3-debug`, `c3-ota`,
+`c3-release`). See `platformio.ini` for the board/mode composition structure.
+
 ```bash
-pio run -e Debug                        # Build (auto version: 0.0-<git-hash>)
-FIRMWARE_VERSION=1.0 pio run -e Debug   # Build with specific version
-BUILD_FRONTEND=1 pio run -e Debug       # Build frontend + firmware in one step
-pio run -e Debug -t upload              # Build and upload via USB serial
-pio run -e Debug -t upload -t monitor   # Upload and open serial monitor
-pio run -e Debug -t monitor             # Serial monitor only
-pio run -e OTA -t upload                # OTA upload (defaults to neato.home)
-OTA_HOST=10.10.10.15 pio run -e OTA -t upload  # OTA to specific host
-pio run -e Debug --target clean         # Clean build artifacts
-pio check -e Debug                      # Static analysis (clang-tidy)
+pio run -e c3-debug                        # Build (auto version: 0.0-<git-hash>)
+FIRMWARE_VERSION=1.0 pio run -e c3-debug   # Build with specific version
+BUILD_FRONTEND=1 pio run -e c3-debug       # Build frontend + firmware in one step
+pio run -e c3-debug -t upload              # Build and upload via USB serial
+pio run -e c3-debug -t upload -t monitor   # Upload and open serial monitor
+pio run -e c3-debug -t monitor             # Serial monitor only
+OTA_HOST=10.10.10.15 pio run -e c3-ota -t upload  # OTA to specific host
+pio run -e c3-release                      # Release build (no serial logging)
+pio run -e c3-debug --target clean         # Clean build artifacts
+pio check -e c3-debug                      # Static analysis (clang-tidy)
 clang-format -i firmware/src/*.cpp firmware/src/*.h  # Format code
 ```
 
-Verify firmware changes by building with `pio run -e Debug` and running
-`pio check -e Debug` with zero defects.
+Verify firmware changes by building with `pio run -e c3-debug` and running
+`pio check -e c3-debug` with zero defects.
 
 ### Frontend
 
@@ -914,6 +968,28 @@ npm run fix:unsafe   # Also apply unsafe fixes (template literals, etc.)
 ```
 
 Frontend build runs `biome check` and `tsc --noEmit` before `vite build` — lint/format/type errors fail the build.
+
+### Flash tool
+
+```bash
+cd tools/flash
+go build -o openneato-flash .             # Build flash tool
+golangci-lint run ./...                    # Lint
+```
+
+The flash tool requires `tools/flash/embed/` to be populated before building.
+Use the CI script or manually:
+
+```bash
+scripts/prepare_flash_embed.sh .pio/build/c3-release  # Populate embed dir
+goreleaser build --snapshot --clean                     # Cross-compile all platforms
+```
+
+Set `PIO_BUILD_DIR` env var when running through GoReleaser:
+
+```bash
+PIO_BUILD_DIR=.pio/build/c3-release goreleaser build --snapshot --clean
+```
 
 ## Dependencies (all pinned)
 

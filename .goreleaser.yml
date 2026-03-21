@@ -1,0 +1,47 @@
+version: 2
+
+project_name: openneato
+
+before:
+  hooks:
+    - bash scripts/prepare_flash_embed.sh {{ .Env.PIO_BUILD_DIR }}
+
+builds:
+  - id: openneato-flash
+    dir: tools/flash
+    binary: openneato-flash
+    env:
+      - >-
+        {{- if eq .Os "darwin" }}CGO_ENABLED=1{{- else }}CGO_ENABLED=0{{- end }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: flash-tool
+    ids:
+      - openneato-flash
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "openneato-flash-{{ .Os }}-{{ .Arch }}"
+
+release:
+  github:
+    owner: renjfk
+    name: OpenNeato
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"

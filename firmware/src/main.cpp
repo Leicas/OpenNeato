@@ -176,16 +176,20 @@ void setup() {
     // WiFi connect, etc.) so boot sequence doesn't trigger a false reset.
     systemManager.initTaskWdt();
 
-    LOG("BOOT", "========================================");
     LOG("BOOT", "System initialization complete");
-    LOG("BOOT", "========================================");
 
-    // Show WiFi config menu if needed (after all boot messages)
+    // User-facing boot banner (visible in serial monitor / flash tool)
+    if (wifiManager.isConnected()) {
+        SerialMenu::printBanner("OpenNeato", FIRMWARE_VERSION,
+                                "WiFi: " + WiFi.SSID() + " (" + WiFi.localIP().toString() + ")",
+                                "Press 'm' for menu, 's' for status");
+    } else {
+        SerialMenu::printBanner("OpenNeato", FIRMWARE_VERSION, "WiFi: not configured");
+    }
+
+    // Show WiFi config menu if needed
     if (!wifiManager.isConnected()) {
         wifiManager.showMenu();
-    } else {
-        LOG("BOOT", "");
-        LOG("BOOT", "Quick commands: [m]enu, [s]tatus");
     }
 }
 

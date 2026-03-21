@@ -177,6 +177,24 @@ void SerialMenu::promptConfirmation(const String& prompt, std::function<void(boo
     inputBuffer = "";
 }
 
+void SerialMenu::printBanner(const String& name, const String& version, const String& status, const String& hint) {
+    Serial.println();
+    Serial.println("========================================");
+    Serial.print("  ");
+    Serial.print(name);
+    Serial.print(" ");
+    Serial.println(version);
+    Serial.println("========================================");
+    Serial.print("  ");
+    Serial.println(status);
+    if (hint.length() > 0) {
+        Serial.print("  ");
+        Serial.println(hint);
+    }
+    Serial.println("========================================");
+    Serial.println();
+}
+
 void SerialMenu::printStatus(const String& message) {
     Serial.println("\n" + message);
 }
