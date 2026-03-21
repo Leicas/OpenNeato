@@ -11,7 +11,7 @@
 
 set -eu
 
-EMBED_DIR="tools/flash/embed"
+EMBED_DIR="flash/embed"
 
 # Always start clean
 rm -f "$EMBED_DIR"/*.bin "$EMBED_DIR"/*.json

@@ -44,7 +44,7 @@ firmware through REST API. Everything runs on the device itself.
 22. **Notification alert/error split** — Separate `ntfyOnError` (UI_ERROR_*, code 243+) and `ntfyOnAlert` (UI_ALERT_*, code 201-242) toggles in settings, independent notification control for errors vs alerts
 23. **Dock & cleaning control UI** — 3-button action bar with state-aware layout (idle: House/Spot/Manual, cleaning: Pause/Dock/Stop, docking: House/Spot/Stop), separate `pause` and `stop` API actions mapped directly to SetEvent commands
 24. **Update notification** — Browser-side GitHub releases check (6h interval, localStorage state), X.Y version comparison, dashboard banner linking to release page
-25. **Release tooling** — Go flash tool (`tools/flash/`) with esptool subprocess, USB port auto-detection, embedded flash images + offsets from PlatformIO `idedata.json`, serial monitor with boot garbage filtering; GoReleaser config for cross-platform builds; `prepare_flash_embed.sh` CI script; composable `platformio.ini` with `[board_*]` + `[mode_*]` sections; user-facing boot banner via `SerialMenu::printBanner`
+25. **Release tooling** — Go flash tool (`flash/`) with esptool subprocess, USB port auto-detection, embedded flash images + offsets from PlatformIO `idedata.json`, serial monitor with boot garbage filtering; GoReleaser config for cross-platform builds; `prepare_flash_embed.sh` CI script; composable `platformio.ini` with `[board_*]` + `[mode_*]` sections; user-facing boot banner via `SerialMenu::printBanner`
 
 **Note for agents**: When a phase is completed, add a one-line summary to the list above.
 
@@ -836,7 +836,7 @@ categories are prefixed `notif_*`.
 - Mobile-first responsive (breakpoints: 400px, 600px, 900px)
 - Consumer-facing UI, not a debug tool
 
-### Flash tool (`tools/flash/`)
+### Flash tool (`flash/`)
 
 Go CLI for first-time firmware flashing and WiFi configuration. Cross-compiled
 for macOS, Linux, and Windows via GoReleaser. Uses `esptool` as a subprocess
@@ -886,7 +886,7 @@ CI builds firmware and flash tool in sequence:
 1. `npm run build` — frontend assets into `web_assets.h`
 2. `FIRMWARE_VERSION=$TAG pio run -e c3-release` — firmware binary
 3. `prepare_flash_embed.sh .pio/build/c3-release` — reads `idedata.json`, copies
-   binaries + generates `offsets.json` into `tools/flash/embed/`
+   binaries + generates `offsets.json` into `flash/embed/`
 4. `goreleaser release` — cross-compiles Go flash tool (with embedded images)
    for all platforms, creates GitHub release
 
@@ -972,12 +972,12 @@ Frontend build runs `biome check` and `tsc --noEmit` before `vite build` — lin
 ### Flash tool
 
 ```bash
-cd tools/flash
+cd flash
 go build -o openneato-flash .             # Build flash tool
 golangci-lint run ./...                    # Lint
 ```
 
-The flash tool requires `tools/flash/embed/` to be populated before building.
+The flash tool requires `flash/embed/` to be populated before building.
 Use the CI script or manually:
 
 ```bash

@@ -2,13 +2,16 @@ version: 2
 
 project_name: openneato
 
+env:
+  - PIO_BUILD_DIR={{ if index .Env "PIO_BUILD_DIR" }}{{ .Env.PIO_BUILD_DIR }}{{ else }}.pio/build/c3-release{{ end }}
+
 before:
   hooks:
     - bash scripts/prepare_flash_embed.sh {{ .Env.PIO_BUILD_DIR }}
 
 builds:
   - id: openneato-flash
-    dir: tools/flash
+    dir: flash
     binary: openneato-flash
     env:
       - >-
