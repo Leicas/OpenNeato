@@ -117,16 +117,6 @@ CSS frameworks, routing, or HTTP wrapper libraries.
 
 ## Planned / In-Progress
 
-**GitHub Actions — Release workflow** — Triggered on version tags. Steps:
-build frontend (`npm run build`), build firmware (`pio run -e c3-release`),
-GoReleaser runs `prepare_flash_embed.sh` via `before.hooks`, builds flash
-tool for all platforms, and creates GitHub release with firmware packs
-attached as extra files.
-
-**GitHub Actions — PR CI workflow** — Triggered on pull requests. Steps:
-firmware build + `pio check` (clang-tidy), frontend lint + type check + build,
-Go lint (`golangci-lint`) + build for flash tool.
-
 **Project README** — Write `README.md` with project description, screenshots,
 feature list, quick start guide, and links to installation docs and releases.
 
