@@ -401,9 +401,9 @@ void WebServer::registerMapRoutes() {
                 if (i > 0)
                     json += ",";
                 const auto& s = sessions[i];
-                json += "{\"name\":\"" + s.name + "\",\"size\":" + String(static_cast<unsigned long>(s.size)) +
-                        ",\"compressed\":" + String(s.compressed ? "true" : "false") +
-                        ",\"recording\":" + String(s.recording ? "true" : "false");
+                json += R"({"name":")" + s.name + R"(","size":)" + String(static_cast<unsigned long>(s.size)) +
+                        R"(,"compressed":)" + String(s.compressed ? "true" : "false") + R"(,"recording":)" +
+                        String(s.recording ? "true" : "false");
                 if (s.session.length() > 0) {
                     json += ",\"session\":" + s.session;
                 } else {

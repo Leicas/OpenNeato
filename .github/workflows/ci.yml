@@ -43,8 +43,11 @@ jobs:
       - name: Build firmware
         run: pio run -e c3-debug
 
+      - name: Format check (clang-format)
+        run: python scripts/check_format.py
+
       - name: Static analysis (clang-tidy)
-        run: pio check -e c3-debug --fail-on-defect=high
+        run: pio check -e c3-debug --fail-on-defect=low
 
   frontend:
     name: Frontend
