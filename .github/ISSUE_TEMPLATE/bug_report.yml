@@ -59,8 +59,8 @@ body:
       label: Logs
       description: |
         Enable debug mode (Settings -> Diagnostics), reproduce the issue, then
-        download the logs (Settings -> Diagnostics -> Logs) and attach them here.
-      render: text
+        download the log files (Settings -> Diagnostics -> Logs) and drag them
+        into this field.
     validations:
       required: false
 
