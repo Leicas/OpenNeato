@@ -83,9 +83,9 @@ Neato Botvac D3 through D7. D8/D9/D10 are NOT supported (different board, passwo
    ```bash
    openneato-flash
    ```
-3. Connect to the `OpenNeato` WiFi network and configure your home WiFi
+3. Configure your home WiFi via the serial menu (opens automatically after flashing)
 4. Wire the ESP32-C3 to your robot's debug port
-5. Open the web UI at the device's IP address
+5. Open the web UI at `http://neato.local` or the IP shown in the serial monitor
 
 For detailed instructions and troubleshooting, see the [User Guide](docs/user-guide.md).
 

@@ -277,11 +277,16 @@ restart, the banner shows:
 
 Open a browser and navigate to:
 
-- `http://neato.local` — mDNS hostname (works on most networks, configurable in Settings)
+- `http://neato.local` — mDNS hostname (configurable in Settings -> Network)
 - `http://192.168.1.42` — use the IP shown in the serial monitor
 
 You should see the OpenNeato dashboard. The robot status will show once the ESP32 is wired
 to the debug port.
+
+> [!NOTE]
+> mDNS (`.local`) doesn't work on all networks — some routers block multicast traffic or
+> resolve it differently. If `neato.local` doesn't work, use the IP address directly. You can
+> find it in the serial monitor output or in your router's DHCP client list.
 
 ### Quick Commands
 
