@@ -12,12 +12,17 @@
 Open-source replacement for Neato's discontinued cloud and mobile app. An ESP32-C3 bridge communicates with
 Botvac robots (D3-D7) over UART and exposes a local web UI over WiFi — no cloud, no app, no account required.
 
-| Dashboard | Manual Drive | Cleaning History |
-|:---:|:---:|:---:|
+> [!NOTE]
+> This is an early beta — things may break, rough edges are expected, and the API may change.
+> If you run into problems, a [Discussion](https://github.com/renjfk/OpenNeato/discussions)
+> or [issue](https://github.com/renjfk/OpenNeato/issues) is always welcome.
+
+|                Dashboard                 |                  Manual Drive                  |                    Cleaning History                    |
+|:----------------------------------------:|:----------------------------------------------:|:------------------------------------------------------:|
 | ![Dashboard](screenshots/dashboard.webp) | ![Manual Drive](screenshots/manual-drive.webp) | ![Cleaning History](screenshots/cleaning-history.webp) |
 
-| Clean Map | Schedule | Settings |
-|:---:|:---:|:---:|
+|                Clean Map                 |                Schedule                |                Settings                |
+|:----------------------------------------:|:--------------------------------------:|:--------------------------------------:|
 | ![Clean Map](screenshots/clean-map.webp) | ![Schedule](screenshots/schedule.webp) | ![Settings](screenshots/settings.webp) |
 
 ## Motivation
