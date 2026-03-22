@@ -6,7 +6,6 @@ declare const __GITHUB_API_BASE__: string | undefined;
 const GITHUB_API_BASE = typeof __GITHUB_API_BASE__ !== "undefined" ? __GITHUB_API_BASE__ : "https://api.github.com";
 const GITHUB_RELEASES_URL = `${GITHUB_API_BASE}/repos/renjfk/OpenNeato/releases/latest`;
 const RELEASE_URL_BASE = "https://github.com/renjfk/OpenNeato/releases/tag/";
-const RELEASE_DL_BASE = "https://github.com/renjfk/OpenNeato/releases/download/";
 const LS_KEY_LATEST = "update_latest_version";
 const LS_KEY_TIMESTAMP = "update_last_check";
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -18,7 +17,6 @@ interface GitHubRelease {
 export interface UpdateInfo {
     version: string;
     url: string;
-    firmwareUrl: string | null;
 }
 
 // Strip leading "v", trim whitespace, drop suffix after "-" so that
@@ -103,7 +101,7 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
 // Read stored update info. Returns null if no update available or if the
 // running version already matches/exceeds the stored version (handles the
 // case where user updated but the flag file lingers).
-export function getAvailableUpdate(currentVersion: string, chip?: string): UpdateInfo | null {
+export function getAvailableUpdate(currentVersion: string): UpdateInfo | null {
     const stored = localStorage.getItem(LS_KEY_LATEST);
     if (!stored) return null;
 
@@ -113,9 +111,5 @@ export function getAvailableUpdate(currentVersion: string, chip?: string): Updat
         return null;
     }
 
-    // Chip from ESP.getChipModel() e.g. "ESP32-C3" → "esp32-c3" for release filenames
-    const slug = chip?.toLowerCase() ?? null;
-    const firmwareUrl = slug ? `${RELEASE_DL_BASE}v${stored}/openneato-${slug}-firmware.bin` : null;
-
-    return { version: stored, url: `${RELEASE_URL_BASE}v${stored}`, firmwareUrl };
+    return { version: stored, url: `${RELEASE_URL_BASE}v${stored}` };
 }
