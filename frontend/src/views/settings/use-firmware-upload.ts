@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../../api";
 import type { ErrorStackHandle } from "../../components/error-banner";
 import { md5 } from "../../md5";
+import { sha256 } from "../../sha256";
 
 type UploadStatus = "idle" | "hashing" | "uploading" | "done";
 
@@ -28,12 +29,6 @@ function parseChipFromBin(buf: ArrayBuffer): string | null {
     // Extended header starts at offset 8; chip ID is at byte 4 of extended header = offset 12
     const chipId = view.getUint8(12) & 0xff;
     return CHIP_IDS[chipId] ?? null;
-}
-
-function hexFromBuffer(buf: ArrayBuffer): string {
-    return Array.from(new Uint8Array(buf))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
 }
 
 // Parse GoReleaser checksums.txt format: "<sha256hex>  <filename>\n" per line.
@@ -145,11 +140,11 @@ export function useFirmwareUpload(
     );
 
     // Compute SHA-256 of firmware file and check against loaded checksums.
+    // Uses pure-JS sha256 — crypto.subtle is unavailable over plain HTTP (non-secure context).
     const verifyFirmwareFile = useCallback(async (fw: File, checksums: Map<string, string>) => {
         const buf = await fw.arrayBuffer();
-        const sha256Digest = await crypto.subtle.digest("SHA-256", buf);
-        const sha256 = hexFromBuffer(sha256Digest);
-        setChecksumResult(verifyChecksum(checksums, fw.name, sha256));
+        const hash = sha256(buf);
+        setChecksumResult(verifyChecksum(checksums, fw.name, hash));
     }, []);
 
     const selectChecksumFile = useCallback(
