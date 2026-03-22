@@ -140,7 +140,14 @@ Download the flash tool for your platform from the
 - `openneato-flash_Windows_x86_64.exe` — Windows
 
 These are standalone binaries — no extraction needed. On macOS/Linux you may need to
-`chmod +x openneato-flash-*` first.
+`chmod +x openneato-flash_*` first.
+
+> [!TIP]
+> On macOS, if you get a "cannot be opened because the developer cannot be verified" error,
+> remove the quarantine attribute:
+> ```bash
+> xattr -d com.apple.quarantine ~/Downloads/openneato-flash_Darwin_arm64
+> ```
 
 > [!WARNING]
 > The flash tool has been primarily tested on macOS. Linux and Windows builds are provided but
