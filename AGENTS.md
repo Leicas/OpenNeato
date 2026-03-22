@@ -61,10 +61,12 @@ pio run -e c3-debug                        # Build
 pio run -e c3-debug -t upload              # Upload via USB
 pio run -e c3-debug -t upload -t monitor   # Upload + serial monitor
 pio run -e c3-release                      # Release build (no serial logging)
+python scripts/check_format.py             # clang-format check (--fix to auto-fix)
 pio check -e c3-debug                      # Static analysis (clang-tidy)
 ```
 
-Verify firmware changes: `pio run -e c3-debug` + `pio check -e c3-debug` with zero defects.
+Verify firmware changes: `pio run -e c3-debug` + `python scripts/check_format.py` +
+`pio check -e c3-debug` with zero defects.
 
 ### Frontend
 
@@ -83,6 +85,26 @@ cd flash
 go build -o openneato-flash .    # Build
 golangci-lint run ./...          # Lint
 ```
+
+### Firmware Upload Integrity
+
+OTA firmware upload uses two separate hash checks:
+
+- **Transfer integrity (MD5):** Browser computes MD5 of the firmware file via
+  `md5.ts` (pure-JS RFC 1321 — `crypto.subtle` dropped MD5 support in most
+  browsers) and sends it as `?hash=<md5>`. The ESP32 `Update` library computes
+  MD5 incrementally over received chunks and verifies at `Update.end(true)`.
+- **Download integrity (SHA-256):** User optionally provides the `checksums.txt`
+  from the GitHub Release (GoReleaser-generated, SHA-256). The browser computes
+  SHA-256 of the firmware file via `crypto.subtle` and compares against the
+  checksums file before upload. Mismatch blocks upload; missing checksums file
+  triggers a confirmation dialog warning about unverified firmware.
+
+The mock server (`frontend/mock/server.js`) mirrors the MD5 verification using
+Node's `crypto.createHash("md5")`.
+
+GoReleaser config (`.goreleaser.yml`) includes firmware `.bin` and full tarball
+in `checksum.extra_files` so they appear in the published `checksums.txt`.
 
 ## Zero-Dependency Policy
 
@@ -116,9 +138,6 @@ CSS frameworks, routing, or HTTP wrapper libraries.
 - **Reset**: GPIO9, hold 5s for factory reset
 
 ## Planned / In-Progress
-
-**Project README** — Write `README.md` with project description, screenshots,
-feature list, quick start guide, and links to installation docs and releases.
 
 **Installation guide** — Write `docs/installation.md` covering required materials
 (ESP32-C3 board, jumper wires, debug port pinout), hardware assembly with photos,

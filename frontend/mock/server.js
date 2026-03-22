@@ -3,6 +3,7 @@
 // Runs as a Vite plugin — hooks into Vite's dev server middleware
 // To test different scenarios, edit the `state` object directly and reload
 
+const { createHash } = require("node:crypto");
 const { execSync } = require("node:child_process");
 const { readFileSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
@@ -821,7 +822,7 @@ const handleRequest = async (req, res) => {
         return sendError(res, "method not allowed", 405);
     }
 
-    // POST /api/firmware/update — validate chip ID, simulate flash write, reboot
+    // POST /api/firmware/update?hash=<md5> — validate chip ID + MD5, simulate flash write, reboot
     if (req.method === "POST" && path === "/api/firmware/update") {
         const MOCK_CHIP_ID = 5; // ESP32-C3
         const chunks = [];
@@ -833,12 +834,24 @@ const handleRequest = async (req, res) => {
         const body = Buffer.concat(chunks);
         const bodyStr = body.toString("binary");
         const headerEnd = bodyStr.indexOf("\r\n\r\n");
-        if (headerEnd !== -1) {
-            const fileStart = headerEnd + 4;
+        // Find end of file content (before the closing boundary)
+        const boundaryEnd = bodyStr.lastIndexOf("\r\n--");
+        const fileStart = headerEnd !== -1 ? headerEnd + 4 : -1;
+        const fileEnd = boundaryEnd > fileStart ? boundaryEnd : body.length;
+        if (fileStart !== -1) {
             if (body.length >= fileStart + 16) {
                 const chipId = body[fileStart + 12];
                 if (chipId !== MOCK_CHIP_ID) {
                     return sendError(res, "Firmware chip mismatch: file targets a different ESP32 variant", 400);
+                }
+            }
+            // MD5 verification — mirrors ESP32 Update.setMD5 / Update.end(true) behavior
+            const expectedMd5 = query.hash || "";
+            if (expectedMd5) {
+                const fileBytes = body.subarray(fileStart, fileEnd);
+                const actualMd5 = createHash("md5").update(fileBytes).digest("hex");
+                if (actualMd5 !== expectedMd5.toLowerCase()) {
+                    return sendError(res, "MD5 mismatch: firmware integrity check failed", 400);
                 }
             }
         }

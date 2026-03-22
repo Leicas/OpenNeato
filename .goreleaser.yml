@@ -48,6 +48,9 @@ release:
 
 checksum:
   name_template: checksums.txt
+  extra_files:
+    - glob: ./release/*-firmware.bin
+    - glob: ./release/*-full.tar.gz
 
 changelog:
   sort: asc

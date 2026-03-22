@@ -123,6 +123,7 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
     const [showRestartConfirm, setShowRestartConfirm] = useState(false);
     const [showFormatConfirm, setShowFormatConfirm] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
+    const [showUploadConfirm, setShowUploadConfirm] = useState(false);
     const [restarting, setRestarting] = useState(false);
     const pendingNav = useRef<string | null>(null);
 
@@ -600,9 +601,53 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                                     </div>
                                 )}
                                 {fw.file && !fw.chipError && (
-                                    <button type="button" class="fw-upload-btn" onClick={fw.startUpload}>
-                                        Upload & Install
-                                    </button>
+                                    <>
+                                        <label class="fw-file-label">
+                                            <input
+                                                type="file"
+                                                accept=".txt"
+                                                class="fw-file-input"
+                                                onChange={(e) =>
+                                                    fw.selectChecksumFile(
+                                                        (e.target as HTMLInputElement).files?.[0] ?? null,
+                                                    )
+                                                }
+                                            />
+                                            <span class={`fw-file-btn${fw.checksumFile ? " has-file" : ""}`}>
+                                                {fw.checksumFile
+                                                    ? fw.checksumFile.name
+                                                    : "Select checksums.txt (optional)"}
+                                            </span>
+                                        </label>
+                                        {fw.checksumResult === "match" && (
+                                            <div class="fw-checksum-status fw-checksum-ok">Checksum verified</div>
+                                        )}
+                                        {fw.checksumResult === "mismatch" && (
+                                            <div class="fw-checksum-status fw-checksum-fail">
+                                                Checksum mismatch — firmware file may be corrupted
+                                            </div>
+                                        )}
+                                        {fw.checksumResult === "not-found" && (
+                                            <div class="fw-checksum-status fw-checksum-warn">
+                                                Firmware filename not found in checksums file
+                                            </div>
+                                        )}
+                                        {fw.canUpload && (
+                                            <button
+                                                type="button"
+                                                class="fw-upload-btn"
+                                                onClick={() => {
+                                                    if (fw.checksumVerified) {
+                                                        fw.startUpload();
+                                                    } else {
+                                                        setShowUploadConfirm(true);
+                                                    }
+                                                }}
+                                            >
+                                                Upload & Install
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                             </>
                         )}
@@ -751,6 +796,18 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                     disabled={restarting}
                     onConfirm={handleFactoryReset}
                     onCancel={() => setShowResetConfirm(false)}
+                />
+            )}
+
+            {showUploadConfirm && (
+                <ConfirmDialog
+                    message="No checksums.txt provided. A corrupted firmware file could brick your device. Upload anyway?"
+                    confirmLabel="Upload"
+                    onConfirm={() => {
+                        setShowUploadConfirm(false);
+                        fw.startUpload();
+                    }}
+                    onCancel={() => setShowUploadConfirm(false)}
                 />
             )}
 

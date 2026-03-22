@@ -1135,6 +1135,24 @@ body {
     font-weight: 600;
 }
 
+.fw-checksum-status {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.fw-checksum-ok {
+    color: var(--green);
+}
+
+.fw-checksum-fail {
+    color: var(--red);
+}
+
+.fw-checksum-warn {
+    color: var(--amber);
+}
+
 .fw-upload-btn {
     width: 100%;
     margin-top: 12px;

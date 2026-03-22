@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../../api";
 import type { ErrorStackHandle } from "../../components/error-banner";
+import { md5 } from "../../md5";
 
 type UploadStatus = "idle" | "hashing" | "uploading" | "done";
+
+// Checksum verification result after comparing firmware SHA-256 against checksums.txt.
+// "match" = firmware hash found and matches, "mismatch" = found but different,
+// "not-found" = checksums file loaded but firmware filename not in it.
+type ChecksumResult = "match" | "mismatch" | "not-found";
 
 // ESP32 image header: byte at offset 12 (extended header) contains chip ID.
 // Mapping from ESP-IDF esp_image_format.h:
@@ -24,25 +30,33 @@ function parseChipFromBin(buf: ArrayBuffer): string | null {
     return CHIP_IDS[chipId] ?? null;
 }
 
-async function computeMd5(file: File): Promise<string> {
-    const buf = await file.arrayBuffer();
-    const hash = await crypto.subtle.digest("MD5", buf);
-    return Array.from(new Uint8Array(hash))
+function hexFromBuffer(buf: ArrayBuffer): string {
+    return Array.from(new Uint8Array(buf))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
 }
 
-// crypto.subtle.digest may not support MD5 in all browsers.
-// Fallback: simple MD5 implementation for firmware files.
-async function computeMd5Fallback(file: File): Promise<string> {
-    try {
-        return await computeMd5(file);
-    } catch {
-        // MD5 not available in crypto.subtle (some browsers removed it).
-        // Use SparkMD5-style manual computation — but we have zero-dep policy.
-        // Instead, send empty hash and let the server skip MD5 validation.
-        return "";
+// Parse GoReleaser checksums.txt format: "<sha256hex>  <filename>\n" per line.
+// Returns a map of lowercase filename -> lowercase sha256 hex.
+function parseChecksums(text: string): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        // GoReleaser format: "hash  filename" (two spaces between)
+        const match = trimmed.match(/^([0-9a-fA-F]{64})\s+(.+)$/);
+        if (match) {
+            map.set(match[2].trim().toLowerCase(), match[1].toLowerCase());
+        }
     }
+    return map;
+}
+
+// Verify firmware file SHA-256 against a parsed checksums map.
+function verifyChecksum(checksums: Map<string, string>, firmwareName: string, sha256: string): ChecksumResult {
+    const expected = checksums.get(firmwareName.toLowerCase());
+    if (expected === undefined) return "not-found";
+    return expected === sha256.toLowerCase() ? "match" : "mismatch";
 }
 
 export function useFirmwareUpload(
@@ -52,7 +66,12 @@ export function useFirmwareUpload(
 ) {
     const [file, setFile] = useState<File | null>(null);
     const [chipError, setChipError] = useState<string | null>(null);
+    const [checksumResult, setChecksumResult] = useState<ChecksumResult | null>(null);
+    const [checksumFile, setChecksumFile] = useState<File | null>(null);
     const [status, setStatus] = useState<UploadStatus>("idle");
+
+    // Parsed checksums map, kept in ref to avoid re-renders.
+    const checksumsMap = useRef<Map<string, string> | null>(null);
 
     // Smoothed progress: XHR fires progress in big jumps (browser buffers writes),
     // so we animate the displayed value toward the real target at a steady rate.
@@ -94,6 +113,7 @@ export function useFirmwareUpload(
         (f: File | null) => {
             setFile(f);
             setChipError(null);
+            setChecksumResult(null);
             setStatus("idle");
             setDisplayProgress(0);
             stopProgressAnim();
@@ -115,8 +135,48 @@ export function useFirmwareUpload(
                 }
             };
             reader.readAsArrayBuffer(f.slice(0, 16));
+
+            // If checksums already loaded, verify against new firmware file
+            if (checksumsMap.current) {
+                verifyFirmwareFile(f, checksumsMap.current);
+            }
         },
         [deviceChip, stopProgressAnim],
+    );
+
+    // Compute SHA-256 of firmware file and check against loaded checksums.
+    const verifyFirmwareFile = useCallback(async (fw: File, checksums: Map<string, string>) => {
+        const buf = await fw.arrayBuffer();
+        const sha256Digest = await crypto.subtle.digest("SHA-256", buf);
+        const sha256 = hexFromBuffer(sha256Digest);
+        setChecksumResult(verifyChecksum(checksums, fw.name, sha256));
+    }, []);
+
+    const selectChecksumFile = useCallback(
+        async (f: File | null) => {
+            if (!f) {
+                setChecksumFile(null);
+                checksumsMap.current = null;
+                setChecksumResult(null);
+                return;
+            }
+
+            const text = await f.text();
+            const parsed = parseChecksums(text);
+            if (parsed.size === 0) {
+                errorStack.push("Could not parse checksums file — expected GoReleaser checksums.txt format");
+                return;
+            }
+
+            setChecksumFile(f);
+            checksumsMap.current = parsed;
+
+            // If firmware file already selected, verify immediately
+            if (file) {
+                await verifyFirmwareFile(file, parsed);
+            }
+        },
+        [file, errorStack, verifyFirmwareFile],
     );
 
     const startUpload = useCallback(async () => {
@@ -124,11 +184,12 @@ export function useFirmwareUpload(
 
         try {
             setStatus("hashing");
-            const md5 = await computeMd5Fallback(file);
+            const buf = await file.arrayBuffer();
+            const fileMd5 = md5(buf);
 
             setStatus("uploading");
             startProgressAnim();
-            await api.uploadFirmware(file, md5, onUploadProgress);
+            await api.uploadFirmware(file, fileMd5, onUploadProgress);
 
             stopProgressAnim();
             setDisplayProgress(100);
@@ -141,12 +202,21 @@ export function useFirmwareUpload(
         }
     }, [file, errorStack, startRebootFlow, startProgressAnim, stopProgressAnim, onUploadProgress]);
 
+    // Upload blocked only on chip mismatch or checksum mismatch.
+    const checksumVerified = checksumResult === "match";
+    const canUpload = !!file && !chipError && checksumResult !== "mismatch";
+
     return {
         file,
         chipError,
+        checksumFile,
+        checksumResult,
+        checksumVerified,
+        canUpload,
         status,
         progress: displayProgress,
         selectFile,
+        selectChecksumFile,
         startUpload,
     };
 }
