@@ -155,6 +155,8 @@ When creating issues, please follow our simple naming convention:
 
 Manual releases via opencode; see [RELEASE_PROCESS.md](RELEASE_PROCESS.md).
 
+Prereleases can be triggered from any PR by commenting `/prerelease` (collaborators only).
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

@@ -27,6 +27,10 @@ Three top-level components: `firmware/` (ESP32 C/C++), `frontend/` (Preact SPA),
 - Release packaging: PIO post-build hook in `scripts/env_config.py` auto-generates
   firmware release artifacts (`*-firmware.bin`, `*-full.tar.gz`) for `*-release` envs.
   Chip name is read from `CHIP_MODEL` build flag. No separate shell script needed.
+- Prerelease: `/prerelease` comment on a PR (collaborators only) or `workflow_dispatch`
+  from the PR branch. Auto-generates tag `v<base>-pr<number>.<sha>` based on the latest
+  release, builds all artifacts via GoReleaser, publishes as GitHub prerelease. Previous
+  prereleases for the same PR are auto-cleaned.
 
 ### Data Logging
 

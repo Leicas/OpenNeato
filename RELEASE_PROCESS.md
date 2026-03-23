@@ -94,6 +94,34 @@ opencode will:
 - **Preview before action** - human approval required
 - **Full build pipeline** - frontend, firmware, and flash tool all built in one workflow
 
+## Prereleases
+
+Prereleases let you build and publish full release artifacts from a PR branch for testing before merging.
+
+### Triggering
+
+**From the PR page:** Comment `/prerelease` on the PR. Only repository collaborators (OWNER, MEMBER, COLLABORATOR) can trigger this.
+
+**From the CLI:**
+```bash
+gh workflow run prerelease.yml -r <branch-name>
+```
+
+### How it works
+
+1. Resolves the PR number and head commit from the branch
+2. Computes a tag based on the latest release: `v<base>-pr<number>.<sha>` (e.g. `v0.1-pr42.abc1234`)
+3. Deletes any previous prerelease for the same PR (tag + release)
+4. Builds frontend, firmware, and flash tool
+5. Publishes a GitHub prerelease via GoReleaser
+6. Posts a comment on the PR with the release link (when triggered via `/prerelease`)
+
+### Notes
+
+- No CI gate — trigger whenever you want a test build
+- Previous prereleases for the same PR are automatically cleaned up
+- The base version comes from the latest non-prerelease GitHub release (falls back to `v0.0`)
+
 ## Troubleshooting
 
 - **gh CLI issues**: Run `gh auth status` to verify authentication
