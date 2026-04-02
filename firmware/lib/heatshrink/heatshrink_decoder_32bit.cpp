@@ -307,7 +307,7 @@ static HSD_state st_yield_backref(heatshrink_decoder *hsd,
         ASSERT(count <= (size_t)(1 << BACKREF_COUNT_BITS(hsd)));
 
         {
-            uint32_t di = hsd->head_index;
+            uint32_t di = hsd->head_index & mask;
             const uint32_t dend = (di + count) & mask;
             uint32_t si = (di - hsd->output_index) & mask;
             // if(count >= 4 && dend > di && (si + count) <= mask ) {
