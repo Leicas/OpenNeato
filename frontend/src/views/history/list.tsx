@@ -45,7 +45,7 @@ function SessionCard({ session, summary, filename, index, active, onSelect, onDe
                             <span>{summary.areaCovered.toFixed(1)}m&sup2;</span>
                             <span>
                                 <Icon svg={boltSvg} />
-                                {session?.battery ?? "?"}%
+                                {session?.battery ?? "?"}% &rarr; {summary.batteryEnd ?? "?"}%
                             </span>
                         </div>
                     )}

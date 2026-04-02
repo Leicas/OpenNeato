@@ -30,34 +30,38 @@ export function HistoryItemView({ file, map, recording }: HistoryItemViewProps) 
         return () => window.removeEventListener("resize", handleResize);
     }, [map, recording]);
 
+    // Prefer list metadata summary (available immediately), fall back to
+    // the summary parsed from the full JSONL data (available after fetch)
+    const summary = file.summary ?? map?.summary ?? null;
+    const session = file.session ?? map?.session ?? null;
+
     return (
         <>
-            {/* Summary bar - use list metadata (available immediately) */}
-            {file.summary && (
+            {/* Summary bar */}
+            {summary && (
                 <div class="history-detail-stats">
                     <div class="history-stat">
                         <span class="history-stat-label">Duration</span>
-                        <span class="history-stat-value">{formatDuration(file.summary.duration)}</span>
+                        <span class="history-stat-value">{formatDuration(summary.duration)}</span>
                     </div>
                     <div class="history-stat">
                         <span class="history-stat-label">Distance</span>
-                        <span class="history-stat-value">{file.summary.distanceTraveled.toFixed(1)}m</span>
+                        <span class="history-stat-value">{summary.distanceTraveled.toFixed(1)}m</span>
                     </div>
                     <div class="history-stat">
                         <span class="history-stat-label">Area</span>
-                        <span class="history-stat-value">{file.summary.areaCovered.toFixed(1)}m&sup2;</span>
+                        <span class="history-stat-value">{summary.areaCovered.toFixed(1)}m&sup2;</span>
                     </div>
                     <div class="history-stat">
                         <span class="history-stat-label">Battery</span>
                         <span class="history-stat-value">
-                            {file.session?.battery ?? "?"}% &rarr;{" "}
-                            {file.summary.batteryEnd ?? file.summary.battery ?? "?"}%
+                            {session?.battery ?? "?"}% &rarr; {summary.batteryEnd ?? summary.battery ?? "?"}%
                         </span>
                     </div>
-                    {file.summary.recharges > 0 && (
+                    {summary.recharges > 0 && (
                         <div class="history-stat">
                             <span class="history-stat-label">Recharges</span>
-                            <span class="history-stat-value">{file.summary.recharges}</span>
+                            <span class="history-stat-value">{summary.recharges}</span>
                         </div>
                     )}
                 </div>

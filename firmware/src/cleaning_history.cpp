@@ -847,37 +847,45 @@ void CleaningHistory::readFirstLastLines(const String& path, bool compressed, St
     lastLine = "";
 
     if (compressed) {
-        // Decompress fully into a String (history files are tiny, 2-5KB)
+        // Stream-decompress keeping only the first and last lines in memory
+        // to avoid buffering the entire file (large sessions can exceed 100KB
+        // decompressed which exhausts ESP32-C3 heap).
         File f = LittleFS.open(path, FILE_READ);
         if (!f)
             return;
         CompressedLogReader reader(std::move(f));
-        String content;
         uint8_t buf[256];
         size_t n;
+        bool firstDone = false;
+        // Current incomplete line being assembled from chunks
+        String current;
         while ((n = reader.read(buf, sizeof(buf))) > 0) {
-            content += String(reinterpret_cast<const char *>(buf), n);
+            for (size_t i = 0; i < n; i++) {
+                char c = static_cast<char>(buf[i]);
+                if (c == '\n') {
+                    current.trim();
+                    if (current.length() > 0) {
+                        if (!firstDone) {
+                            firstLine = current;
+                            firstDone = true;
+                        }
+                        // Always overwrite lastLine with the most recent non-empty line
+                        lastLine = current;
+                    }
+                    current = "";
+                } else {
+                    current += c;
+                }
+            }
         }
-        // Split by newline, take first and last non-empty lines
-        int first = content.indexOf('\n');
-        if (first < 0) {
-            firstLine = content;
-            firstLine.trim();
-            return;
+        // Handle final chunk without trailing newline
+        current.trim();
+        if (current.length() > 0) {
+            if (!firstDone) {
+                firstLine = current;
+            }
+            lastLine = current;
         }
-        firstLine = content.substring(0, first);
-        firstLine.trim();
-        // Find last non-empty line by scanning backward
-        int end = content.length() - 1;
-        while (end >= 0 && (content[end] == '\n' || content[end] == '\r'))
-            end--;
-        if (end < 0)
-            return;
-        int lastNl = content.lastIndexOf('\n', end);
-        if (lastNl < 0)
-            return; // Only one line
-        lastLine = content.substring(lastNl + 1, end + 1);
-        lastLine.trim();
     } else {
         // Plain .jsonl — read first line directly, seek backward for last line
         File f = LittleFS.open(path, FILE_READ);
