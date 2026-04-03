@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import aiohttp
 import async_timeout
 
 from homeassistant.exceptions import HomeAssistantError
+
+_LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = 30  # seconds — ESP32 can be slow when serial queue is busy
 
@@ -42,20 +45,28 @@ class OpenNeatoApiClient:
     async def _get(self, path: str) -> dict[str, Any]:
         """Perform a GET request and return parsed JSON."""
         url = f"{self._base_url}{path}"
+        _LOGGER.debug("GET %s", url)
         try:
             async with async_timeout.timeout(TIMEOUT):
                 async with self._session.get(url) as response:
+                    _LOGGER.debug(
+                        "GET %s -> %s (%s)",
+                        path, response.status, response.content_type,
+                    )
                     response.raise_for_status()
                     return await response.json()
         except aiohttp.ClientConnectionError as err:
+            _LOGGER.warning("Connection error on GET %s: %s", path, err)
             raise OpenNeatoConnectionError(
                 f"Unable to connect to OpenNeato at {self._host}: {err}"
             ) from err
         except aiohttp.ClientResponseError as err:
+            _LOGGER.warning("HTTP %s on GET %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
                 f"API error from {path}: {err.status} {err.message}"
             ) from err
         except TimeoutError as err:
+            _LOGGER.warning("Timeout on GET %s (limit %ss)", path, TIMEOUT)
             raise OpenNeatoConnectionError(
                 f"Timeout connecting to OpenNeato at {self._host}"
             ) from err
@@ -65,23 +76,31 @@ class OpenNeatoApiClient:
     ) -> dict[str, Any] | str:
         """Perform a POST request with optional query params."""
         url = f"{self._base_url}{path}"
+        _LOGGER.debug("POST %s params=%s", url, params)
         try:
             async with async_timeout.timeout(TIMEOUT):
                 async with self._session.post(url, params=params) as response:
+                    _LOGGER.debug(
+                        "POST %s -> %s (%s)",
+                        path, response.status, response.content_type,
+                    )
                     response.raise_for_status()
                     content_type = response.content_type or ""
                     if "json" in content_type:
                         return await response.json()
                     return await response.text()
         except aiohttp.ClientConnectionError as err:
+            _LOGGER.warning("Connection error on POST %s: %s", path, err)
             raise OpenNeatoConnectionError(
                 f"Unable to connect to OpenNeato at {self._host}: {err}"
             ) from err
         except aiohttp.ClientResponseError as err:
+            _LOGGER.warning("HTTP %s on POST %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
                 f"API error from POST {path}: {err.status} {err.message}"
             ) from err
         except TimeoutError as err:
+            _LOGGER.warning("Timeout on POST %s (limit %ss)", path, TIMEOUT)
             raise OpenNeatoConnectionError(
                 f"Timeout connecting to OpenNeato at {self._host}"
             ) from err
@@ -89,20 +108,28 @@ class OpenNeatoApiClient:
     async def _put(self, path: str, json_data: dict[str, Any]) -> dict[str, Any]:
         """Perform a PUT request with a JSON body."""
         url = f"{self._base_url}{path}"
+        _LOGGER.debug("PUT %s body=%s", url, json_data)
         try:
             async with async_timeout.timeout(TIMEOUT):
                 async with self._session.put(url, json=json_data) as response:
+                    _LOGGER.debug(
+                        "PUT %s -> %s (%s)",
+                        path, response.status, response.content_type,
+                    )
                     response.raise_for_status()
                     return await response.json()
         except aiohttp.ClientConnectionError as err:
+            _LOGGER.warning("Connection error on PUT %s: %s", path, err)
             raise OpenNeatoConnectionError(
                 f"Unable to connect to OpenNeato at {self._host}: {err}"
             ) from err
         except aiohttp.ClientResponseError as err:
+            _LOGGER.warning("HTTP %s on PUT %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
                 f"API error from PUT {path}: {err.status} {err.message}"
             ) from err
         except TimeoutError as err:
+            _LOGGER.warning("Timeout on PUT %s (limit %ss)", path, TIMEOUT)
             raise OpenNeatoConnectionError(
                 f"Timeout connecting to OpenNeato at {self._host}"
             ) from err

@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import OpenNeatoApiClient, OpenNeatoConnectionError
 from .const import CONF_HOST, DOMAIN
@@ -30,21 +30,32 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OpenNeato from a config entry."""
     host = entry.data[CONF_HOST]
-    # Create a dedicated session that bypasses any system proxy settings.
-    # HA's shared session inherits HTTP_PROXY from the environment, which
-    # can route local requests through a proxy (e.g. Squid on OPNsense)
-    # that blocks or times out on the ESP32's API endpoints.
-    session = async_create_clientsession(hass)
+    session = async_get_clientsession(hass)
     api = OpenNeatoApiClient(host, session)
 
     # Fetch version info for device_info — raises ConfigEntryNotReady on failure
+    _LOGGER.debug("Connecting to OpenNeato at %s", host)
     try:
         firmware_info = await api.get_firmware_version()
         robot_info = await api.get_robot_version()
     except OpenNeatoConnectionError as err:
+        _LOGGER.warning("Cannot connect to OpenNeato at %s: %s", host, err)
         raise ConfigEntryNotReady(
             f"Cannot connect to OpenNeato at {host}: {err}"
         ) from err
+    except Exception as err:
+        _LOGGER.exception("Unexpected error connecting to OpenNeato at %s", host)
+        raise ConfigEntryNotReady(
+            f"Unexpected error connecting to OpenNeato at {host}: {err}"
+        ) from err
+
+    _LOGGER.info(
+        "Connected to OpenNeato at %s — %s (%s) firmware %s",
+        host,
+        robot_info.get("modelName"),
+        robot_info.get("serialNumber"),
+        firmware_info.get("version"),
+    )
 
     serial = robot_info.get("serialNumber", entry.data.get("serial", "unknown"))
     model = robot_info.get("modelName", entry.data.get("model"))
