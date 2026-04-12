@@ -159,6 +159,22 @@ void CleaningHistory::stopCollection() {
     // Flush any buffered snapshots before writing summary
     flushWriteBuffer();
 
+    // Discard sessions that are too short to produce a useful map
+    if (snapshotCount < HISTORY_MIN_SNAPSHOTS) {
+        if (activeFile) {
+            activeFile.close();
+        }
+        SPIFFS.remove(activeFilePath);
+
+        LOG("HIST", "Session discarded (%u snapshots < %d minimum)", snapshotCount, HISTORY_MIN_SNAPSHOTS);
+        dataLogger.logGenericEvent("history_discard", {{"snapshots", String(snapshotCount), FIELD_INT}});
+
+        collecting = false;
+        recharging = false;
+        setInterval(HISTORY_INTERVAL_IDLE_MS);
+        return;
+    }
+
     // Fetch final battery level for summary
     neato.getCharger([this](bool ok, const ChargerData& charger) {
         int batteryEnd = ok ? charger.fuelPercent : -1;
@@ -195,7 +211,7 @@ void CleaningHistory::stopCollection() {
             setInterval(HISTORY_COMPRESS_INTERVAL_MS);
             LOG("HIST", "Starting compression: %s -> %s", compressSrcPath.c_str(), compressDstPath.c_str());
         } else {
-            // Compression failed — keep raw file
+            // Compression failed - keep raw file
             if (compressSrc)
                 compressSrc.close();
             if (compressDst)
