@@ -16,5 +16,52 @@
     "abort": {
       "already_configured": "This robot is already configured."
     }
+  },
+  "entity": {
+    "sensor": {
+      "battery_level": { "name": "Battery level" },
+      "battery_voltage": { "name": "Battery voltage" },
+      "external_voltage": { "name": "External voltage" },
+      "error_code": { "name": "Error code" },
+      "error_message": { "name": "Error message" },
+      "wifi_signal": { "name": "WiFi signal" },
+      "uptime": { "name": "Uptime" },
+      "free_heap": { "name": "Free heap" },
+      "storage_used": { "name": "Storage used" },
+      "brush_rpm": { "name": "Brush RPM" },
+      "vacuum_rpm": { "name": "Vacuum RPM" },
+      "side_brush_current": { "name": "Side brush current" },
+      "last_clean_duration": { "name": "Last clean duration" },
+      "last_clean_area": { "name": "Last clean area" },
+      "last_clean_distance": { "name": "Last clean distance" },
+      "last_clean_battery_used": { "name": "Last clean battery used" },
+      "last_clean_mode": { "name": "Last clean mode" },
+      "last_clean_ended": { "name": "Last clean ended" }
+    },
+    "binary_sensor": {
+      "charging": { "name": "Charging" },
+      "external_power": { "name": "External power" },
+      "battery_over_temp": { "name": "Battery over temperature" },
+      "battery_failure": { "name": "Battery failure" },
+      "empty_fuel": { "name": "Battery empty" },
+      "error": { "name": "Error" },
+      "ntp_synced": { "name": "NTP synced" }
+    },
+    "switch": {
+      "eco_mode": { "name": "Eco mode" },
+      "intense_clean": { "name": "Intense clean" },
+      "bin_full_detect": { "name": "Bin full detect" },
+      "schedule": { "name": "Schedule" }
+    },
+    "button": {
+      "restart": { "name": "Restart device" },
+      "format_fs": { "name": "Format filesystem" }
+    },
+    "number": {
+      "brush_rpm_setting": { "name": "Brush RPM" },
+      "vacuum_speed_setting": { "name": "Vacuum speed" },
+      "side_brush_power_setting": { "name": "Side brush power" },
+      "stall_threshold_setting": { "name": "Stall threshold" }
+    }
   }
 }
