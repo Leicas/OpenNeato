@@ -45,7 +45,8 @@ BUTTON_DESCRIPTIONS: tuple[OpenNeatoButtonEntityDescription, ...] = (
         translation_key="format_fs",
         name="Format filesystem",
         icon="mdi:harddisk-remove",
-        entity_category=EntityCategory.CONFIG,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         press_fn=lambda api: api.format_fs(),
     ),
 )

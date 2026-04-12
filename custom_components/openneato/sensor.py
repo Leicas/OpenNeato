@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -15,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     EntityCategory,
     UnitOfElectricPotential,
+    UnitOfLength,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
@@ -23,6 +25,17 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
 from .entity import OpenNeatoEntity
+
+
+def _latest_summary(history: Any) -> dict[str, Any] | None:
+    """Return the summary dict from the most recent completed session."""
+    if not isinstance(history, list):
+        return None
+    for session in history:
+        summary = session.get("summary")
+        if summary and isinstance(summary, dict):
+            return summary
+    return None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -116,6 +129,7 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
         native_unit_of_measurement="B",
         icon="mdi:memory",
         entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
     OpenNeatoSensorEntityDescription(
         key="system_fs_used",
@@ -126,6 +140,7 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
         native_unit_of_measurement="B",
         icon="mdi:harddisk",
         entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
     # ── Motors ──────────────────────────────────────────────────────────
     OpenNeatoSensorEntityDescription(
@@ -157,6 +172,81 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
         native_unit_of_measurement="mA",
         icon="mdi:current-dc",
         entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Last clean stats (from history) ──────────────────────────────
+    OpenNeatoSensorEntityDescription(
+        key="last_clean_duration",
+        translation_key="last_clean_duration",
+        name="Last clean duration",
+        section="history",
+        field="",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:timer-outline",
+        value_fn=lambda data: (s := _latest_summary(data)) and s.get("duration"),
+    ),
+    OpenNeatoSensorEntityDescription(
+        key="last_clean_area",
+        translation_key="last_clean_area",
+        name="Last clean area",
+        section="history",
+        field="",
+        native_unit_of_measurement="m\u00b2",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:texture-box",
+        value_fn=lambda data: (s := _latest_summary(data)) and s.get("areaCovered"),
+    ),
+    OpenNeatoSensorEntityDescription(
+        key="last_clean_distance",
+        translation_key="last_clean_distance",
+        name="Last clean distance",
+        section="history",
+        field="",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.METERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:map-marker-distance",
+        value_fn=lambda data: (s := _latest_summary(data)) and s.get("distanceTraveled"),
+    ),
+    OpenNeatoSensorEntityDescription(
+        key="last_clean_battery_used",
+        translation_key="last_clean_battery_used",
+        name="Last clean battery used",
+        section="history",
+        field="",
+        native_unit_of_measurement="%",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:battery-minus-outline",
+        value_fn=lambda data: (
+            s["batteryStart"] - s["batteryEnd"]
+            if (s := _latest_summary(data))
+            and s.get("batteryStart") is not None
+            and s.get("batteryEnd") is not None
+            else None
+        ),
+    ),
+    OpenNeatoSensorEntityDescription(
+        key="last_clean_mode",
+        translation_key="last_clean_mode",
+        name="Last clean mode",
+        section="history",
+        field="",
+        icon="mdi:robot-vacuum",
+        value_fn=lambda data: (s := _latest_summary(data)) and s.get("mode"),
+    ),
+    OpenNeatoSensorEntityDescription(
+        key="last_clean_ended",
+        translation_key="last_clean_ended",
+        name="Last clean ended",
+        section="history",
+        field="",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda data: (
+            datetime.fromtimestamp(s["time"], tz=timezone.utc)
+            if (s := _latest_summary(data)) and s.get("time")
+            else None
+        ),
     ),
 )
 
@@ -196,10 +286,15 @@ class OpenNeatoSensor(OpenNeatoEntity, SensorEntity):
         section_data = self.coordinator.data.get(
             self.entity_description.section, {}
         )
-        value = section_data.get(self.entity_description.field)
         if self.entity_description.value_fn is not None:
-            return self.entity_description.value_fn(value)
-        return value
+            # History sensors (field="") pass the whole section (a list);
+            # field-based sensors pass the extracted field value.
+            if self.entity_description.field:
+                return self.entity_description.value_fn(
+                    section_data.get(self.entity_description.field)
+                )
+            return self.entity_description.value_fn(section_data)
+        return section_data.get(self.entity_description.field)
 
 
 async def async_setup_entry(
