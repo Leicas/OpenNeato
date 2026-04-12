@@ -20,11 +20,21 @@ void CleaningHistory::tick() {
     // Run incremental compression when a session just finished
     if (compressing) {
         if (compressStep()) {
-            // Compression done — remove raw source
+            // Compression done - remove raw source and cache metadata
             compressSrc.close();
             compressDst.close();
             SPIFFS.remove(compressSrcPath);
             LOG("HIST", "Compression done: %s", compressDstPath.c_str());
+
+            // Cache session/summary from memory (avoids decompressing on next list request)
+            String hsName = compressDstPath;
+            int lastSlash = hsName.lastIndexOf('/');
+            if (lastSlash >= 0)
+                hsName = hsName.substring(lastSlash + 1);
+            metaCache[hsName] = {pendingSessionJson, pendingSummaryJson};
+            pendingSessionJson = "";
+            pendingSummaryJson = "";
+
             compressing = false;
             setInterval(HISTORY_INTERVAL_IDLE_MS);
         }
@@ -124,6 +134,8 @@ void CleaningHistory::resetSession() {
     sessionStartTime = 0;
     batteryStart = -1;
     recharging = false;
+    pendingSessionJson = "";
+    pendingSummaryJson = "";
 }
 
 void CleaningHistory::startCollection(const String& uiState) {
@@ -308,7 +320,9 @@ void CleaningHistory::writeSessionHeader() {
         fields.push_back({"time", String(static_cast<long>(sessionStartTime)), FIELD_INT});
     if (batteryStart >= 0)
         fields.push_back({"battery", String(batteryStart), FIELD_INT});
-    writeLine(fieldsToJson(fields));
+    String json = fieldsToJson(fields);
+    pendingSessionJson = json;
+    writeLine(json);
 }
 
 void CleaningHistory::writeSessionSummary(int batteryEnd) {
@@ -332,7 +346,9 @@ void CleaningHistory::writeSessionSummary(int batteryEnd) {
         fields.push_back({"batteryStart", String(batteryStart), FIELD_INT});
     if (batteryEnd >= 0)
         fields.push_back({"batteryEnd", String(batteryEnd), FIELD_INT});
-    writeLine(fieldsToJson(fields));
+    String json = fieldsToJson(fields);
+    pendingSummaryJson = json;
+    writeLine(json);
 }
 
 // -- Buffered file writing ---------------------------------------------------
@@ -853,6 +869,7 @@ void CleaningHistory::enforceLimits() {
         LOG("HIST", "Limit: deleting %s (files=%d, histBytes=%u/%u)", fullPath.c_str(), fileCount, histDirBytes,
             histBudget);
         SPIFFS.remove(fullPath);
+        metaCache.erase(oldest);
     }
 }
 
@@ -973,13 +990,20 @@ std::vector<HistorySessionInfo> CleaningHistory::listSessions() {
             info.size = entry.size();
             info.compressed = name.endsWith(".hs");
 
-            // Completed file on disk — read first/last lines
-            String firstLine, lastLine;
-            readFirstLastLines(fullPath, info.compressed, firstLine, lastLine);
-            info.session = firstLine;
-            // Only set summary if last line is actually a summary
-            if (lastLine.indexOf("\"type\":\"summary\"") >= 0) {
-                info.summary = lastLine;
+            // Use cached metadata if available (avoids decompressing .hs files)
+            auto cached = metaCache.find(name);
+            if (cached != metaCache.end()) {
+                info.session = cached->second.session;
+                info.summary = cached->second.summary;
+            } else {
+                String firstLine, lastLine;
+                readFirstLastLines(fullPath, info.compressed, firstLine, lastLine);
+                info.session = firstLine;
+                if (lastLine.indexOf("\"type\":\"summary\"") >= 0) {
+                    info.summary = lastLine;
+                }
+                // Cache for subsequent requests
+                metaCache[name] = {info.session, info.summary};
             }
 
             result.push_back(info);
@@ -1039,6 +1063,7 @@ bool CleaningHistory::deleteSession(const String& filename) {
     String path = String(HISTORY_DIR) + "/" + filename;
     if (!SPIFFS.exists(path))
         return false;
+    metaCache.erase(filename);
     return SPIFFS.remove(path);
 }
 
@@ -1057,6 +1082,7 @@ void CleaningHistory::deleteAllSessions() {
     for (const auto& p: paths) {
         SPIFFS.remove(p);
     }
+    metaCache.clear();
     LOG("HIST", "Deleted %u session files", paths.size());
 }
 
