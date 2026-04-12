@@ -8,10 +8,12 @@
 class NeatoSerial;
 class SettingsManager;
 class DataLogger;
+class CleaningHistory;
 
 class NotificationManager : public LoopTask {
 public:
-    NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger);
+    NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger,
+                        CleaningHistory& history);
 
     void begin();
 
@@ -24,6 +26,7 @@ private:
     NeatoSerial& neato;
     SettingsManager& settings;
     DataLogger& dataLogger;
+    CleaningHistory& history;
 
     // Previous state for transition detection
     String prevUiState;

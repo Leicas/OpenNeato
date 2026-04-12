@@ -204,6 +204,19 @@ void CleaningHistory::stopCollection() {
 
         float areaCovered = static_cast<float>(visitedCells.size()) * HISTORY_AREA_CELL_M * HISTORY_AREA_CELL_M;
 
+        // Snapshot stats for notification enrichment (survives resetSession)
+        time_t endTime = systemManager.now();
+        lastCleanStats.valid = true;
+        lastCleanStats.mode = cleanMode;
+        lastCleanStats.durationSec = (sessionStartTime > 0 && endTime > sessionStartTime)
+                                         ? static_cast<long>(endTime - sessionStartTime)
+                                         : 0;
+        lastCleanStats.areaCoveredM2 = areaCovered;
+        lastCleanStats.distanceM = totalDistance;
+        lastCleanStats.batteryStart = batteryStart;
+        lastCleanStats.batteryEnd = batteryEnd;
+        lastCleanStats.recharges = rechargeCount;
+
         LOG("HIST", "Collection stopped (%u snapshots, %.1fm², %d recharges)", snapshotCount, areaCovered,
             rechargeCount);
         dataLogger.logGenericEvent("history_stop", {{"snapshots", String(snapshotCount), FIELD_INT},

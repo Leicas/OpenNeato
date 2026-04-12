@@ -12,6 +12,19 @@
 class NeatoSerial;
 class SystemManager;
 
+// Last completed cleaning session stats — populated at end of each session,
+// read by NotificationManager to enrich "cleaning done" notifications.
+struct LastCleanStats {
+    bool valid = false;          // True after at least one completed session
+    String mode;                 // "house", "spot", or "manual"
+    long durationSec = 0;        // Cleaning duration in seconds
+    float areaCoveredM2 = 0.0f;  // Estimated area in square meters
+    float distanceM = 0.0f;      // Total distance traveled in meters
+    int batteryStart = -1;       // Battery % at session start
+    int batteryEnd = -1;         // Battery % at session end
+    int recharges = 0;           // Mid-clean recharge count
+};
+
 // Session metadata returned by listSessions() — includes the raw JSON of
 // the session header line and (if finished) the summary line so the frontend
 // can render list cards without fetching each file's full content.
@@ -44,6 +57,9 @@ public:
     bool deleteSession(const String& filename);
     void deleteAllSessions();
 
+    // Last completed session stats (for notification enrichment)
+    const LastCleanStats& getLastCleanStats() const { return lastCleanStats; }
+
     // Called by WebServer when a clean command is sent via API.
     // Switches to active polling so collection starts immediately
     // instead of waiting for the next idle-interval tick.
@@ -68,6 +84,9 @@ private:
     NeatoSerial& neato;
     DataLogger& dataLogger;
     SystemManager& systemManager;
+
+    // -- Last session stats (survives reset, updated at end of each session) --
+    LastCleanStats lastCleanStats;
 
     // -- State tracking ------------------------------------------------------
     String prevUiState;

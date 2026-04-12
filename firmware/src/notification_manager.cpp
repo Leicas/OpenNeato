@@ -1,4 +1,5 @@
 #include "notification_manager.h"
+#include "cleaning_history.h"
 #include "neato_serial.h"
 #include "settings_manager.h"
 #include "data_logger.h"
@@ -9,8 +10,9 @@
 #define NTFY_DEFAULT_HOST "ntfy.sh"
 #define NTFY_CONNECT_TIMEOUT_MS 3000
 
-NotificationManager::NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger) :
-    LoopTask(NOTIF_INTERVAL_IDLE_MS), neato(neato), settings(settings), dataLogger(logger) {
+NotificationManager::NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger,
+                                         CleaningHistory& history) :
+    LoopTask(NOTIF_INTERVAL_IDLE_MS), neato(neato), settings(settings), dataLogger(logger), history(history) {
     TaskRegistry::add(this);
 }
 
@@ -74,7 +76,18 @@ void NotificationManager::checkTransitions() {
                     bool dockingDone = wasDocking && wasCleaningBeforeDock && !isRecharging;
                     bool suspendedDone = (prevUiState.indexOf("CLEANINGSUSPENDED") >= 0) && wasCleaningBeforeDock;
                     if ((wasCleaning || dockingDone || suspendedDone) && isIdle && cfg.ntfyOnDone) {
-                        sendNotification(topic, "white_check_mark", hostname + ": Cleaning done");
+                        String msg = hostname + ": Cleaning done";
+                        const LastCleanStats& stats = history.getLastCleanStats();
+                        if (stats.valid) {
+                            long mins = stats.durationSec / 60;
+                            msg += "\n" + String(mins) + "min";
+                            msg += " | " + String(stats.areaCoveredM2, 1) + "m2";
+                            msg += " | " + String(stats.distanceM, 0) + "m";
+                            if (stats.batteryStart >= 0 && stats.batteryEnd >= 0) {
+                                msg += " | " + String(stats.batteryStart) + "% -> " + String(stats.batteryEnd) + "%";
+                            }
+                        }
+                        sendNotification(topic, "white_check_mark", msg);
                     }
 
                     // Clear tracking flag when leaving docking — but preserve it
