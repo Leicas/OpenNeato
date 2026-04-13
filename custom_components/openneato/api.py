@@ -180,6 +180,28 @@ class OpenNeatoApiClient:
         """Get the latest LDS LIDAR scan (360 points)."""
         return await self._get("/api/lidar")
 
+    async def get_history_session(self, filename: str) -> str:
+        """Download the raw JSONL data for a specific cleaning session."""
+        url = f"{self._base_url}/api/history/{filename}"
+        _LOGGER.debug("GET %s", url)
+        try:
+            async with timeout(TIMEOUT):
+                async with self._session.get(url) as response:
+                    response.raise_for_status()
+                    return await response.text()
+        except aiohttp.ClientConnectionError as err:
+            raise OpenNeatoConnectionError(
+                f"Unable to connect to OpenNeato at {self._host}: {err}"
+            ) from err
+        except aiohttp.ClientResponseError as err:
+            raise OpenNeatoApiError(
+                f"API error from /api/history/{filename}: {err.status} {err.message}"
+            ) from err
+        except TimeoutError as err:
+            raise OpenNeatoConnectionError(
+                f"Timeout connecting to OpenNeato at {self._host}"
+            ) from err
+
     # ── POST endpoints ───────────────────────────────────────────────
 
     async def clean(self, action: str) -> dict[str, Any] | str:
