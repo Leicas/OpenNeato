@@ -47,17 +47,26 @@ class OpenNeatoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "state", "charger", "error", "user_settings",
             "system", "settings", "motors", "history",
         )
+        # Critical endpoints — if ALL of these fail we consider the robot
+        # unreachable. Non-critical endpoints (like /api/error, which can hang
+        # if the robot's serial interface is stuck) are allowed to fail
+        # individually without breaking the integration.
+        critical_keys = {"state", "charger", "system"}
+
         data: dict[str, Any] = {}
         failures: list[str] = []
+        critical_failures: list[str] = []
 
         for key, result in zip(keys, results):
-            if isinstance(result, OpenNeatoConnectionError):
-                raise UpdateFailed(
-                    f"Cannot connect to OpenNeato: {result}"
-                ) from result
             if isinstance(result, Exception):
-                _LOGGER.warning("Failed to fetch %s: %s", key, result)
+                if isinstance(result, OpenNeatoConnectionError):
+                    _LOGGER.warning("Timeout/connection error on %s: %s", key, result)
+                else:
+                    _LOGGER.warning("Failed to fetch %s: %s", key, result)
                 failures.append(key)
+                if key in critical_keys:
+                    critical_failures.append(key)
+                # Fall back to previous value if we have one
                 if self.data and key in self.data:
                     data[key] = self.data[key]
                 else:
@@ -65,9 +74,19 @@ class OpenNeatoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 data[key] = result
 
-        if len(failures) == len(keys):
+        # Only fail the whole coordinator if ALL critical endpoints failed.
+        # This means a single hung endpoint (e.g. /api/error when the robot's
+        # serial interface gets stuck) doesn't break the rest of the
+        # integration.
+        if critical_failures and len(critical_failures) == len(critical_keys):
             raise UpdateFailed(
-                f"All endpoints failed: {', '.join(failures)}"
+                f"All critical endpoints failed: {', '.join(critical_failures)}"
+            )
+
+        if failures:
+            _LOGGER.debug(
+                "Coordinator update succeeded with %d failed endpoints: %s",
+                len(failures), ", ".join(failures),
             )
 
         return data
