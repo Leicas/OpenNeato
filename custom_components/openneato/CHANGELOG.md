@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+- **LIDAR map camera entity** — standard HA camera entity (`camera.openneato_*_lidar_map`)
+  compatible with vacuum-card, picture-entity, and picture-glance cards.
+  Renders the robot's 360-degree LDS scan as a 480x480 dark-theme PNG with
+  wall segments, grid rings, and robot indicator. Algorithm ported from the
+  standalone frontend's lidar-map.tsx (segment detection, gap bridging,
+  distance smoothing, multi-scan accumulation)
+- **Cleaning session history map** — when the robot is docked/idle, the camera
+  automatically shows the most recent completed cleaning session map with
+  coverage grid (green), path line (gold), start/end markers, and recharge
+  bolt icons. Ported from the frontend's history view rendering
+- **Adaptive map_source attribute** — entity exposes `map_source` ("lidar",
+  "history", or "idle") plus mode-specific diagnostics (rotation_speed,
+  scan_quality for LIDAR; session_mode, session_duration, session_area for
+  history maps)
+- **Self-managed LIDAR polling** — camera fetches `/api/lidar` independently
+  at 2-second intervals only when the robot is actively cleaning. Stops
+  polling when idle to avoid wasting ESP32 serial bandwidth. Zero additional
+  load on the coordinator's 5-second cycle
+- **Session JSONL download** — `get_history_session()` API method to fetch
+  raw JSONL pose data from `/api/history/<file>` with heatshrink corruption
+  recovery
+
+### Changed
+- **No firmware changes required** — uses existing `/api/lidar` and
+  `/api/history/<file>` endpoints. No flash needed to upgrade from 1.2.0
+
+### Note on camera.py removal in 1.2.0
+The previous camera entity (removed in 1.2.0) rendered only cleaning paths
+and pulled Pillow as a declared dependency (~20MB). This new implementation
+takes a fundamentally different approach: Pillow is already a core HA
+dependency (no manifest entry needed), rendering is split into standalone
+modules that run in the executor, and LIDAR polling is self-managed rather
+than added to the coordinator. The architecture was evaluated by a
+cross-functional review covering ESP32 performance constraints, HA camera
+platform conventions, vacuum-card compatibility, and UX considerations.
+
 ## 1.2.0
 
 ### Added
