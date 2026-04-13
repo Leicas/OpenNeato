@@ -62,6 +62,9 @@
       "vacuum_speed_setting": { "name": "Vacuum speed" },
       "side_brush_power_setting": { "name": "Side brush power" },
       "stall_threshold_setting": { "name": "Stall threshold" }
+    },
+    "camera": {
+      "lidar_map": { "name": "LIDAR map" }
     }
   }
 }

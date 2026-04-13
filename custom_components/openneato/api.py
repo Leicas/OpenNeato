@@ -176,6 +176,10 @@ class OpenNeatoApiClient:
         """Get cleaning history sessions."""
         return await self._get("/api/history")  # type: ignore[return-value]
 
+    async def get_lidar(self) -> dict[str, Any]:
+        """Get the latest LDS LIDAR scan (360 points)."""
+        return await self._get("/api/lidar")
+
     # ── POST endpoints ───────────────────────────────────────────────
 
     async def clean(self, action: str) -> dict[str, Any] | str:
