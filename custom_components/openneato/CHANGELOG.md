@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.1
+
+### Fixed
+- **Coordinator resilience** — a single hung endpoint (e.g. `/api/error`
+  when the robot's serial interface gets stuck on the `GetErr` command)
+  no longer puts the integration into "requires attention" state. The
+  coordinator now only fails when ALL critical endpoints (state, charger,
+  system) time out. Non-critical endpoints fall back to their last-known
+  value so the integration keeps working during transient hangs.
+
 ## 1.3.0
 
 ### Added
