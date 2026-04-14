@@ -13,9 +13,15 @@ Open-source replacement for Neato's discontinued cloud and mobile app. An ESP32 
 Botvac robots (D3-D7) over UART and exposes a local web UI over WiFi — no cloud, no app, no account required.
 
 > [!NOTE]
-> This is an early beta — things may break, rough edges are expected, and the API may change.
+> This is an early beta - things may break, rough edges are expected, and the API may change.
 > If you run into problems, a [Discussion](https://github.com/renjfk/OpenNeato/discussions)
 > or [issue](https://github.com/renjfk/OpenNeato/issues) is always welcome.
+
+> [!IMPORTANT]
+> **Now in development:** [Guided Clean - zone cleaning, no-go lines, and map-based navigation](https://github.com/renjfk/OpenNeato/issues/68).
+>
+> Select zones on a previously recorded map, draw no-go lines, and let the robot clean exactly where you want.
+> Follow the issue for progress updates and sub-task tracking.
 
 |                Dashboard                 |                  Manual Drive                  |                    Cleaning History                    |
 |:----------------------------------------:|:----------------------------------------------:|:------------------------------------------------------:|
