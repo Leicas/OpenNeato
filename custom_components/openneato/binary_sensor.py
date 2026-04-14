@@ -91,6 +91,45 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[OpenNeatoBinarySensorEntityDescription, ...] =
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    # ── Digital sensors ────────────────────────────────────────────────
+    OpenNeatoBinarySensorEntityDescription(
+        key="sensors_dustbin_in",
+        translation_key="dustbin",
+        name="Dust bin",
+        section="sensors",
+        field="dustbinIn",
+        device_class=BinarySensorDeviceClass.PRESENCE,
+        icon="mdi:delete-variant",
+    ),
+    OpenNeatoBinarySensorEntityDescription(
+        key="sensors_left_wheel_extended",
+        translation_key="left_wheel_lifted",
+        name="Left wheel lifted",
+        section="sensors",
+        field="leftWheelExtended",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:tire",
+    ),
+    OpenNeatoBinarySensorEntityDescription(
+        key="sensors_right_wheel_extended",
+        translation_key="right_wheel_lifted",
+        name="Right wheel lifted",
+        section="sensors",
+        field="rightWheelExtended",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:tire",
+    ),
+    OpenNeatoBinarySensorEntityDescription(
+        key="sensors_dc_jack_in",
+        translation_key="dock_contact",
+        name="Dock contact",
+        section="sensors",
+        field="dcJackIn",
+        device_class=BinarySensorDeviceClass.PLUG,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 

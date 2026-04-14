@@ -49,6 +49,38 @@ BUTTON_DESCRIPTIONS: tuple[OpenNeatoButtonEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         press_fn=lambda api: api.format_fs(),
     ),
+    OpenNeatoButtonEntityDescription(
+        key="robot_restart",
+        translation_key="robot_restart",
+        name="Restart robot",
+        device_class=ButtonDeviceClass.RESTART,
+        entity_category=EntityCategory.CONFIG,
+        press_fn=lambda api: api.power("restart"),
+    ),
+    OpenNeatoButtonEntityDescription(
+        key="robot_shutdown",
+        translation_key="robot_shutdown",
+        name="Shutdown robot",
+        icon="mdi:power",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+        press_fn=lambda api: api.power("shutdown"),
+    ),
+    OpenNeatoButtonEntityDescription(
+        key="locate",
+        translation_key="locate",
+        name="Locate robot",
+        icon="mdi:map-marker-radius",
+        press_fn=lambda api: api.play_sound(19),
+    ),
+    OpenNeatoButtonEntityDescription(
+        key="clear_errors",
+        translation_key="clear_errors",
+        name="Clear errors",
+        icon="mdi:alert-remove",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        press_fn=lambda api: api.clear_errors(),
+    ),
 )
 
 

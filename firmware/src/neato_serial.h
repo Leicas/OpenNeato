@@ -75,6 +75,9 @@ public:
     // Invalidates the user settings cache.
     bool setUserSetting(const String& key, const String& value, std::function<void(bool)> callback = nullptr);
 
+    // Enable/disable wall following via "SetWallFollower Enable/Disable".
+    bool setWallFollower(bool enable, std::function<void(bool)> callback = nullptr);
+
     // Power control: sends TestMode On, then SetSystemMode after inter-command delay.
     // action = "restart" (PowerCycle) or "shutdown" (Shutdown).
     bool powerControl(const String& action, std::function<void(bool)> callback = nullptr);

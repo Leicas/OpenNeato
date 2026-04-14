@@ -88,6 +88,11 @@ void WebServer::registerApiRoutes() {
     registerGetRoute("/api/error", neato, &NeatoSerial::getErr, {});
     registerGetRoute("/api/lidar", neato, &NeatoSerial::getLdsScan, {});
     registerGetRoute("/api/user-settings", neato, &NeatoSerial::getUserSettings, {});
+    registerGetRoute(
+            "/api/sensors", neato,
+            static_cast<void (NeatoSerial::*)(std::function<void(bool, const DigitalSensorData&)>)>(
+                    &NeatoSerial::getDigitalSensors),
+            {});
 
     // -- Action endpoints ----------------------------------------------------
     // All parameterized actions use query strings: resource URL identifies the
@@ -99,6 +104,7 @@ void WebServer::registerApiRoutes() {
     registerPostRoute("/api/power", neato, &NeatoSerial::powerControl, {"action"});
     registerPostRoute("/api/lidar/rotate", neato, &NeatoSerial::setLdsRotation, {"enable"});
     registerPostRoute("/api/user-settings", neato, &NeatoSerial::setUserSetting, {"key", "value"});
+    registerPostRoute("/api/wall-follower", neato, &NeatoSerial::setWallFollower, {"enable"});
     registerPostRoute("/api/clear-errors", neato, &NeatoSerial::clearErrors, {});
 
     // Serial endpoint — send arbitrary serial command, returns raw response.

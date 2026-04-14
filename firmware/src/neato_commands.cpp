@@ -208,6 +208,7 @@ std::vector<Field> ChargerData::toFields() const {
             {"vExtV", String(vExtV, 2), FIELD_FLOAT},
             {"chargerMAH", String(chargerMAH), FIELD_INT},
             {"dischargeMAH", String(dischargeMAH), FIELD_INT},
+            {"battTempC", String(battTempC), FIELD_INT},
     };
 }
 
@@ -388,6 +389,8 @@ bool parseChargerData(const String& raw, ChargerData& out) {
         out.chargerMAH = val.toInt();
     if (findCsvValue(raw, "Discharge_mAH", val))
         out.dischargeMAH = val.toInt();
+    if (findCsvValue(raw, "BattTempCAvg", val))
+        out.battTempC = val.toInt();
     return out.fuelPercent >= 0;
 }
 
@@ -615,6 +618,7 @@ std::vector<Field> UserSettingsData::toFields() const {
             {"ecoMode", ecoMode ? "true" : "false", FIELD_BOOL},
             {"intenseClean", intenseClean ? "true" : "false", FIELD_BOOL},
             {"binFullDetect", binFullDetect ? "true" : "false", FIELD_BOOL},
+            {"wallEnable", wallEnable ? "true" : "false", FIELD_BOOL},
             {"wifi", wifi ? "true" : "false", FIELD_BOOL},
             {"stealthLed", stealthLed ? "true" : "false", FIELD_BOOL},
             {"filterChange", String(filterChange), FIELD_INT},
@@ -648,6 +652,10 @@ bool UserSettingsData::fromFields(const std::vector<Field>& fields) {
     }
     if ((f = findField(fields, "binFullDetect"))) {
         binFullDetect = f->value == "true";
+        applied = true;
+    }
+    if ((f = findField(fields, "wallEnable"))) {
+        wallEnable = f->value == "true";
         applied = true;
     }
     if ((f = findField(fields, "wifi"))) {
@@ -702,6 +710,10 @@ bool parseUserSettingsData(const String& raw, UserSettingsData& out) {
     }
     if (findCsvValue(raw, "Bin Full Detect", val)) {
         out.binFullDetect = val.equalsIgnoreCase("ON");
+        found = true;
+    }
+    if (findCsvValue(raw, "Wall Enable", val)) {
+        out.wallEnable = val.equalsIgnoreCase("ON");
         found = true;
     }
     if (findCsvValue(raw, "WiFi", val)) {

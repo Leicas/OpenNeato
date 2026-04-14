@@ -151,8 +151,8 @@ class OpenNeatoVacuum(OpenNeatoEntity, StateVacuumEntity):
     # -- Commands ----------------------------------------------------------
 
     async def async_start(self, **kwargs: Any) -> None:
-        """Start cleaning."""
-        await self._api.clean("start")
+        """Start or resume house cleaning."""
+        await self._api.clean("house")
         await self.coordinator.async_request_refresh()
 
     async def async_stop(self, **kwargs: Any) -> None:

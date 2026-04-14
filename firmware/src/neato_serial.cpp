@@ -522,20 +522,46 @@ bool NeatoSerial::clean(const String& action, std::function<void(bool)> callback
         return enqueue(buildSetEvent(EVT_STOP), wrapAction(callback), PRIORITY_HIGH);
     }
 
-    bool isPaused = stateCache.hasCached() && stateCache.getCached().uiState.indexOf("CLEANINGPAUSED") >= 0;
+    // Type-aware resume: "house" only resumes a paused house clean, "spot"
+    // only resumes a paused spot clean. Prevents HA "start" from resuming
+    // a previously paused spot clean when the user expects a new house clean.
+    if (action == "house") {
+        bool isPausedHouse =
+                stateCache.hasCached() && stateCache.getCached().uiState.indexOf("HOUSECLEANINGPAUSED") >= 0;
+        if (isPausedHouse) {
+            invalidateState();
+            return enqueue(buildSetEvent(EVT_RESUME), wrapAction(callback), PRIORITY_HIGH);
+        }
+        invalidateState();
+        if (cleanStartCallback)
+            cleanStartCallback();
+        return enqueue(buildSetEvent(EVT_START_HOUSE), wrapAction(callback), PRIORITY_HIGH);
+    }
 
+    if (action == "spot") {
+        bool isPausedSpot =
+                stateCache.hasCached() && stateCache.getCached().uiState.indexOf("SPOTCLEANINGPAUSED") >= 0;
+        if (isPausedSpot) {
+            invalidateState();
+            return enqueue(buildSetEvent(EVT_RESUME), wrapAction(callback), PRIORITY_HIGH);
+        }
+        invalidateState();
+        if (cleanStartCallback)
+            cleanStartCallback();
+        return enqueue(buildSetEvent(EVT_START_SPOT), wrapAction(callback), PRIORITY_HIGH);
+    }
+
+    // Generic action — resume whatever is paused, or start house clean
+    bool isPaused = stateCache.hasCached() && stateCache.getCached().uiState.indexOf("CLEANINGPAUSED") >= 0;
     if (isPaused) {
-        // Resume in-place — preserves map and localization
         invalidateState();
         return enqueue(buildSetEvent(EVT_RESUME), wrapAction(callback), PRIORITY_HIGH);
     }
 
-    // New clean from idle
-    const char *evt = (action == "spot") ? EVT_START_SPOT : EVT_START_HOUSE;
     invalidateState();
     if (cleanStartCallback)
         cleanStartCallback();
-    return enqueue(buildSetEvent(evt), wrapAction(callback), PRIORITY_HIGH);
+    return enqueue(buildSetEvent(EVT_START_HOUSE), wrapAction(callback), PRIORITY_HIGH);
 }
 
 bool NeatoSerial::testMode(bool enable, std::function<void(bool)> callback) {
@@ -638,6 +664,12 @@ bool NeatoSerial::setMotorSideBrush(bool on, int powerMw, std::function<void(boo
 bool NeatoSerial::setUserSetting(const String& key, const String& value, std::function<void(bool)> callback) {
     userSettingsCache.invalidate();
     String cmd = String(CMD_SET_USER_SETTINGS) + " " + key + " " + value;
+    return enqueue(cmd, wrapAction(callback));
+}
+
+bool NeatoSerial::setWallFollower(bool enable, std::function<void(bool)> callback) {
+    userSettingsCache.invalidate();
+    const char *cmd = enable ? CMD_SET_WALL_FOLLOWER_ON : CMD_SET_WALL_FOLLOWER_OFF;
     return enqueue(cmd, wrapAction(callback));
 }
 

@@ -45,6 +45,8 @@
 #define CMD_GET_ROBOT_POS_SMOOTH "GetRobotPos Smooth"
 #define CMD_GET_USER_SETTINGS "GetUserSettings"
 #define CMD_SET_USER_SETTINGS "SetUserSettings"
+#define CMD_SET_WALL_FOLLOWER_ON "SetWallFollower Enable"
+#define CMD_SET_WALL_FOLLOWER_OFF "SetWallFollower Disable"
 
 // -- Sound IDs ---------------------------------------------------------------
 
@@ -100,6 +102,7 @@ struct ChargerData : public JsonSerializable {
     float vExtV = 0.0f;
     int chargerMAH = 0;
     int dischargeMAH = 0;
+    int battTempC = -1; // Battery temperature in Celsius (-1 = not available)
 
     std::vector<Field> toFields() const override;
 };
@@ -184,6 +187,7 @@ struct UserSettingsData : public JsonSerializable {
     bool ecoMode = false;
     bool intenseClean = false;
     bool binFullDetect = true;
+    bool wallEnable = true;
     // Power saving
     bool wifi = true;
     bool stealthLed = false;

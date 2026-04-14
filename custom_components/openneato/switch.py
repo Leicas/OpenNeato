@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -29,6 +30,8 @@ class OpenNeatoSwitchEntityDescription(SwitchEntityDescription):
     setting_key: str | None = None
     # For settings switches (PUT with JSON body)
     settings_field: str | None = None
+    # For switches with a dedicated API method (e.g. wall follower)
+    api_method: str | None = None
 
 
 SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
@@ -67,6 +70,106 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
         field="scheduleEnabled",
         settings_field="scheduleEnabled",
         icon="mdi:calendar-clock",
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="wall_follower",
+        translation_key="wall_follower",
+        name="Wall follower",
+        section="user_settings",
+        field="wallEnable",
+        api_method="set_wall_follower",
+        icon="mdi:wall",
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="button_click_sounds",
+        translation_key="button_click_sounds",
+        name="Button click sounds",
+        section="user_settings",
+        field="buttonClick",
+        setting_key="ButtonClick",
+        icon="mdi:gesture-tap-button",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="melody_sounds",
+        translation_key="melody_sounds",
+        name="Melody sounds",
+        section="user_settings",
+        field="melodies",
+        setting_key="Melodies",
+        icon="mdi:music",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="warning_sounds",
+        translation_key="warning_sounds",
+        name="Warning sounds",
+        section="user_settings",
+        field="warnings",
+        setting_key="Warnings",
+        icon="mdi:volume-high",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="stealth_led",
+        translation_key="stealth_led",
+        name="Stealth LED",
+        section="user_settings",
+        field="stealthLed",
+        setting_key="StealthLED",
+        icon="mdi:led-off",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    # ── Notification switches (from ESP32 settings) ───────────────────
+    OpenNeatoSwitchEntityDescription(
+        key="notifications_enabled",
+        translation_key="notifications_enabled",
+        name="Notifications",
+        section="settings",
+        field="ntfyEnabled",
+        settings_field="ntfyEnabled",
+        icon="mdi:bell",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="notify_on_done",
+        translation_key="notify_on_done",
+        name="Notify on clean done",
+        section="settings",
+        field="ntfyOnDone",
+        settings_field="ntfyOnDone",
+        icon="mdi:bell-check",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="notify_on_error",
+        translation_key="notify_on_error",
+        name="Notify on error",
+        section="settings",
+        field="ntfyOnError",
+        settings_field="ntfyOnError",
+        icon="mdi:bell-alert",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="notify_on_alert",
+        translation_key="notify_on_alert",
+        name="Notify on alert",
+        section="settings",
+        field="ntfyOnAlert",
+        settings_field="ntfyOnAlert",
+        icon="mdi:bell-ring",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="notify_on_docking",
+        translation_key="notify_on_docking",
+        name="Notify on docking",
+        section="settings",
+        field="ntfyOnDocking",
+        settings_field="ntfyOnDocking",
+        icon="mdi:bell-plus",
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 
@@ -116,7 +219,9 @@ class OpenNeatoSwitch(OpenNeatoEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         desc = self.entity_description
-        if desc.setting_key is not None:
+        if desc.api_method is not None:
+            await getattr(self._api, desc.api_method)(True)
+        elif desc.setting_key is not None:
             await self._api.set_user_setting(desc.setting_key, "ON")
         elif desc.settings_field is not None:
             await self._api.update_settings({desc.settings_field: True})
@@ -125,7 +230,9 @@ class OpenNeatoSwitch(OpenNeatoEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         desc = self.entity_description
-        if desc.setting_key is not None:
+        if desc.api_method is not None:
+            await getattr(self._api, desc.api_method)(False)
+        elif desc.setting_key is not None:
             await self._api.set_user_setting(desc.setting_key, "OFF")
         elif desc.settings_field is not None:
             await self._api.update_settings({desc.settings_field: False})

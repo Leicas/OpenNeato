@@ -168,6 +168,10 @@ class OpenNeatoApiClient:
         """Get user-facing settings (eco mode, intense clean, etc.)."""
         return await self._get("/api/user-settings")
 
+    async def get_sensors(self) -> dict[str, Any]:
+        """Get digital sensor data (dustbin, bumpers, wheel lift)."""
+        return await self._get("/api/sensors")
+
     async def get_settings(self) -> dict[str, Any]:
         """Get full device settings."""
         return await self._get("/api/settings")
@@ -228,6 +232,16 @@ class OpenNeatoApiClient:
         """Send a raw serial command. Returns plain text."""
         result = await self._post("/api/serial", params={"cmd": cmd})
         return str(result)
+
+    async def set_wall_follower(self, enable: bool) -> dict[str, Any] | str:
+        """Enable or disable wall following mode."""
+        return await self._post(
+            "/api/wall-follower", params={"enable": "1" if enable else "0"}
+        )
+
+    async def clear_errors(self) -> dict[str, Any] | str:
+        """Clear all UI errors and alerts."""
+        return await self._post("/api/clear-errors")
 
     async def restart(self) -> dict[str, Any] | str:
         """Restart the robot controller."""

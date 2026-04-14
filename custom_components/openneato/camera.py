@@ -5,7 +5,8 @@ image.  Compatible with vacuum-card, picture-entity, and other Lovelace cards
 that consume camera entities.
 
 Adaptive content based on robot state:
-  - Cleaning / manual mode: live 360-degree LIDAR scan (polled every 2 s).
+  - Cleaning: in-progress cleaning session map (path + coverage, polled every 2 s).
+  - Manual mode: live 360-degree LIDAR scan (polled every 2 s).
   - Docked / idle: most recent completed cleaning session map (path + coverage).
   - No history: placeholder grid image.
 
@@ -25,15 +26,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 
 from .api import OpenNeatoApiClient
-from .const import DOMAIN, HISTORY_IMAGE_SIZE, LIDAR_POLL_INTERVAL, UISTATE_SUBSTRINGS
+from .const import DOMAIN, HISTORY_IMAGE_SIZE, LIDAR_POLL_INTERVAL
 from .entity import OpenNeatoEntity
 from .history_renderer import parse_session_jsonl, render_history_map
 from .lidar_renderer import ScanAccumulator, render_idle_image, render_lidar_scan
 
 _LOGGER = logging.getLogger(__name__)
 
-# uiState substrings that indicate the LDS motor is spinning
-_ACTIVE_SUBSTRINGS = {sub for sub, _ in UISTATE_SUBSTRINGS}
+# uiState substrings that indicate the robot is cleaning (show history map)
+_CLEANING_SUBSTRINGS = {"CLEANINGRUNNING", "CLEANINGPAUSED", "CLEANINGSUSPENDED", "DOCKING"}
+# uiState substrings that indicate manual mode (show LIDAR scan)
+_MANUAL_SUBSTRINGS = {"MANUALCLEANING"}
 
 
 async def async_setup_entry(
@@ -84,15 +87,17 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         self._api = api
         self._attr_unique_id = f"{serial}_lidar_map"
 
-        # LIDAR scan state
+        # LIDAR scan state (manual mode only)
         self._accumulator = ScanAccumulator()
         self._lidar_image: bytes | None = None
-        self._poll_unsub: CALLBACK_TYPE | None = None
-        self._polling_active = False
+        self._lidar_poll_unsub: CALLBACK_TYPE | None = None
+        self._lidar_polling_active = False
 
-        # History map state
+        # History map state (cleaning + idle)
         self._history_image: bytes | None = None
         self._history_session_name: str | None = None  # track which session is cached
+        self._history_poll_unsub: CALLBACK_TYPE | None = None
+        self._history_polling_active = False
 
         # Idle placeholder
         self._idle_image: bytes | None = None
@@ -114,7 +119,7 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
     @property
     def is_on(self) -> bool:
         """Return True when a map image is available."""
-        return self._lidar_image is not None or self._history_image is not None
+        return self._history_image is not None or self._lidar_image is not None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -143,11 +148,11 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
         """Return the current map image based on robot state."""
-        # Active LIDAR takes priority
-        if self._polling_active and self._lidar_image is not None:
+        # Active LIDAR (manual mode) takes priority
+        if self._lidar_polling_active and self._lidar_image is not None:
             return self._lidar_image
 
-        # Fall back to history map
+        # History map (in-progress cleaning or idle)
         if self._history_image is not None:
             return self._history_image
 
@@ -169,66 +174,115 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         await super().async_added_to_hass()
         self._check_polling_state()
         # Try to load the most recent history map on startup
-        self.hass.async_create_task(self._async_update_history_map())
+        self.hass.async_create_task(self._async_update_history_map(allow_recording=False))
 
     async def async_will_remove_from_hass(self) -> None:
-        """Clean up the poll timer."""
-        self._stop_polling()
+        """Clean up the poll timers."""
+        self._stop_lidar_polling()
+        self._stop_history_polling()
         await super().async_will_remove_from_hass()
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """React to coordinator data changes — manage LIDAR polling and history."""
-        was_active = self._polling_active
+        """React to coordinator data changes — manage polling and map display."""
         self._check_polling_state()
-
-        # When robot transitions from active → idle, load the history map
-        if was_active and not self._polling_active:
-            self._map_source = "history"
-            self.hass.async_create_task(self._async_update_history_map())
-
         super()._handle_coordinator_update()
 
-    # ── LIDAR polling lifecycle ──────────────────────────────────────
+    # ── State detection ──────────────────────────────────────────────
 
-    def _is_robot_active(self) -> bool:
-        """Return True if the robot is in a state where the LDS is spinning."""
+    def _get_ui_state(self) -> str:
+        """Return the current uiState string."""
         if not self.coordinator.data:
-            return False
-        ui_state = self.coordinator.data.get("state", {}).get("uiState", "")
-        return any(sub in ui_state for sub in _ACTIVE_SUBSTRINGS)
+            return ""
+        return self.coordinator.data.get("state", {}).get("uiState", "")
+
+    def _is_robot_cleaning(self) -> bool:
+        """Return True if the robot is actively cleaning (show history map)."""
+        ui_state = self._get_ui_state()
+        return any(sub in ui_state for sub in _CLEANING_SUBSTRINGS)
+
+    def _is_robot_manual(self) -> bool:
+        """Return True if the robot is in manual drive mode (show LIDAR)."""
+        ui_state = self._get_ui_state()
+        return any(sub in ui_state for sub in _MANUAL_SUBSTRINGS)
+
+    # ── Polling lifecycle ────────────────────────────────────────────
 
     @callback
     def _check_polling_state(self) -> None:
-        """Start or stop LIDAR polling based on robot state."""
-        should_poll = self._is_robot_active()
-        if should_poll and not self._polling_active:
-            self._start_polling()
-        elif not should_poll and self._polling_active:
-            self._stop_polling()
+        """Start or stop the appropriate polling based on robot state."""
+        cleaning = self._is_robot_cleaning()
+        manual = self._is_robot_manual()
+        was_cleaning = self._history_polling_active
+        was_manual = self._lidar_polling_active
+
+        # Manual mode → LIDAR polling
+        if manual and not self._lidar_polling_active:
+            self._stop_history_polling()
+            self._start_lidar_polling()
+        elif not manual and self._lidar_polling_active:
+            self._stop_lidar_polling()
+
+        # Cleaning → history map polling (in-progress session)
+        if cleaning and not self._history_polling_active:
+            self._stop_lidar_polling()
+            self._start_history_polling()
+        elif not cleaning and self._history_polling_active:
+            self._stop_history_polling()
+
+        # Transition from active → idle: load the completed session
+        if (was_cleaning or was_manual) and not cleaning and not manual:
+            self._map_source = "history"
+            self._history_session_name = None  # force re-fetch of completed session
+            self.hass.async_create_task(self._async_update_history_map(allow_recording=False))
 
     @callback
-    def _start_polling(self) -> None:
-        """Start the periodic LIDAR fetch timer."""
-        _LOGGER.debug("Starting LIDAR polling (robot is active)")
-        self._polling_active = True
+    def _start_lidar_polling(self) -> None:
+        """Start the periodic LIDAR fetch timer (manual mode)."""
+        _LOGGER.debug("Starting LIDAR polling (manual mode)")
+        self._lidar_polling_active = True
         self._map_source = "lidar"
-        self._poll_unsub = async_track_time_interval(
+        self._lidar_poll_unsub = async_track_time_interval(
             self.hass,
             self._async_poll_lidar,
             timedelta(seconds=LIDAR_POLL_INTERVAL),
         )
-        # Fire immediately for first frame
         self.hass.async_create_task(self._async_poll_lidar())
 
     @callback
-    def _stop_polling(self) -> None:
+    def _stop_lidar_polling(self) -> None:
         """Cancel the periodic LIDAR fetch timer."""
-        if self._poll_unsub is not None:
-            _LOGGER.debug("Stopping LIDAR polling (robot is idle)")
-            self._poll_unsub()
-            self._poll_unsub = None
-        self._polling_active = False
+        if self._lidar_poll_unsub is not None:
+            _LOGGER.debug("Stopping LIDAR polling")
+            self._lidar_poll_unsub()
+            self._lidar_poll_unsub = None
+        self._lidar_polling_active = False
+
+    @callback
+    def _start_history_polling(self) -> None:
+        """Start polling the in-progress cleaning session map."""
+        _LOGGER.debug("Starting history map polling (cleaning in progress)")
+        self._history_polling_active = True
+        self._map_source = "history"
+        self._history_poll_unsub = async_track_time_interval(
+            self.hass,
+            self._async_poll_history,
+            timedelta(seconds=LIDAR_POLL_INTERVAL),
+        )
+        self.hass.async_create_task(self._async_poll_history())
+
+    @callback
+    def _stop_history_polling(self) -> None:
+        """Cancel the periodic history map fetch timer."""
+        if self._history_poll_unsub is not None:
+            _LOGGER.debug("Stopping history map polling")
+            self._history_poll_unsub()
+            self._history_poll_unsub = None
+        self._history_polling_active = False
+
+    async def _async_poll_history(self, _now=None) -> None:
+        """Fetch the in-progress recording session and re-render the map."""
+        await self._async_update_history_map(allow_recording=True)
 
     async def _async_poll_lidar(self, _now=None) -> None:
         """Fetch LIDAR data from the ESP32 and re-render the image."""
@@ -243,11 +297,8 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         self._valid_points = data.get("validPoints")
         self._map_source = "lidar"
 
-        # Determine if the robot is physically moving (cleaning vs stationary)
-        moving = self._is_robot_moving()
-
-        # Merge into accumulator and render
-        self._accumulator.merge(points, moving)
+        # In manual mode the robot is always "moving" when wheels are driven
+        self._accumulator.merge(points, True)
         snapshot = self._accumulator.snapshot()
 
         self._lidar_image = await self.hass.async_add_executor_job(
@@ -255,45 +306,58 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         )
         self.async_write_ha_state()
 
-    def _is_robot_moving(self) -> bool:
-        """Return True if the robot is physically moving (not just paused)."""
-        if not self.coordinator.data:
-            return False
-        ui_state = self.coordinator.data.get("state", {}).get("uiState", "")
-        return "CLEANINGRUNNING" in ui_state or "MANUALCLEANING" in ui_state
-
     # ── History map ──────────────────────────────────────────────────
 
-    def _get_latest_session(self) -> dict[str, Any] | None:
-        """Find the most recent completed (non-recording) session from coordinator data."""
+    def _get_latest_session(self, allow_recording: bool = False) -> dict[str, Any] | None:
+        """Find the most recent session from coordinator data.
+
+        When allow_recording is True, prefer the active recording session
+        (in-progress cleaning). When False, skip recording sessions.
+        """
         if not self.coordinator.data:
             return None
         history = self.coordinator.data.get("history", [])
         if not isinstance(history, list):
             return None
+
+        # First pass: look for a recording session if allowed
+        if allow_recording:
+            for session in history:
+                if session.get("recording") and session.get("name"):
+                    return session
+
+        # Second pass: find the most recent completed session
         for session in history:
-            # Skip sessions that are still being recorded
             if session.get("recording"):
                 continue
-            # Need a valid filename to download
             if session.get("name"):
                 return session
         return None
 
-    async def _async_update_history_map(self) -> None:
-        """Fetch and render the most recent cleaning session map."""
-        session_info = self._get_latest_session()
+    async def _async_update_history_map(self, allow_recording: bool = False) -> None:
+        """Fetch and render a cleaning session map.
+
+        When allow_recording is True, prefer the in-progress recording session.
+        When False, only show completed sessions (idle mode).
+        """
+        session_info = self._get_latest_session(allow_recording=allow_recording)
         if not session_info:
-            if not self._polling_active:
+            if not self._lidar_polling_active and not self._history_polling_active:
                 self._map_source = "idle"
                 self.async_write_ha_state()
             return
 
         session_name = session_info["name"]
+        recording = session_info.get("recording", False)
 
-        # Don't re-fetch if we already have this session cached
-        if session_name == self._history_session_name and self._history_image is not None:
-            if not self._polling_active:
+        # Don't re-fetch completed sessions we already have cached.
+        # Always re-fetch recording sessions (data is growing).
+        if (
+            not recording
+            and session_name == self._history_session_name
+            and self._history_image is not None
+        ):
+            if not self._lidar_polling_active:
                 self._map_source = "history"
                 self.async_write_ha_state()
             return
@@ -314,9 +378,6 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
             _LOGGER.debug("Session %s has no path data", session_name)
             return
 
-        # Check if this session is currently being recorded
-        recording = session_info.get("recording", False)
-
         self._history_image = await self.hass.async_add_executor_job(
             render_history_map, parsed, HISTORY_IMAGE_SIZE, recording
         )
@@ -329,6 +390,6 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         self._session_duration = summary.get("duration")
         self._session_area = summary.get("areaCovered")
 
-        if not self._polling_active:
+        if not self._lidar_polling_active:
             self._map_source = "history"
         self.async_write_ha_state()

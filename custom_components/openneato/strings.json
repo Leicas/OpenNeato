@@ -21,6 +21,9 @@
     "sensor": {
       "battery_level": { "name": "Battery level" },
       "battery_voltage": { "name": "Battery voltage" },
+      "battery_temperature": { "name": "Battery temperature" },
+      "discharge_mah": { "name": "Battery discharge" },
+      "charge_mah": { "name": "Battery charge" },
       "external_voltage": { "name": "External voltage" },
       "error_code": { "name": "Error code" },
       "error_message": { "name": "Error message" },
@@ -31,6 +34,7 @@
       "brush_rpm": { "name": "Brush RPM" },
       "vacuum_rpm": { "name": "Vacuum RPM" },
       "side_brush_current": { "name": "Side brush current" },
+      "lidar_rpm": { "name": "LIDAR RPM" },
       "last_clean_duration": { "name": "Last clean duration" },
       "last_clean_area": { "name": "Last clean area" },
       "last_clean_distance": { "name": "Last clean distance" },
@@ -45,17 +49,35 @@
       "battery_failure": { "name": "Battery failure" },
       "empty_fuel": { "name": "Battery empty" },
       "error": { "name": "Error" },
-      "ntp_synced": { "name": "NTP synced" }
+      "ntp_synced": { "name": "NTP synced" },
+      "dustbin": { "name": "Dust bin" },
+      "left_wheel_lifted": { "name": "Left wheel lifted" },
+      "right_wheel_lifted": { "name": "Right wheel lifted" },
+      "dock_contact": { "name": "Dock contact" }
     },
     "switch": {
       "eco_mode": { "name": "Eco mode" },
       "intense_clean": { "name": "Intense clean" },
       "bin_full_detect": { "name": "Bin full detect" },
-      "schedule": { "name": "Schedule" }
+      "schedule": { "name": "Schedule" },
+      "wall_follower": { "name": "Wall follower" },
+      "button_click_sounds": { "name": "Button click sounds" },
+      "melody_sounds": { "name": "Melody sounds" },
+      "warning_sounds": { "name": "Warning sounds" },
+      "stealth_led": { "name": "Stealth LED" },
+      "notifications_enabled": { "name": "Notifications" },
+      "notify_on_done": { "name": "Notify on clean done" },
+      "notify_on_error": { "name": "Notify on error" },
+      "notify_on_alert": { "name": "Notify on alert" },
+      "notify_on_docking": { "name": "Notify on docking" }
     },
     "button": {
       "restart": { "name": "Restart device" },
-      "format_fs": { "name": "Format filesystem" }
+      "format_fs": { "name": "Format filesystem" },
+      "robot_restart": { "name": "Restart robot" },
+      "robot_shutdown": { "name": "Shutdown robot" },
+      "locate": { "name": "Locate robot" },
+      "clear_errors": { "name": "Clear errors" }
     },
     "number": {
       "brush_rpm_setting": { "name": "Brush RPM" },
