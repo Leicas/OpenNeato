@@ -118,6 +118,10 @@ cd flash && go build -o openneato-flash . && cd ..
 OpenNeato is open to contributions and ideas! Whether you're a developer wanting to add features or a user with
 suggestions, your input is valuable.
 
+The most useful contributions are testing prereleases on your hardware, filing clear bug reports, and opening PRs.
+If you'd rather just say thanks, there's a [Ko-fi](https://ko-fi.com/renjfk). Optional, doesn't influence the
+roadmap, the project stays free and community-driven either way.
+
 > [!TIP]
 > Before opening an issue, consider starting a [Discussion](https://github.com/renjfk/OpenNeato/discussions) first —
 > many questions, setup troubles, and ideas are easier to resolve through conversation.
