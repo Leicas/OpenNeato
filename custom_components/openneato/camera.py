@@ -112,6 +112,10 @@ async def async_setup_entry(
 class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
     """Camera entity showing the live LIDAR scan or last cleaning session map."""
 
+    # Custom integrations don't read strings.json at runtime, so set the
+    # display name directly alongside the translation key (sensors/switches
+    # in this codebase do the same).
+    _attr_name = "LIDAR map"
     _attr_translation_key = "lidar_map"
     _attr_frame_interval = 5.0
     _attr_content_type = "image/png"
@@ -165,11 +169,6 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
     # ── Properties ───────────────────────────────────────────────────
 
     @property
-    def is_on(self) -> bool:
-        """Return True when a map image is available."""
-        return self._history_image is not None or self._lidar_image is not None
-
-    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return map diagnostics."""
         attrs: dict[str, Any] = {"map_source": self._map_source}
@@ -220,9 +219,9 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
     async def async_added_to_hass(self) -> None:
         """Start listening for coordinator updates."""
         await super().async_added_to_hass()
+        # _check_polling_state handles the idle case (loads the latest
+        # completed session) and starts LIDAR/history polling otherwise.
         self._check_polling_state()
-        # Try to load the most recent history map on startup
-        self.hass.async_create_task(self._async_update_history_map(allow_recording=False))
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up the poll timers."""
@@ -278,11 +277,22 @@ class OpenNeatoLidarCamera(OpenNeatoEntity, Camera):
         elif not cleaning and self._history_polling_active:
             self._stop_history_polling()
 
-        # Transition from active → idle: load the completed session
-        if (was_cleaning or was_manual) and not cleaning and not manual:
+        # Idle: keep the latest completed session map on screen. Re-checks
+        # on every coordinator tick so the map appears whenever a new
+        # session lands (or after startup if coordinator data arrived
+        # after async_added_to_hass already ran).
+        if not cleaning and not manual:
+            if was_cleaning or was_manual:
+                self._history_session_name = None  # force re-fetch
             self._map_source = "history"
-            self._history_session_name = None  # force re-fetch of completed session
-            self.hass.async_create_task(self._async_update_history_map(allow_recording=False))
+            latest = latest_completed_session(
+                self.coordinator.data.get("history") if self.coordinator.data else None
+            )
+            latest_name = latest.get("name") if latest else None
+            if latest_name and latest_name != self._history_session_name:
+                self.hass.async_create_task(
+                    self._async_update_history_map(allow_recording=False)
+                )
 
     @callback
     def _start_lidar_polling(self) -> None:
@@ -445,6 +455,7 @@ class OpenNeatoMotionCamera(OpenNeatoEntity, Camera):
     camera-image requests.
     """
 
+    _attr_name = "Cleaning replay"
     _attr_translation_key = "motion_map"
     _attr_content_type = "image/gif"
     # The GIF only changes when a new completed session appears, so tell

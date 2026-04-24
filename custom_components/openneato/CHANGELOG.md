@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7
+
+### Fixed
+- **Camera entity names** — the `LIDAR map` and `Cleaning replay` camera
+  entities both showed up as the bare device name (e.g. `BotVacD6Connected`)
+  in the UI, making them indistinguishable. Custom integrations don't read
+  `strings.json` at runtime, so the translation key alone wasn't enough;
+  the display name is now set directly alongside it, matching how every
+  other entity in the integration is declared.
+- **LIDAR map stays blank after HA restart** — when Home Assistant started
+  up with the robot already idle, the LIDAR camera fetched the latest
+  completed session once and never retried. The integration now re-checks
+  on every coordinator tick, so the most recent cleaning map appears as
+  soon as coordinator data is available and refreshes whenever a newer
+  session lands.
+
 ## 1.6
 
 ### Added
