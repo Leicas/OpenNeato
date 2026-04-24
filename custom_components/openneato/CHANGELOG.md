@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.5
+## 1.6
 
 ### Added
 - **Cleaning replay camera** (`camera.openneato_*_motion_map`, translated as
@@ -31,11 +31,10 @@
   misbehaving peer on LAN from redirecting history requests to
   unrelated endpoints or OOM'ing HA Core with an unbounded stream.
 
-### Previous 1.5-track changes (from 2c0adbc)
+### Previous changes bundled in this release (from 2c0adbc)
 - Navigation mode select (Normal/Gentle/Deep/Quick)
 - Remote syslog switch + syslog server IP text entity
 - Wall follower switch migrated to standard `SetUserSettings WallEnable`
-- Manifest bumped 1.3.1 → 1.5
 
 ## 1.3.1
 
