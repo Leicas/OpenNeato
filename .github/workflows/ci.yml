@@ -3,7 +3,31 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'custom_components/**'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-ha.yml'
+      - '.github/workflows/prerelease.yml'
+      - '.github/workflows/slash-command.yml'
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'hacs.json'
   pull_request:
+    paths-ignore:
+      - 'custom_components/**'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-ha.yml'
+      - '.github/workflows/prerelease.yml'
+      - '.github/workflows/slash-command.yml'
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'hacs.json'
 
 permissions:
   contents: read
