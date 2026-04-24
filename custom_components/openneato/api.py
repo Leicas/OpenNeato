@@ -215,8 +215,13 @@ class OpenNeatoApiClient:
                             f"Session {filename} exceeds size cap "
                             f"({MAX_HISTORY_RESPONSE_BYTES} bytes)"
                         )
-                    encoding = response.get_encoding() or "utf-8"
-                    return raw.decode(encoding, errors="replace")
+                    # Firmware emits UTF-8 JSONL; hardcode rather than
+                    # call response.get_encoding(), which raises in
+                    # modern aiohttp when content was streamed via
+                    # response.content.read() (the streaming path
+                    # doesn't populate the response's _body buffer
+                    # that get_encoding's chardet fallback needs).
+                    return raw.decode("utf-8", errors="replace")
         except aiohttp.ClientConnectionError as err:
             raise OpenNeatoConnectionError(
                 f"Unable to connect to OpenNeato at {self._host}: {err}"

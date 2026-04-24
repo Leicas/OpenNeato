@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9
+
+### Fixed
+- **Cameras stuck on idle placeholder** — `get_history_session` called
+  `response.get_encoding()` after streaming the body via
+  `response.content.read()`, which raises `RuntimeError: Cannot compute
+  fallback encoding of a not yet read body` in modern aiohttp (the
+  streaming path doesn't populate the response's `_body` buffer that
+  the chardet fallback in `get_encoding` requires). The session
+  download therefore failed for every fetch, leaving both `LIDAR map`
+  and `Cleaning replay` on the polar-grid placeholder. Hardcoded UTF-8
+  decoding instead — the firmware emits UTF-8 JSONL by spec, so the
+  encoding-detection path was unnecessary.
+
+  This is the root cause that 1.8's WARNING-level logging surfaced.
+
 ## 1.8
 
 ### Fixed
