@@ -110,6 +110,8 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
         setNtfyToken,
         ntfyEnabled,
         setNtfyEnabled,
+        ntfyOnStart,
+        setNtfyOnStart,
         ntfyOnDone,
         setNtfyOnDone,
         ntfyOnError,
@@ -550,6 +552,19 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                                     disabled={saving}
                                     placeholder="Access token (blank = no auth)"
                                 />
+                                <div class="settings-toggle-row">
+                                    <div class="settings-toggle-label">
+                                        <span class="settings-toggle-title">Cleaning started</span>
+                                        <span class="settings-toggle-desc">When a cleaning cycle begins</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class={`settings-toggle${ntfyOnStart ? " on" : ""}`}
+                                        onClick={() => setNtfyOnStart(!ntfyOnStart)}
+                                        disabled={saving}
+                                        aria-label="Toggle cleaning started notification"
+                                    />
+                                </div>
                                 <div class="settings-toggle-row">
                                     <div class="settings-toggle-label">
                                         <span class="settings-toggle-title">Cleaning done</span>

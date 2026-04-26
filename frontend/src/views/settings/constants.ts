@@ -131,6 +131,7 @@ export const DEFAULT_SERVER = {
     ntfyServer: "",
     ntfyToken: "",
     ntfyEnabled: false,
+    ntfyOnStart: true,
     ntfyOnDone: true,
     ntfyOnError: true,
     ntfyOnAlert: true,

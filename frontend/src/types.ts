@@ -64,6 +64,7 @@ export interface SettingsData {
     ntfyServer: string; // Custom ntfy server hostname (empty = ntfy.sh)
     ntfyToken: string; // Access token for authenticated ntfy servers (empty = no auth)
     ntfyEnabled: boolean; // Global switch — must be on for any notification to fire
+    ntfyOnStart: boolean; // Notify when a cleaning cycle begins
     ntfyOnDone: boolean; // Notify when cleaning completes
     ntfyOnError: boolean; // Notify on robot error (UI_ERROR_*, code 243+)
     ntfyOnAlert: boolean; // Notify on robot alert (UI_ALERT_*, code 201-242)

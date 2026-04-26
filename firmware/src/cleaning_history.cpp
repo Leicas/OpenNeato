@@ -221,6 +221,11 @@ void CleaningHistory::stopCollection() {
         LOG("HIST", "Session discarded (%u snapshots < %d minimum)", snapshotCount, HISTORY_MIN_SNAPSHOTS);
         dataLogger.logGenericEvent("history_discard", {{"snapshots", String(snapshotCount), FIELD_INT}});
 
+        // Mark stats invalid so NotificationManager doesn't enrich a "done"
+        // notification with stale data from the previous session.
+        lastCleanStats.valid = false;
+        lastCleanStats.sessionId = ++sessionCounter;
+
         collecting = false;
         recharging = false;
         setInterval(HISTORY_INTERVAL_IDLE_MS);
@@ -244,7 +249,9 @@ void CleaningHistory::stopCollection() {
 
         float areaCovered = static_cast<float>(visitedCells.size()) * HISTORY_AREA_CELL_M * HISTORY_AREA_CELL_M;
 
-        // Snapshot stats for notification enrichment (survives resetSession)
+        // Snapshot stats for notification enrichment (survives resetSession).
+        // sessionId increments last so NotificationManager can detect that
+        // the async charger fetch above has finalized the stats.
         time_t endTime = systemManager.now();
         lastCleanStats.valid = true;
         lastCleanStats.mode = cleanMode;
@@ -256,6 +263,7 @@ void CleaningHistory::stopCollection() {
         lastCleanStats.batteryStart = batteryStart;
         lastCleanStats.batteryEnd = batteryEnd;
         lastCleanStats.recharges = rechargeCount;
+        lastCleanStats.sessionId = ++sessionCounter;
 
         LOG("HIST", "Collection stopped (%u snapshots, %.1fm², %d recharges)", snapshotCount, areaCovered,
             rechargeCount);
