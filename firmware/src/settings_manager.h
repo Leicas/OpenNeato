@@ -44,6 +44,7 @@ struct Settings : public JsonSerializable {
     String ntfyServer; // Custom server hostname (empty = ntfy.sh)
     String ntfyToken; // Access token for authenticated servers (empty = no auth)
     bool ntfyEnabled = false; // Global switch — must be on for any notification to fire
+    bool ntfyOnStart = true; // Notify when a cleaning cycle begins
     bool ntfyOnDone = true; // Notify when cleaning completes
     bool ntfyOnError = true; // Notify on robot error (UI_ERROR_*, code 243+)
     bool ntfyOnAlert = true; // Notify on robot alert (UI_ALERT_*, code 201-242)

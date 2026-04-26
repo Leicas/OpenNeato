@@ -256,6 +256,7 @@ const state = {
     ntfyServer: "",
     ntfyToken: "",
     ntfyEnabled: true,
+    ntfyOnStart: true,
     ntfyOnDone: true,
     ntfyOnError: true,
     ntfyOnAlert: true,
@@ -755,6 +756,7 @@ const routes = {
             "ntfyServer",
             "ntfyToken",
             "ntfyEnabled",
+            "ntfyOnStart",
             "ntfyOnDone",
             "ntfyOnError",
             "ntfyOnAlert",
@@ -1076,6 +1078,7 @@ const handleRequest = async (req, res) => {
             if (data.ntfyServer !== undefined) state.ntfyServer = data.ntfyServer;
             if (data.ntfyToken !== undefined) state.ntfyToken = data.ntfyToken;
             if (data.ntfyEnabled !== undefined) state.ntfyEnabled = data.ntfyEnabled;
+            if (data.ntfyOnStart !== undefined) state.ntfyOnStart = data.ntfyOnStart;
             if (data.ntfyOnDone !== undefined) state.ntfyOnDone = data.ntfyOnDone;
             if (data.ntfyOnError !== undefined) state.ntfyOnError = data.ntfyOnError;
             if (data.ntfyOnAlert !== undefined) state.ntfyOnAlert = data.ntfyOnAlert;
@@ -1114,6 +1117,7 @@ const handleRequest = async (req, res) => {
                 "ntfyServer",
                 "ntfyToken",
                 "ntfyEnabled",
+                "ntfyOnStart",
                 "ntfyOnDone",
                 "ntfyOnError",
                 "ntfyOnAlert",

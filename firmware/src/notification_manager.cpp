@@ -10,6 +10,10 @@
 #define NTFY_DEFAULT_HOST "ntfy.sh"
 #define NTFY_CONNECT_TIMEOUT_MS 3000
 
+// Max wall-clock to wait for CleaningHistory::stopCollection's async charger
+// fetch to finalize stats before sending the "done" notification anyway.
+#define NTFY_DONE_PENDING_TIMEOUT_MS 5000
+
 NotificationManager::NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger,
                                          CleaningHistory& history) :
     LoopTask(NOTIF_INTERVAL_IDLE_MS), neato(neato), settings(settings), dataLogger(logger), history(history) {
@@ -21,6 +25,11 @@ void NotificationManager::begin() {
 }
 
 void NotificationManager::tick() {
+    // Drain a pending "done" notification independently of the fetch path —
+    // it's waiting on CleaningHistory's async stop, not our own state fetch.
+    if (donePending)
+        flushPendingDone();
+
     if (fetchPending)
         return;
 
@@ -52,6 +61,7 @@ void NotificationManager::checkTransitions() {
                 if (!prevUiState.isEmpty()) {
                     bool wasCleaning = prevUiState.indexOf("CLEANINGRUNNING") >= 0;
                     bool wasDocking = prevUiState.indexOf("DOCKING") >= 0;
+                    bool isCleaningRunning = ui.indexOf("CLEANINGRUNNING") >= 0;
                     bool isDocking = ui.indexOf("DOCKING") >= 0;
                     bool isSuspended = ui.indexOf("CLEANINGSUSPENDED") >= 0;
                     bool isIdle = ui == "UIMGR_STATE_IDLE" || ui == "UIMGR_STATE_STANDBY";
@@ -66,6 +76,14 @@ void NotificationManager::checkTransitions() {
                     // The UI state transitions DOCKING -> CLEANINGSUSPENDED once on the dock.
                     bool isRecharging = rs.indexOf("Charging_Cleaning") >= 0;
 
+                    // Fresh start: idle -> CLEANINGRUNNING (excludes resume from
+                    // pause/suspended and resume after mid-clean recharge dock).
+                    bool prevInCleaningContext = prevUiState.indexOf("CLEANING") >= 0 ||
+                                                 prevUiState.indexOf("DOCKING") >= 0;
+                    if (isCleaningRunning && !prevInCleaningContext && cfg.ntfyOnStart) {
+                        sendNotification(topic, "arrow_forward", hostname + ": Cleaning started");
+                    }
+
                     if (isDocking && !wasDocking && isRecharging && cfg.ntfyOnDocking) {
                         // Recharge dock — robot will resume cleaning after charging
                         sendNotification(topic, "electric_plug", hostname + ": Returning to base to recharge");
@@ -75,19 +93,17 @@ void NotificationManager::checkTransitions() {
                     // Also handle suspended -> idle (user stops clean while recharging).
                     bool dockingDone = wasDocking && wasCleaningBeforeDock && !isRecharging;
                     bool suspendedDone = (prevUiState.indexOf("CLEANINGSUSPENDED") >= 0) && wasCleaningBeforeDock;
-                    if ((wasCleaning || dockingDone || suspendedDone) && isIdle && cfg.ntfyOnDone) {
-                        String msg = hostname + ": Cleaning done";
-                        const LastCleanStats& stats = history.getLastCleanStats();
-                        if (stats.valid) {
-                            long mins = stats.durationSec / 60;
-                            msg += "\n" + String(mins) + "min";
-                            msg += " | " + String(stats.areaCoveredM2, 1) + "m2";
-                            msg += " | " + String(stats.distanceM, 0) + "m";
-                            if (stats.batteryStart >= 0 && stats.batteryEnd >= 0) {
-                                msg += " | " + String(stats.batteryStart) + "% -> " + String(stats.batteryEnd) + "%";
-                            }
-                        }
-                        sendNotification(topic, "white_check_mark", msg);
+                    if ((wasCleaning || dockingDone || suspendedDone) && isIdle && cfg.ntfyOnDone && !donePending) {
+                        // Defer the send: CleaningHistory::stopCollection finalizes stats
+                        // inside an async getCharger callback, so reading getLastCleanStats()
+                        // here can race and pull stale data from the prior session. Capture
+                        // the current sessionId; flushPendingDone() fires once it increments
+                        // (or after NTFY_DONE_PENDING_TIMEOUT_MS).
+                        donePending = true;
+                        doneTriggerSessionId = history.getLastCleanStats().sessionId;
+                        donePendingSinceMs = millis();
+                        doneHostname = hostname;
+                        doneTopic = topic;
                     }
 
                     // Clear tracking flag when leaving docking — but preserve it
@@ -124,6 +140,34 @@ void NotificationManager::checkTransitions() {
 bool NotificationManager::isActiveState(const String& uiState) {
     return uiState.indexOf("CLEANINGRUNNING") >= 0 || uiState.indexOf("CLEANINGPAUSED") >= 0 ||
            uiState.indexOf("CLEANINGSUSPENDED") >= 0 || uiState.indexOf("DOCKING") >= 0;
+}
+
+void NotificationManager::flushPendingDone() {
+    const LastCleanStats& stats = history.getLastCleanStats();
+    bool finalized = stats.sessionId != doneTriggerSessionId;
+    bool timedOut = (millis() - donePendingSinceMs) >= NTFY_DONE_PENDING_TIMEOUT_MS;
+    if (!finalized && !timedOut)
+        return;
+
+    // If stopCollection finalized after we triggered, sessionId moved and stats
+    // are fresh; if we timed out, fire bare without stats rather than stale.
+    sendDoneNotification(doneTopic, doneHostname, finalized && stats.valid);
+    donePending = false;
+}
+
+void NotificationManager::sendDoneNotification(const String& topic, const String& hostname, bool withStats) {
+    String msg = hostname + ": Cleaning done";
+    if (withStats) {
+        const LastCleanStats& stats = history.getLastCleanStats();
+        long mins = stats.durationSec / 60;
+        msg += "\n" + String(mins) + "min";
+        msg += " | " + String(stats.areaCoveredM2, 1) + "m2";
+        msg += " | " + String(stats.distanceM, 0) + "m";
+        if (stats.batteryStart >= 0 && stats.batteryEnd >= 0) {
+            msg += " | " + String(stats.batteryStart) + "% -> " + String(stats.batteryEnd) + "%";
+        }
+    }
+    sendNotification(topic, "white_check_mark", msg);
 }
 
 void NotificationManager::sendNotification(const String& topic, const String& tags, const String& message) {

@@ -23,6 +23,10 @@ struct LastCleanStats {
     int batteryStart = -1;       // Battery % at session start
     int batteryEnd = -1;         // Battery % at session end
     int recharges = 0;           // Mid-clean recharge count
+    // Bumped every time a session is finalized (success or discard) so that
+    // NotificationManager can detect when stopCollection's async charger fetch
+    // has completed and the stats above reflect the just-ended session.
+    uint32_t sessionId = 0;
 };
 
 // Session metadata returned by listSessions() — includes the raw JSON of
@@ -87,6 +91,7 @@ private:
 
     // -- Last session stats (survives reset, updated at end of each session) --
     LastCleanStats lastCleanStats;
+    uint32_t sessionCounter = 0; // Source of truth for lastCleanStats.sessionId
 
     // -- State tracking ------------------------------------------------------
     String prevUiState;

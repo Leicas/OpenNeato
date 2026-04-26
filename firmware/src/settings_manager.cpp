@@ -69,6 +69,7 @@ void SettingsManager::load() {
     current.ntfyServer = prefs.getString(NVS_KEY_NTFY_SERVER, "");
     current.ntfyToken = prefs.getString(NVS_KEY_NTFY_TOKEN, "");
     current.ntfyEnabled = prefs.getBool(NVS_KEY_NTFY_ENABLED, false);
+    current.ntfyOnStart = prefs.getBool(NVS_KEY_NTFY_ON_START, true);
     current.ntfyOnDone = prefs.getBool(NVS_KEY_NTFY_ON_DONE, true);
     current.ntfyOnError = prefs.getBool(NVS_KEY_NTFY_ON_ERR, true);
     current.ntfyOnAlert = prefs.getBool(NVS_KEY_NTFY_ON_ALERT, true);
@@ -101,6 +102,7 @@ void SettingsManager::save() {
     prefs.putString(NVS_KEY_NTFY_SERVER, current.ntfyServer);
     prefs.putString(NVS_KEY_NTFY_TOKEN, current.ntfyToken);
     prefs.putBool(NVS_KEY_NTFY_ENABLED, current.ntfyEnabled);
+    prefs.putBool(NVS_KEY_NTFY_ON_START, current.ntfyOnStart);
     prefs.putBool(NVS_KEY_NTFY_ON_DONE, current.ntfyOnDone);
     prefs.putBool(NVS_KEY_NTFY_ON_ERR, current.ntfyOnError);
     prefs.putBool(NVS_KEY_NTFY_ON_ALERT, current.ntfyOnAlert);
@@ -286,6 +288,11 @@ ApplyResult SettingsManager::apply(const String& json) {
         changed = true;
         LOG("SETTINGS", "ntfy enabled -> %s", current.ntfyEnabled ? "on" : "off");
     }
+    if (incoming.ntfyOnStart != current.ntfyOnStart) {
+        current.ntfyOnStart = incoming.ntfyOnStart;
+        changed = true;
+        LOG("SETTINGS", "ntfy on start -> %s", current.ntfyOnStart ? "on" : "off");
+    }
     if (incoming.ntfyOnDone != current.ntfyOnDone) {
         current.ntfyOnDone = incoming.ntfyOnDone;
         changed = true;
@@ -363,6 +370,7 @@ std::vector<Field> Settings::toFields() const {
             {"ntfyServer", ntfyServer, FIELD_STRING},
             {"ntfyToken", ntfyToken, FIELD_STRING},
             {"ntfyEnabled", ntfyEnabled ? "true" : "false", FIELD_BOOL},
+            {"ntfyOnStart", ntfyOnStart ? "true" : "false", FIELD_BOOL},
             {"ntfyOnDone", ntfyOnDone ? "true" : "false", FIELD_BOOL},
             {"ntfyOnError", ntfyOnError ? "true" : "false", FIELD_BOOL},
             {"ntfyOnAlert", ntfyOnAlert ? "true" : "false", FIELD_BOOL},
@@ -454,6 +462,10 @@ bool Settings::fromFields(const std::vector<Field>& fields) {
     }
     if ((f = findField(fields, "ntfyEnabled")) && f->type == FIELD_BOOL) {
         ntfyEnabled = (f->value == "true");
+        applied = true;
+    }
+    if ((f = findField(fields, "ntfyOnStart")) && f->type == FIELD_BOOL) {
+        ntfyOnStart = (f->value == "true");
         applied = true;
     }
     if ((f = findField(fields, "ntfyOnDone")) && f->type == FIELD_BOOL) {

@@ -26,6 +26,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
     const [ntfyServer, setNtfyServer] = useState("");
     const [ntfyToken, setNtfyToken] = useState("");
     const [ntfyEnabled, setNtfyEnabled] = useState(false);
+    const [ntfyOnStart, setNtfyOnStart] = useState(true);
     const [ntfyOnDone, setNtfyOnDone] = useState(true);
     const [ntfyOnError, setNtfyOnError] = useState(true);
     const [ntfyOnAlert, setNtfyOnAlert] = useState(true);
@@ -63,6 +64,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             setNtfyServer(fetched.ntfyServer ?? "");
             setNtfyToken(fetched.ntfyToken ?? "");
             setNtfyEnabled(fetched.ntfyEnabled ?? false);
+            setNtfyOnStart(fetched.ntfyOnStart ?? true);
             setNtfyOnDone(fetched.ntfyOnDone ?? true);
             setNtfyOnError(fetched.ntfyOnError ?? true);
             setNtfyOnAlert(fetched.ntfyOnAlert ?? true);
@@ -92,6 +94,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             ntfyServer !== (server.current.ntfyServer ?? "") ||
             ntfyToken !== (server.current.ntfyToken ?? "") ||
             ntfyEnabled !== (server.current.ntfyEnabled ?? false) ||
+            ntfyOnStart !== (server.current.ntfyOnStart ?? true) ||
             ntfyOnDone !== (server.current.ntfyOnDone ?? true) ||
             ntfyOnError !== (server.current.ntfyOnError ?? true) ||
             ntfyOnAlert !== (server.current.ntfyOnAlert ?? true) ||
@@ -151,6 +154,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         if (ntfyServer !== (server.current.ntfyServer ?? "")) patch.ntfyServer = ntfyServer;
         if (ntfyToken !== (server.current.ntfyToken ?? "")) patch.ntfyToken = ntfyToken;
         if (ntfyEnabled !== (server.current.ntfyEnabled ?? false)) patch.ntfyEnabled = ntfyEnabled;
+        if (ntfyOnStart !== (server.current.ntfyOnStart ?? true)) patch.ntfyOnStart = ntfyOnStart;
         if (ntfyOnDone !== (server.current.ntfyOnDone ?? true)) patch.ntfyOnDone = ntfyOnDone;
         if (ntfyOnError !== (server.current.ntfyOnError ?? true)) patch.ntfyOnError = ntfyOnError;
         if (ntfyOnAlert !== (server.current.ntfyOnAlert ?? true)) patch.ntfyOnAlert = ntfyOnAlert;
@@ -174,6 +178,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         ntfyServer,
         ntfyToken,
         ntfyEnabled,
+        ntfyOnStart,
         ntfyOnDone,
         ntfyOnError,
         ntfyOnAlert,
@@ -250,6 +255,8 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         setNtfyToken,
         ntfyEnabled,
         setNtfyEnabled,
+        ntfyOnStart,
+        setNtfyOnStart,
         ntfyOnDone,
         setNtfyOnDone,
         ntfyOnError,

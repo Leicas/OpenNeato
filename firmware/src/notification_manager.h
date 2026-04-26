@@ -40,7 +40,18 @@ private:
     // Pending state fetch tracking
     bool fetchPending = false;
 
+    // Deferred "cleaning done" notification — captured at the cleaning->idle
+    // transition and held until CleaningHistory::stopCollection finalizes the
+    // session stats (sessionId increments) or a wall-clock timeout elapses.
+    bool donePending = false;
+    uint32_t doneTriggerSessionId = 0; // sessionId observed at trigger time
+    unsigned long donePendingSinceMs = 0;
+    String doneHostname; // captured hostname at trigger time
+    String doneTopic;    // captured topic at trigger time
+
     void checkTransitions();
+    void flushPendingDone();
+    void sendDoneNotification(const String& topic, const String& hostname, bool withStats);
     void sendNotification(const String& topic, const String& tags, const String& message);
     static bool isActiveState(const String& uiState);
 };
