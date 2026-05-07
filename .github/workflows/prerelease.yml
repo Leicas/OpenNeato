@@ -51,15 +51,17 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             TAG="v${BASE}-pr${PR_NUMBER}.${SHORT_SHA}"
           else
-            SAFE_REF=$(echo "$HEAD_REF" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            SAFE_REF="${HEAD_REF//[^a-zA-Z0-9._-]/-}"
             TAG="v${BASE}-${SAFE_REF}.${SHORT_SHA}"
           fi
 
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          {
+            echo "pr_number=$PR_NUMBER"
+            echo "head_sha=$HEAD_SHA"
+            echo "head_ref=$HEAD_REF"
+            echo "tag=$TAG"
+            echo "version=${TAG#v}"
+          } >> "$GITHUB_OUTPUT"
           echo "Release: $TAG ($HEAD_REF @ $SHORT_SHA)"
 
   prerelease:
@@ -120,10 +122,10 @@ jobs:
         env:
           FIRMWARE_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          for env in $(grep -oE '^\[env:([a-zA-Z0-9_-]+-release)\]' platformio.ini | sed 's/\[env:\(.*\)\]/\1/'); do
+          while IFS= read -r env; do
             echo "Building $env..."
             pio run -e "$env"
-          done
+          done < <(grep -oE '^\[env:([a-zA-Z0-9_-]+-release)\]' platformio.ini | sed 's/\[env:\(.*\)\]/\1/')
 
       # --- Flash tool + GitHub Release ---
 

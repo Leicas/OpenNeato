@@ -58,7 +58,7 @@ jobs:
         run: |
           RELEASE_TAG="${{ github.event.inputs.release_tag }}"
           VERSION=${RELEASE_TAG#v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Setting version to: $VERSION"
 
       - name: Save release notes
@@ -126,10 +126,10 @@ jobs:
         run: |
           # Build all *-release environments; post-build hook packages
           # firmware artifacts into each env's build dir for GoReleaser
-          for env in $(grep -oE '^\[env:([a-zA-Z0-9_-]+-release)\]' platformio.ini | sed 's/\[env:\(.*\)\]/\1/'); do
+          while IFS= read -r env; do
             echo "Building $env..."
             pio run -e "$env"
-          done
+          done < <(grep -oE '^\[env:([a-zA-Z0-9_-]+-release)\]' platformio.ini | sed 's/\[env:\(.*\)\]/\1/')
 
       # --- Flash tool + GitHub Release ---
 

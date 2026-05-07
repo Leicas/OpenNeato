@@ -77,6 +77,9 @@ Verify frontend changes: `npm run check` + `npm run build` in `frontend/`.
 
 Verify flash tool changes: `golangci-lint run ./...` + `go build` in `flash/`.
 
+Verify GitHub Actions workflow changes: install `actionlint` if missing, then run
+`actionlint` from the repository root.
+
 ### Frontend
 
 ```bash
