@@ -4,10 +4,10 @@ go 1.26.2
 
 require (
 	go.bug.st/serial v1.6.4
-	golang.org/x/term v0.42.0
+	golang.org/x/term v0.43.0
 )
 
 require (
 	github.com/creack/goselect v0.1.3 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 )

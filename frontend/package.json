@@ -13,14 +13,14 @@
         "fix:unsafe": "biome check --write --unsafe"
     },
     "dependencies": {
-        "preact": "10.29.1"
+        "preact": "^10.29.1"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.4.13",
-        "@preact/preset-vite": "2.10.5",
-        "openapi-typescript": "7.13.0",
-        "typescript": "6.0.3",
-        "vite": "8.0.10",
-        "yaml": "2.8.3"
+        "@biomejs/biome": "^2.4.15",
+        "@preact/preset-vite": "^2.10.5",
+        "openapi-typescript": "^7.13.0",
+        "typescript": "^6.0.3",
+        "vite": "^8.0.13",
+        "yaml": "^2.9.0"
     }
 }
