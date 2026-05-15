@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -26,6 +27,19 @@ class OpenNeatoConnectionError(HomeAssistantError):
 
 class OpenNeatoApiError(HomeAssistantError):
     """Error to indicate a non-connection API failure."""
+
+
+async def _read_json(response: aiohttp.ClientResponse) -> Any:
+    """Read a response body and parse it as JSON, tolerating stray non-UTF-8 bytes.
+
+    The firmware's jsonEscape() passes bytes >= 0x20 through verbatim, so the
+    /api/version response can contain raw bytes from the robot's smart-battery
+    memory (manufacturer name, serial, etc.) that aren't valid UTF-8. Replace
+    those bytes rather than raising — losing one glyph is better than failing
+    the whole config-entry setup.
+    """
+    raw = await response.read()
+    return json.loads(raw.decode("utf-8", errors="replace"))
 
 
 class OpenNeatoApiClient:
@@ -59,7 +73,7 @@ class OpenNeatoApiClient:
                         path, response.status, response.content_type,
                     )
                     response.raise_for_status()
-                    return await response.json()
+                    return await _read_json(response)
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on GET %s: %s", path, err)
             raise OpenNeatoConnectionError(
@@ -92,7 +106,7 @@ class OpenNeatoApiClient:
                     response.raise_for_status()
                     content_type = response.content_type or ""
                     if "json" in content_type:
-                        return await response.json()
+                        return await _read_json(response)
                     return await response.text()
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on POST %s: %s", path, err)
@@ -122,7 +136,7 @@ class OpenNeatoApiClient:
                         path, response.status, response.content_type,
                     )
                     response.raise_for_status()
-                    return await response.json()
+                    return await _read_json(response)
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on PUT %s: %s", path, err)
             raise OpenNeatoConnectionError(
@@ -148,6 +162,14 @@ class OpenNeatoApiClient:
     async def get_charger(self) -> dict[str, Any]:
         """Get charger / battery information."""
         return await self._get("/api/charger")
+
+    async def get_battery_analog(self) -> dict[str, Any]:
+        """Get analog battery readings (voltage, current, temperature)."""
+        return await self._get("/api/analog")
+
+    async def get_battery_warranty(self) -> dict[str, Any]:
+        """Get battery warranty data (cumulative cycles, runtime)."""
+        return await self._get("/api/warranty")
 
     async def get_error(self) -> dict[str, Any]:
         """Get current error information."""
@@ -269,6 +291,10 @@ class OpenNeatoApiClient:
     async def restart(self) -> dict[str, Any] | str:
         """Restart the robot controller."""
         return await self._post("/api/system/restart")
+
+    async def new_battery(self) -> dict[str, Any] | str:
+        """Reset battery fuel-gauge calibration after physically replacing the pack."""
+        return await self._post("/api/battery/new")
 
     async def format_fs(self) -> dict[str, Any] | str:
         """Format the filesystem."""

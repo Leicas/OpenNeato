@@ -40,7 +40,12 @@
       "last_clean_distance": { "name": "Last clean distance" },
       "last_clean_battery_used": { "name": "Last clean battery used" },
       "last_clean_mode": { "name": "Last clean mode" },
-      "last_clean_ended": { "name": "Last clean ended" }
+      "last_clean_ended": { "name": "Last clean ended" },
+      "analog_battery_voltage": { "name": "Battery voltage (analog)" },
+      "analog_battery_current": { "name": "Battery current" },
+      "analog_external_voltage": { "name": "External voltage (analog)" },
+      "battery_cycles": { "name": "Battery cycles" },
+      "cumulative_cleaning_time": { "name": "Cumulative cleaning time" }
     },
     "binary_sensor": {
       "charging": { "name": "Charging" },
@@ -78,7 +83,8 @@
       "robot_restart": { "name": "Restart robot" },
       "robot_shutdown": { "name": "Shutdown robot" },
       "locate": { "name": "Locate robot" },
-      "clear_errors": { "name": "Clear errors" }
+      "clear_errors": { "name": "Clear errors" },
+      "new_battery": { "name": "New battery" }
     },
     "number": {
       "brush_rpm_setting": { "name": "Brush RPM" },
