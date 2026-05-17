@@ -8,6 +8,7 @@ import calendarSvg from "../assets/icons/calendar.svg?raw";
 import chipSvg from "../assets/icons/chip.svg?raw";
 import databaseSvg from "../assets/icons/database.svg?raw";
 import gearSvg from "../assets/icons/gear.svg?raw";
+import globeSvg from "../assets/icons/globe.svg?raw";
 import houseSvg from "../assets/icons/house.svg?raw";
 import manualSvg from "../assets/icons/manual.svg?raw";
 import moonSvg from "../assets/icons/moon.svg?raw";
@@ -1062,6 +1063,35 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                         </button>
                     </div>
                 </SettingsCategory>
+
+                {firmware && (
+                    <SettingsCategory title="About" icon={globeSvg}>
+                        <div class="settings-section">
+                            <div class="settings-about-card">
+                                <div class="settings-about-name">{firmware.name}</div>
+                                <div class="settings-about-description">
+                                    Open-source replacement for Neato's discontinued cloud and mobile app.
+                                </div>
+                                <div class="settings-about-meta">Copyright © 2026 Soner Köksal</div>
+                                <div class="settings-about-meta">Licensed under {firmware.license} License</div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <a
+                                class="settings-nav-row settings-link-row"
+                                href={firmware.repositoryUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <div class="settings-nav-row-left">
+                                    <Icon svg={globeSvg} />
+                                    View on GitHub
+                                </div>
+                                <span class="settings-nav-chevron">&rsaquo;</span>
+                            </a>
+                        </div>
+                    </SettingsCategory>
+                )}
 
                 <SettingsCategory title="Danger Zone" icon={alertSvg}>
                     <div class="settings-section">

@@ -911,10 +911,49 @@ input:disabled {
     color: var(--red);
 }
 
+.settings-link-row {
+    text-decoration: none;
+}
+
+.settings-link-row .settings-nav-row-left {
+    min-width: 0;
+}
+
+.settings-link-row .settings-nav-row-left {
+    overflow-wrap: anywhere;
+}
+
 .settings-nav-chevron {
     font-size: 20px;
     color: var(--text-muted);
     line-height: 1;
+}
+
+.settings-about-card {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.settings-about-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.settings-about-description {
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--text-dim);
+}
+
+.settings-about-meta {
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
 }
 
 .settings-toggle-row {

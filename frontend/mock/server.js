@@ -938,11 +938,15 @@ const routes = {
 
     "GET /api/firmware/version": (_req, res) => {
         jsonResponse(res, {
+            name: "OpenNeato",
             version: state.firmwareVersion ?? getVersion(),
             chip: "ESP32-C3",
+            model: state.identifying ? "" : state.unsupported ? "Botvac Connected" : "Botvac D7",
             hostname: "neato-kitchen",
             supported: !state.unsupported && !state.identifying,
             identifying: state.identifying,
+            repositoryUrl: "https://github.com/renjfk/OpenNeato",
+            license: "MIT",
         });
     },
 };

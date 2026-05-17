@@ -330,12 +330,15 @@ void WebServer::registerFirmwareRoutes() {
     // GET /api/firmware/version — current ESP32 firmware version + chip model + robot support status
     loggedRoute("/api/firmware/version", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
         std::vector<Field> fields = {
+                {"name", "OpenNeato", FIELD_STRING},
                 {"version", fwMgr.getFirmwareVersion(), FIELD_STRING},
                 {"chip", fwMgr.getChipModel(), FIELD_STRING},
                 {"model", neato.getModelName(), FIELD_STRING},
                 {"hostname", settingsMgr.get().hostname, FIELD_STRING},
                 {"supported", isSupportedModel(neato.getModelName()) ? "true" : "false", FIELD_BOOL},
                 {"identifying", neato.isIdentifying() ? "true" : "false", FIELD_BOOL},
+                {"repositoryUrl", "https://github.com/renjfk/OpenNeato", FIELD_STRING},
+                {"license", "MIT", FIELD_STRING},
         };
         request->send(200, "application/json", fieldsToJson(fields));
         return 200;

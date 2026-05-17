@@ -1541,6 +1541,9 @@ components:
     FirmwareVersion:
       type: object
       properties:
+        name:
+          type: string
+          description: Product name
         version:
           type: string
           description: Bridge firmware semantic version
@@ -1559,13 +1562,22 @@ components:
         identifying:
           type: boolean
           description: True while the bridge is still probing the robot model
+        repositoryUrl:
+          type: string
+          description: Project repository URL
+        license:
+          type: string
+          description: Project license identifier
       required:
+        - name
         - version
         - chip
         - model
         - hostname
         - supported
         - identifying
+        - repositoryUrl
+        - license
     HistoryFileInfo:
       type: object
       properties:
