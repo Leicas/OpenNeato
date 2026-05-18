@@ -24,14 +24,6 @@ namespace_id = "20260518"
   limit = 60
   period = 60
 
-[[ratelimits]]
-name = "PROBE_PATH_RATE_LIMITER"
-namespace_id = "20260519"
-
-  [ratelimits.simple]
-  limit = 1
-  period = 60
-
 [[routes]]
 pattern = "openneato-demo.renjfk.com"
 custom_domain = true

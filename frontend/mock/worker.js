@@ -79,23 +79,6 @@ async function checkAnalyticsRateLimit(request, env) {
     });
 }
 
-async function checkProbePathRateLimit(request, env) {
-    if (!env.PROBE_PATH_RATE_LIMITER) return null;
-
-    const clientIP = request.headers.get("CF-Connecting-IP") || "anonymous";
-    const { success } = await env.PROBE_PATH_RATE_LIMITER.limit({ key: `probe-path:${clientIP}` });
-    if (success) return null;
-
-    return new Response(null, {
-        status: 429,
-        headers: { "Retry-After": "60" },
-    });
-}
-
-function isProbePath(pathname) {
-    return pathname.includes("/wp-");
-}
-
 async function readBodyWithLimit(request) {
     if (!request.body) return new Uint8Array();
 
@@ -421,15 +404,6 @@ async function serveAsset(request, env) {
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
-
-        if (isProbePath(url.pathname)) {
-            const rateLimited = await checkProbePathRateLimit(request, env);
-            if (rateLimited) return withSecurityHeaders(rateLimited);
-
-            // Do not fall through to the SPA asset fallback for obvious probe paths.
-            return withSecurityHeaders(new Response(null, { status: 404 }));
-        }
-
         if (request.method === "POST" && url.pathname === "/api/collect") {
             return withSecurityHeaders(await handleCollect(request, env));
         }
