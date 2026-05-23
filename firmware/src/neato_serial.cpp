@@ -583,8 +583,7 @@ bool NeatoSerial::clean(const String& action, std::function<void(bool)> callback
     }
 
     if (action == "spot") {
-        bool isPausedSpot =
-                stateCache.hasCached() && stateCache.getCached().uiState.indexOf("SPOTCLEANINGPAUSED") >= 0;
+        bool isPausedSpot = stateCache.hasCached() && stateCache.getCached().uiState.indexOf("SPOTCLEANINGPAUSED") >= 0;
         if (isPausedSpot) {
             invalidateState();
             return enqueue(buildSetEvent(EVT_RESUME), wrapAction(callback), PRIORITY_HIGH);

@@ -8,7 +8,7 @@
 // Heatshrink decompression can drop a byte that merges two JSONL lines into
 // one, so substring matching isn't enough — validate the braces balance and
 // nothing trails the top-level object before embedding into /api/history.
-static bool isValidMetaLine(const String& line, const char* expectedTypePrefix) {
+static bool isValidMetaLine(const String& line, const char *expectedTypePrefix) {
     if (line.length() < 2 || line[0] != '{' || line[line.length() - 1] != '}')
         return false;
     if (line.indexOf(expectedTypePrefix) < 0)
@@ -256,8 +256,8 @@ void CleaningHistory::stopCollection() {
         lastCleanStats.valid = true;
         lastCleanStats.mode = cleanMode;
         lastCleanStats.durationSec = (sessionStartTime > 0 && endTime > sessionStartTime)
-                                         ? static_cast<long>(endTime - sessionStartTime)
-                                         : 0;
+                                             ? static_cast<long>(endTime - sessionStartTime)
+                                             : 0;
         lastCleanStats.areaCoveredM2 = areaCovered;
         lastCleanStats.distanceM = totalDistance;
         lastCleanStats.batteryStart = batteryStart;

@@ -78,8 +78,8 @@ void NotificationManager::checkTransitions() {
 
                     // Fresh start: idle -> CLEANINGRUNNING (excludes resume from
                     // pause/suspended and resume after mid-clean recharge dock).
-                    bool prevInCleaningContext = prevUiState.indexOf("CLEANING") >= 0 ||
-                                                 prevUiState.indexOf("DOCKING") >= 0;
+                    bool prevInCleaningContext =
+                            prevUiState.indexOf("CLEANING") >= 0 || prevUiState.indexOf("DOCKING") >= 0;
                     if (isCleaningRunning && !prevInCleaningContext && cfg.ntfyOnStart) {
                         sendNotification(topic, "arrow_forward", hostname + ": Cleaning started");
                     }
@@ -179,7 +179,7 @@ void NotificationManager::sendNotification(const String& topic, const String& ta
 
     WiFiClientSecure secureClient;
     WiFiClient plainClient;
-    Client* client;
+    Client *client;
 
     if (useHttps) {
         secureClient.setInsecure(); // Skip cert validation — self-hosted server

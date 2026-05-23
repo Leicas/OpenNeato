@@ -92,11 +92,10 @@ void WebServer::registerApiRoutes() {
     registerGetRoute("/api/error", neato, &NeatoSerial::getErr, {});
     registerGetRoute("/api/lidar", neato, &NeatoSerial::getLdsScan, {});
     registerGetRoute("/api/user-settings", neato, &NeatoSerial::getUserSettings, {});
-    registerGetRoute(
-            "/api/sensors", neato,
-            static_cast<void (NeatoSerial::*)(std::function<void(bool, const DigitalSensorData&)>)>(
-                    &NeatoSerial::getDigitalSensors),
-            {});
+    registerGetRoute("/api/sensors", neato,
+                     static_cast<void (NeatoSerial::*)(std::function<void(bool, const DigitalSensorData&)>)>(
+                             &NeatoSerial::getDigitalSensors),
+                     {});
 
     // -- Action endpoints ----------------------------------------------------
     // All parameterized actions use query strings: resource URL identifies the
