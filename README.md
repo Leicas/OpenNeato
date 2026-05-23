@@ -75,6 +75,90 @@ port, giving you a local web interface that works without any external dependenc
 The frontend is a lightweight SPA that gets gzipped and embedded directly into the firmware binary, so a single
 OTA update covers both firmware and UI. Mobile-friendly, dark theme by default.
 
+## Home Assistant Integration
+
+This fork ships a HACS-installable Home Assistant custom integration in
+[`custom_components/openneato/`](custom_components/openneato/). Once installed it discovers your OpenNeato bridge
+by IP/hostname and exposes the robot as a full HA device — no YAML, no extra add-ons.
+
+> [!NOTE]
+> The HA integration is the primary differentiator of this fork. The firmware, frontend, and flash tool track
+> upstream [`renjfk/OpenNeato`](https://github.com/renjfk/OpenNeato) closely. If you only want the standalone web
+> UI, use upstream directly.
+
+### Install via HACS
+
+1. In HACS, add this fork as a **custom repository**: `https://github.com/Leicas/OpenNeato` (category:
+   *Integration*).
+2. Search for **OpenNeato** in HACS and install.
+3. Restart Home Assistant.
+4. **Settings → Devices & Services → Add Integration → OpenNeato** and enter the bridge hostname or IP
+   (e.g. `neato.local` or `192.168.1.42`).
+
+The integration polls `/api/*` over your LAN every 5 seconds (`local_polling`). No cloud round-trip, no
+external dependencies. Requires firmware `1.0+`; battery diagnostics need firmware `0.13+` (upstream PR #121).
+
+### What you get
+
+A single device with the following entity groups:
+
+- **Vacuum** (`vacuum.openneato_<name>`) — start/stop/pause/dock/locate/spot-clean, battery level, status,
+  fan speed presets (Eco/Auto/Intense), error reporting. Works with all the standard vacuum cards.
+- **Cameras** — `LIDAR map` (live 360° scan during cleaning) and `Cleaning replay` (animated GIF time-lapse
+  of the most recent completed session). Both are standard HA camera entities, compatible with
+  picture-entity, picture-glance, and vacuum-card.
+- **Sensors** — battery level/voltage/current/temperature, battery cycle count, cumulative cleaning time,
+  WiFi RSSI, free heap, storage used, uptime, motor RPMs, error code/message, plus "last clean" stats
+  (duration, area covered, distance, battery used, mode, end time) pulled from the on-device history.
+- **Binary sensors** — charging, external power, battery over-temp, battery failure, empty fuel, error
+  active, NTP synced, dustbin seated, left/right wheel lifted, dock contact.
+- **Switches** — eco mode, intense clean, bin-full detect, wall follower, schedule on/off, button-click
+  sounds, melodies, warnings, stealth LED, remote syslog, WiFi AP fallback, and per-event push
+  notifications (start/done/error/alert/docking).
+- **Text** — syslog server IP, ntfy topic, ntfy server, ntfy token (full push-notification config from HA).
+- **Numbers** — brush RPM, vacuum speed, side-brush power, stall threshold.
+- **Select** — navigation mode (Normal / Gentle / Deep / Quick).
+- **Buttons** — restart bridge, restart robot, shutdown robot, locate, clear errors, format filesystem
+  (diagnostic, disabled by default), **new battery** (resets fuel-gauge calibration after a physical pack
+  swap, disabled by default for safety).
+
+Every entity is translated via `strings.json`, and diagnostic-class entities (voltages, currents, raw
+sensor states) are tagged so they cluster cleanly under HA's Diagnostic section.
+
+### Notes for setup
+
+- **Camera entities and vacuum-card** — the `LIDAR map` camera self-manages a 2 s `/api/lidar` poll only
+  while the robot is actively cleaning, so it doesn't add load to the coordinator's 5 s cycle. When idle,
+  both cameras fall back to the most recent completed cleaning map.
+- **Coordinator resilience** — the integration tolerates a single hung endpoint without going into
+  "requires attention" state. State / charger / system are critical; anything else (errors, motors,
+  history) falls back to the last known value during transient ESP32 serial hangs.
+- **No Pillow declared dependency** — map rendering uses Pillow which already ships with HA Core, so the
+  integration's `manifest.json` keeps `"requirements": []`. Nothing extra to install.
+- **ntfy + custom servers** — point `ntfy_server` at a self-hosted instance and `ntfy_token` at a Bearer
+  token for authenticated push. Empty server defaults to `ntfy.sh`; empty token is unauthenticated.
+
+### Version history
+
+Full per-version notes live in [`custom_components/openneato/CHANGELOG.md`](custom_components/openneato/CHANGELOG.md).
+Highlights:
+
+- **1.11** — added `notify_on_start` and `ap_fallback_on_disconnect` switches; ntfy topic/server/token text
+  entities for full HA-side push config.
+- **1.10** — battery diagnostics (current, voltage, cycles, cumulative cleaning time) on top of firmware
+  PR #121, `New battery` calibration button, UTF-8-tolerant `/api/version` parsing.
+- **1.9** — fixed cameras stuck on the idle placeholder (`get_encoding()` crash on streamed bodies).
+- **1.6** — `Cleaning replay` camera (animated GIF time-lapse), `/api/history` corruption-tolerant parsing,
+  history filename validation + 2 MB response cap (LAN-MITM mitigation).
+- **1.3** — `LIDAR map` camera ported from the frontend renderer; self-managed polling.
+- **1.2** — last-clean stats sensors; dropped Pillow from declared deps.
+
+### Reporting integration bugs
+
+Use this fork's [issue tracker](https://github.com/Leicas/OpenNeato/issues) for anything that lives under
+`custom_components/openneato/`. For firmware, frontend, or flash-tool issues, upstream
+[renjfk/OpenNeato](https://github.com/renjfk/OpenNeato/issues) is the right place.
+
 ## Supported Robots
 
 Neato Botvac D3 through D7. D8/D9/D10 are NOT supported (different board, password-locked serial port).
