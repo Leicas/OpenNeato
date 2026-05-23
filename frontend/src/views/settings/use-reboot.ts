@@ -1,40 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useRef, useState } from "preact/hooks";
+import { usePoll } from "../../hooks/use-poll";
 import type { SystemData } from "../../types";
 
 export function useReboot(currentUptime: number) {
     const [rebooting, setRebooting] = useState(false);
-    const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const uptimeBeforeReboot = useRef(0);
 
-    const pollUntilRebooted = useCallback(() => {
-        const poll = () => {
-            fetch("/api/system")
-                .then((res) => (res.ok ? res.json() : Promise.reject()))
-                .then((data: SystemData) => {
-                    if (data.uptime < uptimeBeforeReboot.current) {
-                        window.location.reload();
-                    } else {
-                        pollTimer.current = setTimeout(poll, 2000);
-                    }
-                })
-                .catch(() => {
-                    pollTimer.current = setTimeout(poll, 2000);
-                });
-        };
-        pollTimer.current = setTimeout(poll, 2000);
-    }, []);
-
-    useEffect(() => {
-        return () => {
-            if (pollTimer.current) clearTimeout(pollTimer.current);
-        };
-    }, []);
+    usePoll(
+        async () => {
+            const res = await fetch("/api/system");
+            if (!res.ok) throw new Error();
+            const data: SystemData = await res.json();
+            if (data.uptime < uptimeBeforeReboot.current) {
+                window.location.reload();
+            }
+        },
+        2000,
+        rebooting,
+        2000,
+    );
 
     const startRebootFlow = useCallback(() => {
         uptimeBeforeReboot.current = currentUptime;
         setRebooting(true);
-        pollUntilRebooted();
-    }, [currentUptime, pollUntilRebooted]);
+    }, [currentUptime]);
 
     return { rebooting, startRebootFlow };
 }

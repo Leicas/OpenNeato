@@ -10,6 +10,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
     // Local form state
     const [tz, setTz] = useState<string>("UTC0");
     const [logLevel, setLogLevel] = useState(0);
+    const [apFallbackOnDisconnect, setApFallbackOnDisconnect] = useState(true);
     const [syslogEnabled, setSyslogEnabled] = useState(false);
     const [syslogIp, setSyslogIp] = useState("");
     const [wifiTxPower, setWifiTxPower] = useState(60);
@@ -48,6 +49,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
             server.current = { ...fetched };
             setTz(fetched.tz);
             setLogLevel(fetched.logLevel);
+            setApFallbackOnDisconnect(fetched.apFallbackOnDisconnect ?? true);
             setSyslogEnabled(fetched.syslogEnabled ?? false);
             setSyslogIp(fetched.syslogIp ?? "");
             setWifiTxPower(fetched.wifiTxPower);
@@ -79,6 +81,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         settingsLoaded &&
         (tz !== server.current.tz ||
             logLevel !== server.current.logLevel ||
+            apFallbackOnDisconnect !== (server.current.apFallbackOnDisconnect ?? true) ||
             syslogEnabled !== (server.current.syslogEnabled ?? false) ||
             syslogIp !== (server.current.syslogIp ?? "") ||
             wifiTxPower !== server.current.wifiTxPower ||
@@ -139,6 +142,8 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         const patch: Partial<SettingsData> = {};
         if (tz !== server.current.tz) patch.tz = tz;
         if (logLevel !== server.current.logLevel) patch.logLevel = logLevel;
+        if (apFallbackOnDisconnect !== (server.current.apFallbackOnDisconnect ?? true))
+            patch.apFallbackOnDisconnect = apFallbackOnDisconnect;
         if (syslogEnabled !== (server.current.syslogEnabled ?? false)) patch.syslogEnabled = syslogEnabled;
         if (syslogIp !== (server.current.syslogIp ?? "")) patch.syslogIp = syslogIp;
         if (wifiTxPower !== server.current.wifiTxPower) patch.wifiTxPower = wifiTxPower;
@@ -163,6 +168,7 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
     }, [
         tz,
         logLevel,
+        apFallbackOnDisconnect,
         syslogEnabled,
         syslogIp,
         wifiTxPower,
@@ -224,6 +230,8 @@ export function useSettingsForm(errorStack: ErrorStackHandle, startRebootFlow: (
         setTz,
         logLevel,
         setLogLevel,
+        apFallbackOnDisconnect,
+        setApFallbackOnDisconnect,
         syslogEnabled,
         setSyslogEnabled,
         syslogIp,

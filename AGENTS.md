@@ -25,7 +25,9 @@ Three top-level components: `firmware/` (ESP32 C/C++), `frontend/` (Preact SPA),
 - Flash tool: Go CLI, cross-compiled via GoReleaser, uses esptool subprocess
 - Mock server: `frontend/mock/server.js` Vite plugin, `SCENARIO` constant for state switching. Reset to `"ok"` before
   committing.
-- Build pipeline: `npm run build` -> lint -> tsc -> vite -> `embed_frontend.js` generates `web_assets.h`
+- Build pipeline: `npm run build` -> lint -> `jscpd` duplicate check -> `openapi-typescript` regenerates `src/types.generated.ts` from
+  `frontend/api/openapi.yaml` -> `check_api_paths.js` enforces firmware↔spec route parity -> tsc -> vite ->
+  `embed_frontend.js` generates `web_assets.h`. `frontend/api/openapi.yaml` ships as a release asset.
 
 ### Data Logging
 
@@ -42,6 +44,13 @@ All significant events must be logged via `DataLogger` (injected by reference).
 needs logging, add a new typed helper following the existing pattern. Log both
 success and failure outcomes. At info level, only failures and state transitions
 are logged; at debug level, all serial commands including raw responses are included.
+
+### API Documentation
+
+`frontend/api/openapi.yaml` is the single source of truth for the HTTP API.
+When adding/changing a route, edit it alongside `web_server.cpp` (the build
+fails if paths drift). Frontend types are generated from it; frontend-only
+types live in `frontend/src/types.ts`.
 
 ### Filesystem and Flash Wear
 
@@ -68,13 +77,17 @@ Verify frontend changes: `npm run check` + `npm run build` in `frontend/`.
 
 Verify flash tool changes: `golangci-lint run ./...` + `go build` in `flash/`.
 
+Verify GitHub Actions workflow changes: install `actionlint` if missing, then run
+`actionlint` from the repository root.
+
 ### Frontend
 
 ```bash
 cd frontend
 npm run dev          # Vite dev server with mock API
-npm run build        # Lint + type check + build + embed into firmware header
+npm run build        # Lint + duplicate check + type check + build + embed into firmware header
 npm run check        # Biome lint/format check
+npm run dupes        # Duplicate code check via jscpd
 npm run fix          # Auto-fix safe issues
 ```
 
@@ -109,6 +122,9 @@ CSS frameworks, routing, or HTTP wrapper libraries.
 
 - 4-space indent, double quotes, semicolons, 120-col (Biome)
 - Named `interface`/`type` only, never inline object type literals
+- Reuse existing CSS utilities and component classes before adding new ones.
+  When two rules share a body, consolidate via a shared selector list, a
+  shared class, or a CSS custom property.
 
 ## Hardware
 

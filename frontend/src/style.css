@@ -494,10 +494,6 @@ body {
     transition: opacity 0.15s;
 }
 
-.update-banner:active {
-    opacity: 0.7;
-}
-
 .update-banner svg {
     width: 16px;
     height: 16px;
@@ -552,11 +548,14 @@ body {
 
 .action-btn:disabled {
     opacity: 0.3;
-    cursor: default;
     transform: none;
 }
 
-.action-btn.pending {
+/* -- Shared cross-cutting utilities --------------------------------------- */
+
+/* Pulse for any in-flight button or input. Components opt in by adding the
+   `pending` class while a request is running. */
+.pending {
     animation: btn-pulse 1s ease-in-out infinite;
 }
 
@@ -568,6 +567,33 @@ body {
     50% {
         opacity: 0.7;
     }
+}
+
+/* Default cursor on disabled controls , replaces per-element copies. */
+button:disabled,
+select:disabled,
+input:disabled {
+    cursor: default;
+}
+
+/* Press feedback for tappable elements. Listed explicitly because some
+   buttons have custom :active styles (transform-based scales) that we
+   don't want to dim. */
+.update-banner:active,
+.settings-category-header:active,
+.settings-nav-row:active,
+.settings-ntfy-test-btn:not(:disabled):active,
+.settings-wifi-scan-btn:not(:disabled):active,
+.fw-upload-btn:active,
+.settings-save-btn:active,
+.settings-device-btn:active,
+.confirm-btn:active,
+.logs-delete-all-btn:active,
+.logs-file-info:active,
+.history-recovery-link:active,
+.history-session-card:active,
+.history-delete-all-btn:active {
+    opacity: 0.7;
 }
 
 .action-btn.primary {
@@ -624,7 +650,6 @@ body {
 
 .header-back-btn:disabled {
     opacity: 0.3;
-    cursor: default;
     transform: none;
 }
 
@@ -689,10 +714,6 @@ body {
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     letter-spacing: 0.01em;
-}
-
-.settings-category-header:active {
-    opacity: 0.7;
 }
 
 .settings-category-title {
@@ -828,14 +849,6 @@ body {
     border-color: var(--accent);
 }
 
-.settings-tz-select:disabled {
-    cursor: default;
-}
-
-.settings-tz-select.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
-}
-
 .settings-robot-time {
     display: flex;
     align-items: center;
@@ -876,10 +889,6 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-.settings-nav-row:active {
-    opacity: 0.7;
-}
-
 .settings-nav-row-left {
     display: flex;
     align-items: center;
@@ -902,10 +911,49 @@ body {
     color: var(--red);
 }
 
+.settings-link-row {
+    text-decoration: none;
+}
+
+.settings-link-row .settings-nav-row-left {
+    min-width: 0;
+}
+
+.settings-link-row .settings-nav-row-left {
+    overflow-wrap: anywhere;
+}
+
 .settings-nav-chevron {
     font-size: 20px;
     color: var(--text-muted);
     line-height: 1;
+}
+
+.settings-about-card {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.settings-about-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.settings-about-description {
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--text-dim);
+}
+
+.settings-about-meta {
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
 }
 
 .settings-toggle-row {
@@ -917,6 +965,13 @@ body {
     border-radius: 12px;
     background: var(--surface);
     margin-bottom: 10px;
+}
+
+/* Drop the trailing gap when the toggle is the last thing in its container,
+   so single-toggle sections don't show extra padding before the section
+   divider. Stacked toggles still get the 10px breathing room above. */
+.settings-toggle-row:last-child {
+    margin-bottom: 0;
 }
 
 .settings-toggle-label {
@@ -967,10 +1022,6 @@ body {
         background 0.2s;
 }
 
-.settings-toggle.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
-}
-
 .settings-toggle.on {
     border-color: var(--text);
 }
@@ -978,6 +1029,88 @@ body {
 .settings-toggle.on::after {
     transform: translateX(22px);
     background: var(--text);
+}
+
+/* Battery diagnostics */
+
+.settings-battery-card {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.settings-battery-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.settings-battery-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.settings-battery-desc {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.55;
+}
+
+.settings-battery-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.settings-battery-grid > div {
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card-bg);
+}
+
+.settings-battery-grid > div span {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.settings-battery-grid > div strong {
+    display: block;
+    overflow: hidden;
+    margin-top: 2px;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-battery-note {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.settings-battery-empty {
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--card-bg);
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
 }
 
 /* Settings pin configuration */
@@ -1069,11 +1202,44 @@ body {
 
 .settings-ntfy-test-btn:disabled {
     opacity: 0.4;
-    cursor: default;
 }
 
-.settings-ntfy-test-btn:not(:disabled):active {
-    opacity: 0.7;
+/* WiFi management section */
+
+.settings-wifi-pick-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.settings-wifi-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-wifi-scan-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.settings-wifi-scan-btn:disabled {
+    opacity: 0.4;
+}
+
+.settings-wifi-password {
+    margin-top: 10px;
+}
+
+.settings-wifi-connect-btn {
+    margin-top: 10px;
 }
 
 /* Firmware update section */
@@ -1185,10 +1351,6 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-.fw-upload-btn:active {
-    opacity: 0.7;
-}
-
 .fw-progress-wrap {
     display: flex;
     flex-direction: column;
@@ -1248,17 +1410,8 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-.settings-save-btn:active {
-    opacity: 0.7;
-}
-
 .settings-save-btn:disabled {
     opacity: 0.3;
-    cursor: default;
-}
-
-.settings-save-btn.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
 }
 
 /* Device action buttons */
@@ -1283,10 +1436,6 @@ body {
     font-family: inherit;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-}
-
-.settings-device-btn:active {
-    opacity: 0.7;
 }
 
 .settings-device-btn span {
@@ -1362,8 +1511,23 @@ body {
     outline: none;
 }
 
-.confirm-text-input:focus {
-    border-color: var(--red);
+/* Per-variant tone , drives the confirm button color. */
+.confirm-dialog.destructive {
+    --tone: var(--red);
+    --tone-bg: rgba(255, 69, 58, 0.12);
+    --tone-border: rgba(255, 69, 58, 0.2);
+}
+
+.confirm-dialog.primary {
+    --tone: var(--accent);
+    --tone-bg: rgba(249, 235, 178, 0.08);
+    --tone-border: var(--border-accent);
+}
+
+/* Tint the input focus on destructive dialogs to reinforce the "type X to
+   confirm" gate. Plain dialogs (Connect, password entry) use the default. */
+.confirm-dialog.destructive .confirm-text-input:focus {
+    border-color: var(--tone);
 }
 
 .confirm-actions {
@@ -1383,13 +1547,8 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-.confirm-btn:active {
-    opacity: 0.7;
-}
-
 .confirm-btn:disabled {
     opacity: 0.3;
-    cursor: default;
 }
 
 .confirm-btn.cancel {
@@ -1397,15 +1556,20 @@ body {
     color: var(--text);
 }
 
-.confirm-btn.destructive {
-    background: rgba(255, 69, 58, 0.12);
-    border-color: rgba(255, 69, 58, 0.2);
-    color: var(--red);
+.confirm-btn.destructive,
+.confirm-btn.primary {
+    background: var(--tone-bg);
+    border-color: var(--tone-border);
+    color: var(--tone);
 }
 
-/* Reboot overlay */
+.confirm-btn.primary {
+    font-weight: 700;
+}
 
-.reboot-overlay {
+/* Full-screen loading overlay (reboot, WiFi connect, etc.) */
+
+.loading-overlay {
     position: fixed;
     inset: 0;
     z-index: 200;
@@ -1418,7 +1582,7 @@ body {
     backdrop-filter: blur(4px);
 }
 
-.reboot-dialog {
+.loading-dialog {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1431,28 +1595,30 @@ body {
     max-width: 260px;
 }
 
-.reboot-spinner {
+.loading-spinner {
     width: 36px;
     height: 36px;
     border: 3px solid var(--border);
     border-top-color: var(--accent);
     border-radius: 50%;
-    animation: reboot-spin 0.8s linear infinite;
+    animation: loading-spin 0.8s linear infinite;
 }
 
-@keyframes reboot-spin {
+@keyframes loading-spin {
     to {
         transform: rotate(360deg);
     }
 }
 
-.reboot-text {
+.loading-text {
     font-size: 16px;
     font-weight: 600;
     color: var(--text);
+    text-align: center;
+    word-break: break-word;
 }
 
-.reboot-subtext {
+.loading-subtext {
     font-size: 12px;
     font-weight: 500;
     color: var(--text-muted);
@@ -1489,18 +1655,6 @@ body {
     font-family: inherit;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-}
-
-.logs-delete-all-btn:active {
-    opacity: 0.7;
-}
-
-.logs-delete-all-btn:disabled {
-    cursor: default;
-}
-
-.logs-delete-all-btn.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
 }
 
 .logs-empty {
@@ -1552,10 +1706,6 @@ body {
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     min-width: 0;
-}
-
-.logs-file-info:active {
-    opacity: 0.7;
 }
 
 .logs-file-name {
@@ -1623,14 +1773,6 @@ body {
 
 .logs-file-delete:active {
     opacity: 1;
-}
-
-.logs-file-delete:disabled {
-    cursor: default;
-}
-
-.logs-file-delete.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
 }
 
 .logs-file-delete span {
@@ -1883,6 +2025,47 @@ body {
     padding: 48px 0;
 }
 
+.history-recovery {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 20px;
+    margin-top: 12px;
+}
+
+.history-recovery-title {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--red);
+}
+
+.history-recovery-msg {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.history-recovery-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.history-recovery-link {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
 .history-session-row {
     display: flex;
     align-items: center;
@@ -1955,10 +2138,6 @@ body {
     text-align: left;
     -webkit-tap-highlight-color: transparent;
     min-width: 0;
-}
-
-.history-session-card:active {
-    opacity: 0.7;
 }
 
 .history-session-download {
@@ -2120,18 +2299,6 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-.history-delete-all-btn:active {
-    opacity: 0.7;
-}
-
-.history-delete-all-btn:disabled {
-    cursor: default;
-}
-
-.history-delete-all-btn.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
-}
-
 .history-summary-actions {
     display: flex;
     gap: 8px;
@@ -2162,10 +2329,6 @@ body {
 
 .history-import-label:active .history-import-btn {
     opacity: 0.7;
-}
-
-.history-import-btn.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
 }
 
 .history-detail-stats {
@@ -2200,11 +2363,67 @@ body {
 }
 
 .history-canvas-wrap {
+    position: relative;
     border: 1px solid var(--border);
     border-radius: 12px;
     overflow: hidden;
     background: var(--surface);
     touch-action: manipulation;
+}
+
+.history-rotate-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.45);
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.55;
+    transition:
+        opacity 0.15s,
+        transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 1;
+}
+
+.history-rotate-btn.left {
+    left: 8px;
+}
+
+.history-rotate-btn.right {
+    right: 8px;
+}
+
+.history-rotate-btn svg {
+    width: 26px;
+    height: 26px;
+}
+
+.history-rotate-btn:hover,
+.history-rotate-btn:focus-visible {
+    opacity: 1;
+    color: var(--text);
+}
+
+.history-rotate-btn:active {
+    transform: translateY(-50%) scale(0.9);
+}
+
+.light .history-rotate-btn {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-color-scheme: light) {
+    .system-theme .history-rotate-btn {
+        background: rgba(255, 255, 255, 0.7);
+    }
 }
 
 .history-canvas {
@@ -2334,7 +2553,6 @@ body {
 
 .history-player-btn:disabled {
     opacity: 0.4;
-    cursor: default;
 }
 
 .history-player-btn span {
@@ -2567,7 +2785,6 @@ body {
 
 .sched-add-btn:disabled {
     opacity: 0.3;
-    cursor: default;
 }
 
 .sched-remove-btn {
@@ -2592,10 +2809,6 @@ body {
 
 .sched-remove-btn:active {
     opacity: 1;
-}
-
-.sched-remove-btn:disabled {
-    cursor: default;
 }
 
 .schedule-day-left {
@@ -2820,10 +3033,6 @@ body {
     background: var(--blue);
     color: #fff;
     border-color: var(--blue);
-}
-
-.manual-motor-btn.pending {
-    animation: btn-pulse 1s ease-in-out infinite;
 }
 
 .manual-motor-btn:active {

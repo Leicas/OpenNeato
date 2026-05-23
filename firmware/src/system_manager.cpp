@@ -23,9 +23,9 @@ void SystemManager::initTaskWdt() {
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)
     // ESP-IDF 5.3+ uses config struct API
     const esp_task_wdt_config_t wdtCfg = {
-        .timeout_ms = TASK_WDT_TIMEOUT_S * 1000,
-        .idle_core_mask = 0,
-        .trigger_panic = true,
+            .timeout_ms = TASK_WDT_TIMEOUT_S * 1000,
+            .idle_core_mask = 0,
+            .trigger_panic = true,
     };
     esp_task_wdt_init(&wdtCfg);
 #else

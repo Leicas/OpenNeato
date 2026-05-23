@@ -6,7 +6,6 @@ Everything you need to set up, configure, and troubleshoot OpenNeato.
 
 - [Hardware Setup](#hardware-setup)
     - [What You Need](#what-you-need)
-    - [Opening the Robot](#opening-the-robot)
     - [Debug Port Pinout](#debug-port-pinout)
     - [Wiring](#wiring)
 - [Flashing Firmware](#flashing-firmware)
@@ -14,16 +13,21 @@ Everything you need to set up, configure, and troubleshoot OpenNeato.
     - [Basic Usage](#basic-usage)
     - [What Happens Under the Hood](#what-happens-under-the-hood)
     - [Command Reference](#command-reference)
+    - [Manual Flashing with esptool](#manual-flashing-with-esptool)
     - [Troubleshooting Flash Issues](#troubleshooting-flash-issues)
 - [First-Time WiFi Setup](#first-time-wifi-setup)
-    - [Serial Monitor](#serial-monitor)
+    - [Option A: Fallback Access Point (no serial cable)](#option-a-fallback-access-point-no-serial-cable)
+    - [Option B: Serial Monitor](#option-b-serial-monitor)
     - [WiFi Configuration Menu](#wifi-configuration-menu)
     - [Verifying the Connection](#verifying-the-connection)
     - [Quick Commands](#quick-commands)
+    - [Reconfiguring WiFi Later](#reconfiguring-wifi-later)
 - [Troubleshooting](#troubleshooting)
     - [Enabling Logging](#enabling-logging)
     - [Collecting Logs](#collecting-logs)
+    - [Robot Stuck Starting a House Clean](#robot-stuck-starting-a-house-clean)
     - [Downloading Cleaning Maps](#downloading-cleaning-maps)
+    - [Recovering Corrupted Cleaning History](#recovering-corrupted-cleaning-history)
     - [Factory Reset](#factory-reset)
     - [Reporting an Issue](#reporting-an-issue)
 - [Multiple Robots](#multiple-robots)
@@ -37,12 +41,10 @@ Everything you need to set up, configure, and troubleshoot OpenNeato.
 ## Hardware Setup
 
 > [!NOTE]
-> Hardware assembly is not the primary focus of this project. There are already comprehensive
-> teardown and wiring guides available — in particular
-> [Philip2809/neato-brainslug](https://github.com/Philip2809/neato-brainslug) which covers
-> the D3-D7 debug port in detail. This section shares my personal experience with minimal
-> photos and a bill of materials. If there's community interest I'll expand it further —
-> I'll be opening my own Neato D7 soon to replace the LIDAR O-ring.
+> Hardware assembly is not the primary focus of this project. For a comprehensive teardown
+> guide covering how to open the robot and reach the debug port, see
+> [Philip2809/neato-brainslug](https://github.com/Philip2809/neato-brainslug). This section
+> covers the parts list, debug port pinout, and wiring.
 
 ### What You Need
 
@@ -75,11 +77,6 @@ solder the JST connector wires directly to the board pads for the cleanest resul
 The ESP32 is powered directly from the robot's 3.3V debug port — no separate USB power
 supply needed during normal operation.
 
-### Opening the Robot
-
-<!-- TODO: brief description of my experience, photos of the bottom screws and top shell removal -->
-<!-- Reference: https://github.com/Philip2809/neato-brainslug for a comprehensive teardown guide -->
-
 ### Debug Port Pinout
 
 The debug port connector on Botvac D3-D7 has four pins (left to right when looking at the
@@ -102,7 +99,7 @@ These are the **robot's** RX/TX labels, so you cross-connect to the ESP32:
 
 The default TX/RX GPIOs depend on the chip (ESP32-C3: GPIO 3/4, ESP32-S3: GPIO 17/18,
 original ESP32: GPIO 17/16) but are fully configurable from the web UI in
-**Settings -> Robot -> UART Pins** — so wire whichever GPIOs are convenient and update the
+**Settings -> Device -> UART Pins** — so wire whichever GPIOs are convenient and update the
 setting to match.
 
 ### Wiring
@@ -154,6 +151,11 @@ These are standalone binaries — no extraction needed. On macOS/Linux you may n
 > ```bash
 > xattr -d com.apple.quarantine ~/Downloads/openneato-flash_Darwin_arm64
 > ```
+
+> [!IMPORTANT]
+> macOS 11 (Big Sur) is the minimum supported version. This is the floor for the Go toolchain
+> the binary is built with — older macOS versions (Catalina, Mojave, and earlier) will fail to
+> load the binary or crash on first network request.
 
 > [!WARNING]
 > The flash tool has been primarily tested on macOS. Linux and Windows builds are provided but
@@ -215,6 +217,108 @@ tool refuses to flash.
 > directory as the `.tar.gz` file. The tool verifies SHA-256 before extracting and will
 > refuse to flash if the checksums file is missing or the hash doesn't match.
 
+### Manual Flashing with esptool
+
+If `openneato-flash` does not run on your system, you can flash the same firmware pack manually
+with Espressif's prebuilt `esptool` binary. This path does not require Python and uses the same
+files, offsets, baud rate, compression, and reset behavior as `openneato-flash`.
+
+1. Download the matching prebuilt `esptool` binary for your platform from
+   [Espressif's esptool releases](https://github.com/espressif/esptool/releases), then extract
+   it. To use the same version as `openneato-flash`, check `ESPTOOL_VERSION` in
+   [`.goreleaser.yml`](../.goreleaser.yml).
+
+2. Plug in the ESP32. If only one ESP device is connected, you can let `esptool` find the serial
+   port automatically by omitting `-p`.
+
+   If you have multiple serial devices connected, pass the port explicitly with `-p`. Common port
+   names are `/dev/cu.usbmodem*` on macOS, `/dev/ttyUSB*` or `/dev/ttyACM*` on Linux, and `COM3`
+   or similar on Windows.
+
+3. Detect the chip name:
+
+   ```bash
+   ./esptool chip-id
+   ```
+
+   Look for a line like `Detecting chip type... ESP32-C3`, then use the lowercase chip name in
+   the firmware filename: `esp32-c3`, `esp32-s3`, or `esp32`.
+
+4. Download the full firmware pack and `checksums.txt` from the
+   [OpenNeato Releases](https://github.com/renjfk/OpenNeato/releases) page.
+
+   For example, for an ESP32-C3 on the latest release:
+
+   ```bash
+   curl -LO https://github.com/renjfk/OpenNeato/releases/latest/download/openneato-esp32-c3-full.tar.gz
+   curl -LO https://github.com/renjfk/OpenNeato/releases/latest/download/checksums.txt
+   ```
+
+5. Verify the firmware pack checksum before extracting it.
+
+   macOS:
+
+   ```bash
+   shasum -a 256 -c checksums.txt --ignore-missing
+   ```
+
+   Linux:
+
+   ```bash
+   sha256sum -c checksums.txt --ignore-missing
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   Select-String "openneato-esp32-c3-full.tar.gz" checksums.txt
+   Get-FileHash .\openneato-esp32-c3-full.tar.gz -Algorithm SHA256
+   ```
+
+   The hash printed by PowerShell must match the hash from `checksums.txt`.
+
+6. Extract the firmware pack and open `offsets.json`.
+
+   macOS/Linux:
+
+   ```bash
+   tar -xzf openneato-esp32-c3-full.tar.gz
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   tar -xzf .\openneato-esp32-c3-full.tar.gz
+   ```
+
+7. Flash all images using the offsets from `offsets.json`.
+
+   macOS/Linux:
+
+   ```bash
+   ./esptool -b 921600 --before default-reset --after hard-reset write-flash -z \
+     BOOTLOADER_OFFSET bootloader.bin \
+     PARTITIONS_OFFSET partitions.bin \
+     OTADATA_OFFSET boot_app0.bin \
+     APP_OFFSET firmware.bin
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   .\esptool.exe -b 921600 --before default-reset --after hard-reset write-flash -z `
+     BOOTLOADER_OFFSET .\bootloader.bin `
+     PARTITIONS_OFFSET .\partitions.bin `
+     OTADATA_OFFSET .\boot_app0.bin `
+     APP_OFFSET .\firmware.bin
+   ```
+
+   Replace the `*_OFFSET` placeholders with the values from `offsets.json`, and replace the
+   firmware pack name to match your chip. If auto-detection picks the wrong serial device or you
+   have multiple ESP devices connected, add `-p <port>` before `-b 921600`. Do not hard-code the
+   flash offsets from another source; `offsets.json` is generated with the release and is the
+   source of truth for the manual command.
+
 ### Troubleshooting Flash Issues
 
 **"No USB serial ports found"** — Make sure the ESP32 is plugged in and your OS recognizes
@@ -234,23 +338,48 @@ Windows, close any other serial monitor that might have the port open.
 
 ## First-Time WiFi Setup
 
-After flashing, the tool opens a serial monitor where you'll configure WiFi.
+After flashing, the device has no saved WiFi credentials and won't be on your network yet.
+You have two ways to provision it: a browser via the fallback access point (no serial cable
+needed), or the serial menu that the flash tool opens for you.
 
-### Serial Monitor
+### Option A: Fallback Access Point (no serial cable)
+
+When the device has no saved credentials, it broadcasts an open WiFi network so you can
+configure it from any phone or laptop browser. This works even after you've unplugged the
+USB cable and tucked the ESP32 inside the robot.
+
+1. From your phone or laptop, connect to the WiFi network named **`neato-ap`** (or
+   `<hostname>-ap` if you've changed the hostname). It's an open network , no password.
+2. Open a browser and go to `http://192.168.4.1`. You'll land on the OpenNeato dashboard.
+3. Open **Settings -> WiFi**, tap **Scan**, pick your home network from the dropdown, and
+   enter the password.
+4. After confirming, the device joins your home network and reboots. The `neato-ap` network
+   disappears at that point , reconnect your phone/laptop to your home WiFi to keep using
+   the web UI at `http://neato.local` (or the IP shown on the dashboard).
+
+> [!NOTE]
+> The fallback AP is unencrypted because there's no way to display a password to a user
+> who hasn't set one up yet. It only runs while the device has no saved credentials or
+> cannot reach your home network. Once connected, it shuts down automatically.
+
+### Option B: Serial Monitor
 
 The serial monitor connects at 115,200 baud and shows the ESP32's boot output. You'll see
-the boot banner:
+the boot banner. With no credentials saved, the fallback AP comes up automatically and the
+banner reflects that:
 
 ```
 ========================================
   OpenNeato v0.1
 ========================================
-  WiFi: not configured
+  WiFi: AP mode, connect to neato-ap and open http://192.168.4.1
   Press 'm' for menu, 's' for status
 ========================================
 ```
 
-If WiFi is not configured, the configuration menu appears automatically.
+You can finish provisioning either by joining `neato-ap` from a browser (Option A above) or
+by pressing `m` to open the WiFi configuration menu over serial , both end up in the same
+place.
 
 ### WiFi Configuration Menu
 
@@ -311,6 +440,21 @@ Once connected, you can type single-key commands in the serial monitor at any ti
 | `m` | Open WiFi configuration menu            |
 | `s` | Print WiFi status (SSID, IP, MAC, RSSI) |
 
+### Reconfiguring WiFi Later
+
+Once the device is on your home network you can change networks from the web UI directly:
+**Settings -> WiFi -> Scan**, pick a new network, enter the password.
+
+If your home network goes down or you've moved house, the bridge falls back to the
+`<hostname>-ap` access point automatically so you can re-provision it from a browser without
+opening up the robot. This behavior is controlled by the **Fallback AP on disconnect** toggle
+in the WiFi section , it's on by default. If you turn it off, recovery from a broken WiFi
+config requires the serial menu.
+
+To wipe credentials entirely and force the device back into first-time setup mode (always-on
+AP, no auto-reconnect), use **Settings -> WiFi -> Forget current network**. The device will
+broadcast `<hostname>-ap` until you provision a new network.
+
 ---
 
 ## Troubleshooting
@@ -327,6 +471,11 @@ Go to **Settings -> Diagnostics** and set **Log Level**:
   and notifications. Auto-reverts to off after 1 hour.
 - **Debug** — everything in Info plus all serial commands with raw responses. Auto-reverts to
   off after 10 minutes.
+
+The Diagnostics section also shows a **Battery diagnostics** card with live readings from the
+robot: charge percentage, voltage, current, temperature, cycle count, and chemistry details.
+If you replace the battery, use the **New Battery** button to reset the fuel gauge calibration
+(only after physically installing the new pack).
 
 For long-running diagnostics (e.g. catching an intermittent error that only appears after
 hours of idling), enable **Remote Syslog** in the same section. This sends all log output
@@ -355,6 +504,41 @@ To download all logs: use the individual download buttons for each file you need
 reporting an issue, include at least the `current.jsonl` and any archived log files from the
 time the problem occurred.
 
+### Robot Stuck Starting a House Clean
+
+Some Botvac D7 robots can get stuck while starting a house clean with a robot notice like
+"Failed to load persistent map". Debug logs usually show `UI_ALERT_PM_LOAD_FAIL` (`234`) and
+the robot remains in `UIMGR_STATE_STARTHOUSECLEANING` while the robot state stays
+`ST_C_Standby`. This appears to be a robot firmware-side state rather than an OpenNeato
+scheduler failure. See [issue #24](https://github.com/renjfk/OpenNeato/issues/24) for the
+original field reports that led to documenting this recovery path.
+
+Try the recovery steps in this order:
+
+1. Open **Settings -> Diagnostics** and use **Clear Robot Errors**, then try starting a clean
+   again.
+2. If it remains stuck, open **Settings -> Robot** and use **Restart Robot**. This is equivalent
+   to a robot power cycle and has been the most reliable software recovery in reports so far.
+3. If the issue keeps returning, enable **Debug** logging or **Remote Syslog** before the next
+   scheduled run and save the logs when it happens.
+4. As an advanced hardware recovery step, fully remove power from the robot by disconnecting the
+   battery for a few minutes, then reconnect it. Some users reported the issue stopped after
+   maintenance that included a battery disconnect, cleaning sensors, clearing robot logs, and
+   removing debris from the brush or motor area.
+
+> [!CAUTION]
+> Disconnecting the robot battery requires opening the robot. Only do this if you are comfortable
+> with hardware disassembly, and avoid pulling on wires or shorting the battery connector.
+
+When reporting this issue, include the robot software version from:
+
+```bash
+curl -X POST 'http://neato.local/api/serial?cmd=GetVersion'
+```
+
+In known reports, affected robots were running Neato software `4.5.3.189`, but this is not yet a
+confirmed root cause.
+
 ### Downloading Cleaning Maps
 
 If a cleaning session produced unexpected results (missed areas, strange paths, early
@@ -362,7 +546,36 @@ termination), download the cleaning history session from **History**. Each sessi
 the robot's recorded path rendered as a coverage map, along with stats like duration, distance,
 area covered, and battery usage.
 
-<!-- TODO: describe how to download/share the session data file for issue reports -->
+### Recovering Corrupted Cleaning History
+
+If the History page shows a "Cleaning history is corrupted" message, one of the stored sessions
+has malformed data and is preventing the list from loading. This can happen if a cleaning was
+interrupted by a power loss or unexpected reset. The following steps let you find and remove
+the bad session(s) without losing the rest. Replace `YOUR_ROBOT` with your bridge's hostname
+or IP address.
+
+1. **Fetch the session list** and inspect it visually:
+
+    ```sh
+    curl "http://YOUR_ROBOT/api/history"
+    ```
+
+   Paste the response into a JSON validator (for example
+   [jsonlint.com](https://jsonlint.com) or [jsonformatter.org](https://jsonformatter.org)).
+   The validator will flag the position of the malformed entry. Note the `name` field of the
+   bad session (e.g. `1776667071.jsonl.hs`).
+
+2. **Delete the bad session**:
+
+    ```sh
+    curl -X DELETE "http://YOUR_ROBOT/api/history/<filename>"
+    ```
+
+3. **Reload the History page**. If multiple sessions are corrupted, repeat steps 1-2 until the
+   list loads.
+
+If you'd rather not investigate, the History page also offers a **Delete all history** button
+that wipes every session in one go and restores the list view.
 
 ### Factory Reset
 
@@ -481,9 +694,9 @@ A few typical maintenance tasks:
 
 ```bash
 # New battery installed (resets fuel gauge calibration, requires TestMode)
-curl -X POST 'http://neato.local/api/testmode?enable=1'
+curl -X POST 'http://neato.local/api/serial?cmd=TestMode%20On'
 curl -X POST 'http://neato.local/api/serial?cmd=NewBattery'
-curl -X POST 'http://neato.local/api/testmode?enable=0'
+curl -X POST 'http://neato.local/api/serial?cmd=TestMode%20Off'
 
 # Reset robot user settings to factory defaults
 curl -X POST 'http://neato.local/api/serial?cmd=SetUserSettings%20Reset'

@@ -41,12 +41,15 @@ class OpenNeatoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.api.get_motors(),
             self.api.get_history(),
             self.api.get_sensors(),
+            self.api.get_battery_analog(),
+            self.api.get_battery_warranty(),
             return_exceptions=True,
         )
 
         keys = (
             "state", "charger", "error", "user_settings",
             "system", "settings", "motors", "history", "sensors",
+            "analog", "warranty",
         )
         # Critical endpoints — if ALL of these fail we consider the robot
         # unreachable. Non-critical endpoints (like /api/error, which can hang

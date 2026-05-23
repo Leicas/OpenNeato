@@ -22,6 +22,7 @@ jobs:
       pr_number: ${{ steps.resolve.outputs.pr_number }}
       head_sha: ${{ steps.resolve.outputs.head_sha }}
       head_ref: ${{ steps.resolve.outputs.head_ref }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
       release_tag: ${{ steps.resolve.outputs.tag }}
       version: ${{ steps.resolve.outputs.version }}
 
@@ -37,9 +38,11 @@ jobs:
             PR_JSON=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,headRefName)
             HEAD_SHA=$(echo "$PR_JSON" | jq -r '.headRefOid')
             HEAD_REF=$(echo "$PR_JSON" | jq -r '.headRefName')
+            CHECKOUT_REF="refs/pull/$PR_NUMBER/head"
           else
             HEAD_SHA="$GITHUB_SHA"
             HEAD_REF="$GITHUB_REF_NAME"
+            CHECKOUT_REF="$GITHUB_SHA"
           fi
 
           LATEST_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" \
@@ -51,15 +54,18 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             TAG="v${BASE}-pr${PR_NUMBER}.${SHORT_SHA}"
           else
-            SAFE_REF=$(echo "$HEAD_REF" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            SAFE_REF="${HEAD_REF//[^a-zA-Z0-9._-]/-}"
             TAG="v${BASE}-${SAFE_REF}.${SHORT_SHA}"
           fi
 
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          {
+            echo "pr_number=$PR_NUMBER"
+            echo "head_sha=$HEAD_SHA"
+            echo "head_ref=$HEAD_REF"
+            echo "checkout_ref=$CHECKOUT_REF"
+            echo "tag=$TAG"
+            echo "version=${TAG#v}"
+          } >> "$GITHUB_OUTPUT"
           echo "Release: $TAG ($HEAD_REF @ $SHORT_SHA)"
 
   prerelease:
@@ -71,7 +77,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve.outputs.head_sha }}
+          ref: ${{ needs.resolve.outputs.checkout_ref }}
           fetch-depth: 0
 
       - name: Create release tag
@@ -122,10 +128,10 @@ jobs:
         env:
           FIRMWARE_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          for env in $(grep -oE '^\[env:([a-zA-Z0-9_-]+-release)\]' platformio.ini | sed 's/\[env:\(.*\)\]/\1/'); do
+          while IFS= read -r env; do
             echo "Building $env..."
             pio run -e "$env"
-          done
+          done < <(grep -oE '^\[env:([a-zA-Z0-9_-]+-release)\]' platformio.ini | sed 's/\[env:\(.*\)\]/\1/')
 
       # --- Flash tool + GitHub Release ---
 

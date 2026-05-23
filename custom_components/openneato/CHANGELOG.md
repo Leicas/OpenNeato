@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.11
+
+### Added
+- **`notify_on_start` switch** — surfaces fork PR #2's "notify on cleaning
+  started" setting (`ntfyOnStart`). Firmware + frontend already supported
+  the toggle; the matching HA entity was missing, so the switch row sat
+  among `notify_on_done`/`error`/`alert`/`docking` with no `start` peer.
+- **`ap_fallback_on_disconnect` switch** — upstream firmware #110 added
+  an `apFallbackOnDisconnect` setting that brings up the captive-portal
+  AP automatically when WiFi STA drops. Now configurable from HA.
+- **`ntfy_topic`, `ntfy_server`, `ntfy_token` text entities** — full ntfy
+  push-notification configuration is now editable from HA, no need to
+  open the device web UI. Empty topic disables notifications; empty
+  server defaults to `ntfy.sh`; empty token is unauthenticated.
+
+### Not done (deliberate deferral)
+- **Upstream About metadata not surfaced** — firmware commit bb7b541
+  added `name`, `repositoryUrl`, `license`, `model` fields to
+  `/api/firmware/version`. Threading `repository_url` through every
+  entity constructor for nine platforms (vacuum, sensor, switch,
+  binary_sensor, number, button, camera, select, text) just to set a
+  device-info attribute was too invasive for the value it adds, and the
+  `name` field already matches our hardcoded `manufacturer="OpenNeato"`.
+  A cleaner future approach is a dedicated diagnostic sensor that
+  exposes the full About payload as attributes.
+- **Zeroconf discovery not added** — `manifest.json` was eligible for a
+  `zeroconf` entry, but the firmware (`wifi_manager.cpp`) currently only
+  registers the generic `_http._tcp` service. Claiming that service for
+  the OpenNeato integration would match every random HTTP device on the
+  LAN. When the firmware advertises a dedicated service type (e.g.
+  `_openneato._tcp`), wire this up.
+
+## 1.10
+
+### Fixed
+- **Setup crash with new firmware (`utf-8 codec can't decode byte 0xab`)** —
+  Upstream firmware PR #121 added `smartBattery*` string fields to
+  `/api/version` that pass raw bytes from the robot's smart-battery
+  memory through the firmware's `jsonEscape()` (it only escapes bytes
+  below 0x20). When the pack reports a non-UTF-8 byte, aiohttp's
+  `response.json()` raised `UnicodeDecodeError` and the config entry
+  failed setup. Responses are now decoded with `errors="replace"`
+  before being parsed as JSON so one bad glyph can't take the
+  integration down.
+
+### Added
+- **Battery diagnostics from firmware PR #121** — three new diagnostic
+  sensors backed by the new `/api/analog` endpoint (battery voltage,
+  current, external voltage) and two backed by `/api/warranty`
+  (battery cycles, cumulative cleaning time). The existing
+  `Battery temperature` sensor was repointed from the now-removed
+  `/api/charger#battTempC` to `/api/analog#batteryTemperatureC`
+  (a finer-grained float in °C). A `New battery` button (disabled by
+  default) calls `POST /api/battery/new` to reset the fuel-gauge
+  calibration after a pack swap.
+
 ## 1.9
 
 ### Fixed

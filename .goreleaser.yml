@@ -5,6 +5,13 @@ project_name: openneato
 env:
   - ESPTOOL_VERSION=v5.2.0
 
+before:
+  # Stamp the release version into the OpenAPI spec shipped as a release
+  # artifact. The in-repo file carries "0.0.0-dev" as a placeholder.
+  hooks:
+    - "sed -i.bak 's/^  version:.*/  version: {{ .Version }}/' frontend/api/openapi.yaml"
+    - "rm -f frontend/api/openapi.yaml.bak"
+
 builds:
   - id: openneato-flash
     dir: flash
@@ -16,6 +23,16 @@ builds:
     env:
       - >-
         {{- if eq .Os "darwin" }}CGO_ENABLED=1{{- else }}CGO_ENABLED=0{{- end }}
+      # Pin macOS minimum to 11.0 (Big Sur), which is also Go's own floor as of
+      # Go 1.25+. Without this, the linker uses the build host's SDK as the
+      # deployment target, producing binaries that fail to load on anything
+      # older than the runner's macOS version.
+      - >-
+        {{- if eq .Os "darwin" }}MACOSX_DEPLOYMENT_TARGET=11.0{{- end }}
+      - >-
+        {{- if eq .Os "darwin" }}CGO_CFLAGS=-mmacosx-version-min=11.0{{- end }}
+      - >-
+        {{- if eq .Os "darwin" }}CGO_LDFLAGS=-mmacosx-version-min=11.0{{- end }}
     goos:
       - linux
       - darwin
@@ -43,12 +60,14 @@ release:
   extra_files:
     - glob: .pio/build/*-release/*-firmware.bin
     - glob: .pio/build/*-release/*-full.tar.gz
+    - glob: frontend/api/openapi.yaml
 
 checksum:
   name_template: checksums.txt
   extra_files:
     - glob: .pio/build/*-release/*-firmware.bin
     - glob: .pio/build/*-release/*-full.tar.gz
+    - glob: frontend/api/openapi.yaml
 
 changelog:
   sort: asc

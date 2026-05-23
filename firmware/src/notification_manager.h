@@ -12,8 +12,7 @@ class CleaningHistory;
 
 class NotificationManager : public LoopTask {
 public:
-    NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger,
-                        CleaningHistory& history);
+    NotificationManager(NeatoSerial& neato, SettingsManager& settings, DataLogger& logger, CleaningHistory& history);
 
     void begin();
 
@@ -47,7 +46,7 @@ private:
     uint32_t doneTriggerSessionId = 0; // sessionId observed at trigger time
     unsigned long donePendingSinceMs = 0;
     String doneHostname; // captured hostname at trigger time
-    String doneTopic;    // captured topic at trigger time
+    String doneTopic; // captured topic at trigger time
 
     void checkTransitions();
     void flushPendingDone();

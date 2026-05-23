@@ -3,10 +3,12 @@ import { api } from "../api";
 import alertSvg from "../assets/icons/alert.svg?raw";
 import backSvg from "../assets/icons/back.svg?raw";
 import bellSvg from "../assets/icons/bell.svg?raw";
+import boltSvg from "../assets/icons/bolt.svg?raw";
 import calendarSvg from "../assets/icons/calendar.svg?raw";
 import chipSvg from "../assets/icons/chip.svg?raw";
 import databaseSvg from "../assets/icons/database.svg?raw";
 import gearSvg from "../assets/icons/gear.svg?raw";
+import globeSvg from "../assets/icons/globe.svg?raw";
 import houseSvg from "../assets/icons/house.svg?raw";
 import manualSvg from "../assets/icons/manual.svg?raw";
 import moonSvg from "../assets/icons/moon.svg?raw";
@@ -22,6 +24,7 @@ import { ErrorBannerStack, useErrorStack } from "../components/error-banner";
 import { Icon } from "../components/icon";
 import { useNavigate } from "../components/router";
 import { useDirtyGuard } from "../hooks/use-dirty-guard";
+import { usePoll } from "../hooks/use-poll";
 import { usePolling } from "../hooks/use-polling";
 import type { FirmwareVersion, SystemData, UserSettingsData } from "../types";
 import { normalizeError } from "../utils";
@@ -39,6 +42,7 @@ import { SettingsCategory } from "./settings/settings-category";
 import { useFirmwareUpload } from "./settings/use-firmware-upload";
 import { useReboot } from "./settings/use-reboot";
 import { useSettingsForm } from "./settings/use-settings-form";
+import { WiFiSection } from "./settings/wifi-section";
 
 type Theme = "system" | "dark" | "light";
 
@@ -85,6 +89,8 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
         setSyslogIp,
         wifiTxPower,
         setWifiTxPower,
+        apFallbackOnDisconnect,
+        setApFallbackOnDisconnect,
         uartTxPin,
         setUartTxPin,
         uartRxPin,
@@ -195,43 +201,39 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
     const [showRobotRestartConfirm, setShowRobotRestartConfirm] = useState(false);
     const [showRobotShutdownConfirm, setShowRobotShutdownConfirm] = useState(false);
     const [robotRestarting, setRobotRestarting] = useState(false);
-    const robotRestartPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [robotRestartPolling, setRobotRestartPolling] = useState(false);
     const robotRestartTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         return () => {
-            if (robotRestartPollTimer.current) clearTimeout(robotRestartPollTimer.current);
             if (robotRestartTimeout.current) clearTimeout(robotRestartTimeout.current);
         };
     }, []);
+
+    usePoll(
+        async () => {
+            await api.getState();
+            if (robotRestartTimeout.current) clearTimeout(robotRestartTimeout.current);
+            robotRestartTimeout.current = null;
+            setRobotRestarting(false);
+            setRobotRestartPolling(false);
+        },
+        2000,
+        robotRestartPolling,
+        2000,
+    );
 
     const handleRobotRestart = useCallback(() => {
         setRobotRestarting(true);
 
         robotRestartTimeout.current = setTimeout(() => {
-            if (robotRestartPollTimer.current) clearTimeout(robotRestartPollTimer.current);
-            robotRestartPollTimer.current = null;
-            robotRestartTimeout.current = null;
+            setRobotRestartPolling(false);
             setRobotRestarting(false);
             errorStack.push("Robot did not recover after restart — check physical connection");
         }, 30000);
 
         api.robotRestart()
-            .then(() => {
-                const poll = () => {
-                    api.getState()
-                        .then(() => {
-                            if (robotRestartTimeout.current) clearTimeout(robotRestartTimeout.current);
-                            robotRestartTimeout.current = null;
-                            robotRestartPollTimer.current = null;
-                            setRobotRestarting(false);
-                        })
-                        .catch(() => {
-                            robotRestartPollTimer.current = setTimeout(poll, 2000);
-                        });
-                };
-                robotRestartPollTimer.current = setTimeout(poll, 2000);
-            })
+            .then(() => setRobotRestartPolling(true))
             .catch((e: unknown) => {
                 if (robotRestartTimeout.current) clearTimeout(robotRestartTimeout.current);
                 robotRestartTimeout.current = null;
@@ -497,6 +499,15 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                             </div>
                         </button>
                     </div>
+                </SettingsCategory>
+
+                <SettingsCategory title="WiFi" icon={wifiSvg} lazy>
+                    <WiFiSection
+                        apFallbackOnDisconnect={apFallbackOnDisconnect}
+                        onApFallbackChange={setApFallbackOnDisconnect}
+                        saving={saving}
+                        errorStack={errorStack}
+                    />
                 </SettingsCategory>
 
                 <SettingsCategory title="Notifications" icon={bellSvg}>
@@ -840,7 +851,7 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                     </div>
                 </SettingsCategory>
 
-                <SettingsCategory title="Diagnostics" icon={stethoscopeSvg}>
+                <SettingsCategory title="Diagnostics" icon={stethoscopeSvg} lazy>
                     <div class="settings-section">
                         <div class="settings-section-title">Log Level</div>
                         <div class="settings-tz-select-wrap">
@@ -890,6 +901,15 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                                 {syslogIpError && <div class="settings-field-error">{syslogIpError}</div>}
                             </>
                         )}
+                    </div>
+                    <div class="settings-section">
+                        <button type="button" class="settings-nav-row" onClick={() => guardedNavigate("/battery")}>
+                            <div class="settings-nav-row-left">
+                                <Icon svg={boltSvg} />
+                                Battery Diagnostics
+                            </div>
+                            <span class="settings-nav-chevron">&rsaquo;</span>
+                        </button>
                     </div>
                     <div class="settings-section">
                         <button type="button" class="settings-nav-row" onClick={() => guardedNavigate("/logs")}>
@@ -1078,6 +1098,35 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
                     </div>
                 </SettingsCategory>
 
+                {firmware && (
+                    <SettingsCategory title="About" icon={globeSvg}>
+                        <div class="settings-section">
+                            <div class="settings-about-card">
+                                <div class="settings-about-name">{firmware.name}</div>
+                                <div class="settings-about-description">
+                                    Open-source replacement for Neato's discontinued cloud and mobile app.
+                                </div>
+                                <div class="settings-about-meta">Copyright © 2026 Soner Köksal</div>
+                                <div class="settings-about-meta">Licensed under {firmware.license} License</div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <a
+                                class="settings-nav-row settings-link-row"
+                                href={firmware.repositoryUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <div class="settings-nav-row-left">
+                                    <Icon svg={globeSvg} />
+                                    View on GitHub
+                                </div>
+                                <span class="settings-nav-chevron">&rsaquo;</span>
+                            </a>
+                        </div>
+                    </SettingsCategory>
+                )}
+
                 <SettingsCategory title="Danger Zone" icon={alertSvg}>
                     <div class="settings-section">
                         <button
@@ -1195,11 +1244,11 @@ export function SettingsView({ theme, onThemeChange, firmware }: SettingsViewPro
             )}
 
             {(rebooting || robotRestarting) && (
-                <div class="reboot-overlay">
-                    <div class="reboot-dialog">
-                        <div class="reboot-spinner" />
-                        <div class="reboot-text">{robotRestarting ? "Restarting robot..." : "Rebooting..."}</div>
-                        <div class="reboot-subtext">
+                <div class="loading-overlay">
+                    <div class="loading-dialog">
+                        <div class="loading-spinner" />
+                        <div class="loading-text">{robotRestarting ? "Restarting robot..." : "Rebooting..."}</div>
+                        <div class="loading-subtext">
                             {robotRestarting
                                 ? "Waiting for robot to come back online"
                                 : "Waiting for device to come back online"}
