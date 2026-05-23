@@ -1,32 +1,40 @@
-[![CI](https://github.com/renjfk/OpenNeato/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/renjfk/OpenNeato/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/renjfk/OpenNeato)](https://github.com/renjfk/OpenNeato/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/renjfk/OpenNeato/total)](https://github.com/renjfk/OpenNeato/releases)
+[![Latest Release](https://img.shields.io/github/v/release/Leicas/OpenNeato)](https://github.com/Leicas/OpenNeato/releases/latest)
+[![Upstream](https://img.shields.io/badge/upstream-renjfk%2FOpenNeato-blue)](https://github.com/renjfk/OpenNeato)
 
 <p align="center">
  <img width="192" alt="OpenNeato Icon" src="frontend/public/icon-192.png">
 </p>
 
-# OpenNeato
+# OpenNeato — Home Assistant fork
 
-Open-source replacement for Neato's discontinued cloud and mobile app. An ESP32 bridge communicates with
-Botvac robots (D3-D7) over UART and exposes a local web UI over WiFi — no cloud, no app, no account required.
-
-> [!NOTE]
-> This is an early beta - things may break, rough edges are expected, and the API may change.
-> If you run into problems, a [Discussion](https://github.com/renjfk/OpenNeato/discussions)
-> or [issue](https://github.com/renjfk/OpenNeato/issues) is always welcome.
+**This is a [Leicas/OpenNeato](https://github.com/Leicas/OpenNeato) fork focused on the Home Assistant
+integration.** The HACS-installable integration under
+[`custom_components/openneato/`](custom_components/openneato/) is the reason this fork exists — it turns the
+upstream ESP32 bridge into a full HA device with vacuum / camera / sensor / switch / button entities, no YAML.
 
 > [!IMPORTANT]
-> **Now in development:**
-[Guided Clean - zone cleaning, no-go lines, and map-based navigation](https://github.com/renjfk/OpenNeato/issues/68).
+> **If you want the standalone web UI**, use upstream [renjfk/OpenNeato](https://github.com/renjfk/OpenNeato)
+> directly — it has the original maintainer, the release cadence, and the live demo.
 >
-> Select zones on a previously recorded map, draw no-go lines, and let the robot clean exactly where you want.
-> Follow the issue for progress updates and sub-task tracking.
+> **Use this fork if** you run Home Assistant and want the robot exposed as a first-class HA device. Firmware
+> changes in this fork are minor and exist only to support the integration (e.g. `/api/sensors`,
+> `/api/history` hardening, ntfy server/token/on-start extensions). The firmware, frontend, and flash tool
+> otherwise track upstream closely.
+
+The upstream project is an open-source replacement for Neato's discontinued cloud and mobile app: an ESP32
+bridge that talks to Botvac robots (D3-D7) over UART and exposes a local web UI over WiFi — no cloud, no app,
+no account required.
+
+> [!NOTE]
+> Both upstream and this fork are early beta. Rough edges are expected. For HA-integration bugs, open an
+> [issue here](https://github.com/Leicas/OpenNeato/issues); for firmware/frontend/flash-tool bugs, file
+> against [upstream](https://github.com/renjfk/OpenNeato/issues).
 
 > [!TIP]
-> Want to get a feel for OpenNeato without hardware? Open the [live demo](https://openneato-demo.renjfk.com/).
-> Demo states can be selected with `?scenario=...`; see [mock scenarios](docs/mock-scenarios.md).
+> Want to get a feel for the underlying web UI without hardware? Open the upstream
+> [live demo](https://openneato-demo.renjfk.com/). Demo states can be selected with `?scenario=...`; see
+> [mock scenarios](docs/mock-scenarios.md).
 
 |                Dashboard                 |                  Manual Drive                  |                    Cleaning History                    |
 |:----------------------------------------:|:----------------------------------------------:|:------------------------------------------------------:|
@@ -36,13 +44,19 @@ Botvac robots (D3-D7) over UART and exposes a local web UI over WiFi — no clou
 |:----------------------------------------:|:--------------------------------------:|:--------------------------------------:|
 | ![Clean Map](screenshots/clean-map.webp) | ![Schedule](screenshots/schedule.webp) | ![Settings](screenshots/settings.webp) |
 
-## Motivation
+## About the underlying project (upstream)
+
+The sections below describe the upstream [renjfk/OpenNeato](https://github.com/renjfk/OpenNeato) project that
+this fork builds on — the ESP32 bridge firmware, standalone web UI, and flash tool. **None of this is unique
+to this fork**; it's reproduced here so HA users have full context on what's running behind the integration.
+If you only want the HA bits, you can skip ahead to the [Home Assistant section](#home-assistant-integration)
+below.
 
 Neato shut down their cloud services and mobile app, leaving perfectly functional robot vacuums without remote
 control or scheduling. OpenNeato brings them back to life with a small ESP32 board wired to the robot's debug
 port, giving you a local web interface that works without any external dependencies.
 
-## Features
+### Upstream web UI features
 
 - **Dashboard** with live robot status, battery level, cleaning state, WiFi signal, and storage usage
 - **House and spot cleaning** with pause/resume/stop/dock controls that adapt to the current state
