@@ -63,6 +63,7 @@ void SettingsManager::load() {
     current.brushRpm = prefs.getInt(NVS_KEY_MC_BRUSH_RPM, MANUAL_BRUSH_RPM);
     current.vacuumSpeed = prefs.getInt(NVS_KEY_MC_VACUUM_PCT, MANUAL_VACUUM_SPEED_PCT);
     current.sideBrushPower = prefs.getInt(NVS_KEY_MC_SBRUSH_MW, MANUAL_SIDE_BRUSH_POWER_MW);
+    current.apFallbackOnDisconnect = prefs.getBool(NVS_KEY_AP_FALLBACK, true);
     current.syslogEnabled = prefs.getBool(NVS_KEY_SYSLOG_ENABLED, false);
     current.syslogIp = prefs.getString(NVS_KEY_SYSLOG_IP, "");
     current.ntfyTopic = prefs.getString(NVS_KEY_NTFY_TOPIC, "");
@@ -96,6 +97,7 @@ void SettingsManager::save() {
     prefs.putInt(NVS_KEY_MC_BRUSH_RPM, current.brushRpm);
     prefs.putInt(NVS_KEY_MC_VACUUM_PCT, current.vacuumSpeed);
     prefs.putInt(NVS_KEY_MC_SBRUSH_MW, current.sideBrushPower);
+    prefs.putBool(NVS_KEY_AP_FALLBACK, current.apFallbackOnDisconnect);
     prefs.putBool(NVS_KEY_SYSLOG_ENABLED, current.syslogEnabled);
     prefs.putString(NVS_KEY_SYSLOG_IP, current.syslogIp);
     prefs.putString(NVS_KEY_NTFY_TOPIC, current.ntfyTopic);
@@ -256,6 +258,14 @@ ApplyResult SettingsManager::apply(const String& json) {
         LOG("SETTINGS", "Side brush power -> %d mW", current.sideBrushPower);
     }
 
+    if (incoming.apFallbackOnDisconnect != current.apFallbackOnDisconnect) {
+        current.apFallbackOnDisconnect = incoming.apFallbackOnDisconnect;
+        changed = true;
+        if (apFallbackChangeCb)
+            apFallbackChangeCb(current.apFallbackOnDisconnect);
+        LOG("SETTINGS", "AP fallback -> %s", current.apFallbackOnDisconnect ? "on" : "off");
+    }
+
     if (incoming.syslogEnabled != current.syslogEnabled) {
         current.syslogEnabled = incoming.syslogEnabled;
         changed = true;
@@ -364,6 +374,7 @@ std::vector<Field> Settings::toFields() const {
             {"brushRpm", String(brushRpm), FIELD_INT},
             {"vacuumSpeed", String(vacuumSpeed), FIELD_INT},
             {"sideBrushPower", String(sideBrushPower), FIELD_INT},
+            {"apFallbackOnDisconnect", apFallbackOnDisconnect ? "true" : "false", FIELD_BOOL},
             {"syslogEnabled", syslogEnabled ? "true" : "false", FIELD_BOOL},
             {"syslogIp", syslogIp, FIELD_STRING},
             {"ntfyTopic", ntfyTopic, FIELD_STRING},
@@ -438,6 +449,10 @@ bool Settings::fromFields(const std::vector<Field>& fields) {
     }
     if ((f = findField(fields, "sideBrushPower")) && f->type == FIELD_INT) {
         sideBrushPower = f->value.toInt();
+        applied = true;
+    }
+    if ((f = findField(fields, "apFallbackOnDisconnect")) && f->type == FIELD_BOOL) {
+        apFallbackOnDisconnect = (f->value == "true");
         applied = true;
     }
     if ((f = findField(fields, "syslogEnabled")) && f->type == FIELD_BOOL) {

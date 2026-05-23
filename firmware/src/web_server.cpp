@@ -8,15 +8,16 @@
 #include "manual_clean_manager.h"
 #include "notification_manager.h"
 #include "cleaning_history.h"
+#include "wifi_manager.h"
 #include <SPIFFS.h>
 
 unsigned long WebServer::lastApiActivity = 0;
 
 WebServer::WebServer(AsyncWebServer& server, NeatoSerial& neato, DataLogger& logger, SystemManager& sys,
                      FirmwareManager& fw, SettingsManager& settings, ManualCleanManager& manual,
-                     NotificationManager& notif, CleaningHistory& history) :
+                     NotificationManager& notif, CleaningHistory& history, WiFiManager& wifi) :
     server(server), neato(neato), logger(logger), sysMgr(sys), fwMgr(fw), settingsMgr(settings), manualMgr(manual),
-    notifMgr(notif), historyMgr(history) {}
+    notifMgr(notif), historyMgr(history), wifiMgr(wifi) {}
 
 void WebServer::loggedRoute(const char *path, WebRequestMethodComposite httpMethod, SyncHandler handler) {
     server.on(path, httpMethod, [this, handler](AsyncWebServerRequest *request) {
@@ -71,6 +72,7 @@ void WebServer::begin() {
     registerSettingsRoutes();
     registerFirmwareRoutes();
     registerMapRoutes();
+    registerWiFiRoutes();
 
     LOG("WEB", "Frontend and API routes registered");
 }
@@ -80,6 +82,8 @@ void WebServer::registerApiRoutes() {
 
     registerGetRoute("/api/version", neato, &NeatoSerial::getVersion, {});
     registerGetRoute("/api/charger", neato, &NeatoSerial::getCharger, {});
+    registerGetRoute("/api/analog", neato, &NeatoSerial::getBatteryAnalog, {});
+    registerGetRoute("/api/warranty", neato, &NeatoSerial::getBatteryWarranty, {});
     registerGetRoute(
             "/api/motors", neato,
             static_cast<void (NeatoSerial::*)(std::function<void(bool, const MotorData&)>)>(&NeatoSerial::getMotors),
@@ -100,14 +104,15 @@ void WebServer::registerApiRoutes() {
 
     registerPostRoute("/api/clean", neato, &NeatoSerial::clean, {"action"});
     registerPostRoute("/api/sound", neato, &NeatoSerial::playSound, {"id"});
-    registerPostRoute("/api/testmode", neato, &NeatoSerial::testMode, {"enable"});
     registerPostRoute("/api/power", neato, &NeatoSerial::powerControl, {"action"});
     registerPostRoute("/api/lidar/rotate", neato, &NeatoSerial::setLdsRotation, {"enable"});
     registerPostRoute("/api/user-settings", neato, &NeatoSerial::setUserSetting, {"key", "value"});
     registerPostRoute("/api/clear-errors", neato, &NeatoSerial::clearErrors, {});
+    registerPostRoute("/api/battery/new", neato, &NeatoSerial::newBattery, {});
 
     // Serial endpoint — send arbitrary serial command, returns raw response.
     // Always available (no debug gate — useful for diagnostics without enabling verbose logging).
+    // Excluded from public API docs (diagnostics-only passthrough).
     server.on("/api/serial", HTTP_POST, [this](AsyncWebServerRequest *request) {
         lastApiActivity = millis();
         unsigned long startMs = lastApiActivity;
@@ -146,6 +151,7 @@ void WebServer::registerApiRoutes() {
 void WebServer::registerManualRoutes() {
     // Register longer paths first — ESPAsyncWebServer matches routes by prefix,
     // so /api/manual would swallow /api/manual/move and /api/manual/motors.
+
     loggedRoute("/api/manual/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
         request->send(200, "application/json", manualMgr.getStatusJson());
         return 200;
@@ -179,6 +185,7 @@ static String logListJson(const std::vector<LogFileInfo>& files) {
 }
 
 void WebServer::registerLogRoutes() {
+
     // GET /api/logs[/filename] — list logs or download a specific file
     // A single BackwardCompatible handler matches both "/api/logs" and "/api/logs/..."
     // This route uses server.on() directly instead of loggedRoute() because
@@ -240,6 +247,7 @@ void WebServer::registerLogRoutes() {
 // -- System health endpoint ---------------------------------------------------
 
 void WebServer::registerSystemRoutes() {
+
     // GET /api/system — live system health (heap, uptime, RSSI, storage, NTP)
     loggedRoute("/api/system", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
         request->send(200, "application/json", sysMgr.getSystemHealth(settingsMgr.get().tz).toJson());
@@ -273,6 +281,7 @@ void WebServer::registerSystemRoutes() {
 // -- Settings endpoint -------------------------------------------------------
 
 void WebServer::registerSettingsRoutes() {
+
     // GET /api/settings — all user-configurable settings
     loggedRoute("/api/settings", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
         request->send(200, "application/json", settingsMgr.get().toJson());
@@ -322,15 +331,19 @@ void WebServer::registerSettingsRoutes() {
 // -- Firmware endpoints -------------------------------------------------------
 
 void WebServer::registerFirmwareRoutes() {
+
     // GET /api/firmware/version — current ESP32 firmware version + chip model + robot support status
     loggedRoute("/api/firmware/version", HTTP_GET, [this](AsyncWebServerRequest *request) -> int {
         std::vector<Field> fields = {
+                {"name", "OpenNeato", FIELD_STRING},
                 {"version", fwMgr.getFirmwareVersion(), FIELD_STRING},
                 {"chip", fwMgr.getChipModel(), FIELD_STRING},
                 {"model", neato.getModelName(), FIELD_STRING},
                 {"hostname", settingsMgr.get().hostname, FIELD_STRING},
                 {"supported", isSupportedModel(neato.getModelName()) ? "true" : "false", FIELD_BOOL},
                 {"identifying", neato.isIdentifying() ? "true" : "false", FIELD_BOOL},
+                {"repositoryUrl", "https://github.com/renjfk/OpenNeato", FIELD_STRING},
+                {"license", "MIT", FIELD_STRING},
         };
         request->send(200, "application/json", fieldsToJson(fields));
         return 200;
@@ -393,6 +406,7 @@ void WebServer::registerFirmwareRoutes() {
 // -- Map data endpoints -------------------------------------------------------
 
 void WebServer::registerMapRoutes() {
+
     // GET /api/history[/filename] — list sessions, collection status, or download a specific file
     server.on("/api/history", HTTP_GET, [this](AsyncWebServerRequest *request) {
         lastApiActivity = millis();
@@ -502,4 +516,24 @@ void WebServer::registerMapRoutes() {
             });
 
     LOG("WEB", "History routes registered");
+}
+
+// -- WiFi management endpoints -----------------------------------------------
+
+void WebServer::registerWiFiRoutes() {
+    // GET /api/wifi/status , STA + fallback AP snapshot
+    registerGetRoute("/api/wifi/status", wifiMgr, &WiFiManager::getStatus, {});
+
+    // GET /api/wifi/scan , list nearby networks
+    registerGetRoute("/api/wifi/scan", wifiMgr, &WiFiManager::scanNetworks, {});
+
+    // POST /api/wifi/connect?ssid=&password= , save credentials and connect.
+    // On success the device reboots into normal STA mode; on failure the
+    // fallback AP stays up so the user can retry.
+    registerPostRoute("/api/wifi/connect", wifiMgr, &WiFiManager::connect, {"ssid", "password"});
+
+    // POST /api/wifi/disconnect , clear credentials and drop the connection
+    registerPostRoute("/api/wifi/disconnect", wifiMgr, &WiFiManager::disconnect, {});
+
+    LOG("WEB", "WiFi routes registered");
 }

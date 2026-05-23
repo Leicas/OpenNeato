@@ -1,5 +1,7 @@
 import { parseMapData } from "./history-data";
 import type {
+    BatteryAnalogData,
+    BatteryWarrantyData,
     ChargerData,
     ErrorData,
     FirmwareVersion,
@@ -12,6 +14,9 @@ import type {
     StateData,
     SystemData,
     UserSettingsData,
+    VersionData,
+    WiFiScanResult,
+    WiFiStatus,
 } from "./types";
 
 async function parseError(res: Response): Promise<string> {
@@ -24,10 +29,24 @@ async function parseError(res: Response): Promise<string> {
     return `${res.status} ${res.statusText}`;
 }
 
+// Thrown when an OK response body cannot be parsed as JSON. Distinct from
+// network/HTTP errors so callers can render a recovery flow instead of a
+// generic error banner.
+export class ResponseParseError extends Error {
+    constructor(public url: string) {
+        super(`Failed to parse response from ${url}`);
+        this.name = "ResponseParseError";
+    }
+}
+
 async function get<T>(url: string): Promise<T> {
     const res = await fetch(url);
     if (!res.ok) throw new Error(await parseError(res));
-    return res.json();
+    try {
+        return (await res.json()) as T;
+    } catch {
+        throw new ResponseParseError(url);
+    }
 }
 
 async function post(url: string): Promise<void> {
@@ -50,12 +69,6 @@ async function put<T>(url: string, body: unknown): Promise<T> {
     return res.json();
 }
 
-async function sendSerial(cmd: string): Promise<string> {
-    const res = await fetch(`/api/serial?cmd=${encodeURIComponent(cmd)}`, { method: "POST" });
-    if (!res.ok) throw new Error(await parseError(res));
-    return res.text();
-}
-
 async function fetchLogText(name: string): Promise<string> {
     const res = await fetch(`/api/logs/${name}`);
     if (!res.ok) throw new Error(await parseError(res));
@@ -70,10 +83,10 @@ async function fetchSessionData(filename: string): Promise<MapData[]> {
     return parseMapData(raw);
 }
 
-function importSession(file: File, onProgress: (pct: number) => void): Promise<void> {
+function uploadFile(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/history/import");
+        xhr.open("POST", url);
         xhr.upload.addEventListener("progress", (e) => {
             if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
         });
@@ -95,38 +108,22 @@ function importSession(file: File, onProgress: (pct: number) => void): Promise<v
         form.append("file", file);
         xhr.send(form);
     });
+}
+
+function importSession(file: File, onProgress: (pct: number) => void): Promise<void> {
+    return uploadFile("/api/history/import", file, onProgress);
 }
 
 function uploadFirmware(file: File, md5: string, onProgress: (pct: number) => void): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `/api/firmware/update?hash=${md5}`);
-        xhr.upload.addEventListener("progress", (e) => {
-            if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-        });
-        xhr.addEventListener("load", () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                resolve();
-            } else {
-                try {
-                    const data = JSON.parse(xhr.responseText);
-                    reject(new Error(data.error || `${xhr.status} ${xhr.statusText}`));
-                } catch {
-                    reject(new Error(`${xhr.status} ${xhr.statusText}`));
-                }
-            }
-        });
-        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
-        xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
-        const form = new FormData();
-        form.append("file", file);
-        xhr.send(form);
-    });
+    return uploadFile(`/api/firmware/update?hash=${md5}`, file, onProgress);
 }
 
 export const api = {
+    getVersion: () => get<VersionData>("/api/version"),
     getState: () => get<StateData>("/api/state"),
     getCharger: () => get<ChargerData>("/api/charger"),
+    getBatteryAnalog: () => get<BatteryAnalogData>("/api/analog"),
+    getBatteryWarranty: () => get<BatteryWarrantyData>("/api/warranty"),
     getError: () => get<ErrorData>("/api/error"),
     getSystem: () => get<SystemData>("/api/system"),
     getFirmwareVersion: () => get<FirmwareVersion>("/api/firmware/version"),
@@ -150,6 +147,7 @@ export const api = {
     clearErrors: () => post("/api/clear-errors"),
     robotRestart: () => post("/api/power?action=restart"),
     robotShutdown: () => post("/api/power?action=shutdown"),
+    newBattery: () => post("/api/battery/new"),
     restart: () => post("/api/system/restart"),
     formatFs: () => post("/api/system/format-fs"),
     factoryReset: () => post("/api/system/reset"),
@@ -169,5 +167,10 @@ export const api = {
     getUserSettings: () => get<UserSettingsData>("/api/user-settings"),
     setUserSetting: (key: string, value: string) =>
         post(`/api/user-settings?key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`),
-    sendSerial: (cmd: string) => sendSerial(cmd),
+
+    getWifiStatus: () => get<WiFiStatus>("/api/wifi/status"),
+    scanWifi: () => get<WiFiScanResult>("/api/wifi/scan"),
+    connectWifi: (ssid: string, password: string) =>
+        post(`/api/wifi/connect?ssid=${encodeURIComponent(ssid)}&password=${encodeURIComponent(password)}`),
+    disconnectWifi: () => post("/api/wifi/disconnect"),
 };

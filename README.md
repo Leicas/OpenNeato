@@ -18,11 +18,15 @@ Botvac robots (D3-D7) over UART and exposes a local web UI over WiFi — no clou
 > or [issue](https://github.com/renjfk/OpenNeato/issues) is always welcome.
 
 > [!IMPORTANT]
-> **Now in development:** 
+> **Now in development:**
 [Guided Clean - zone cleaning, no-go lines, and map-based navigation](https://github.com/renjfk/OpenNeato/issues/68).
 >
 > Select zones on a previously recorded map, draw no-go lines, and let the robot clean exactly where you want.
 > Follow the issue for progress updates and sub-task tracking.
+
+> [!TIP]
+> Want to get a feel for OpenNeato without hardware? Open the [live demo](https://openneato-demo.renjfk.com/).
+> Demo states can be selected with `?scenario=...`; see [mock scenarios](docs/mock-scenarios.md).
 
 |                Dashboard                 |                  Manual Drive                  |                    Cleaning History                    |
 |:----------------------------------------:|:----------------------------------------------:|:------------------------------------------------------:|
@@ -55,8 +59,8 @@ port, giving you a local web interface that works without any external dependenc
 - **OTA firmware updates** from the browser with SHA-256 download verification (against published `checksums.txt`), MD5
   transfer integrity, dual-partition layout with auto-rollback, and automatic new version notifications when a release
   is available on GitHub
-- **Settings page** for hostname, timezone, motor presets, notification topics, UART pins, theme (dark/light/auto), and
-  more
+- **Settings page** for hostname, timezone, motor presets, notification topics, UART pins, theme (dark/light/auto),
+  battery diagnostics (cycle count, voltage, temperature, and a "New Battery" calibration trigger), and more
 - **Event logging** with configurable log levels (off/info/debug), compressed JSONL files on SPIFFS, browsable and
   downloadable from the UI; optional remote syslog (UDP) for long-running diagnostics without flash wear; logging is
   off by default
@@ -165,6 +169,10 @@ When creating issues, please follow our simple naming convention:
 - No period at the end
 
 ## Development
+
+For frontend development without hardware, use the mock API scenarios documented in
+[`docs/mock-scenarios.md`](docs/mock-scenarios.md). The same `?scenario=...` URLs work in local Vite dev and the
+Cloudflare demo.
 
 ### Release Process
 
