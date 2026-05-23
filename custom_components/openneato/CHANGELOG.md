@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.10
+
+### Fixed
+- **Setup crash with new firmware (`utf-8 codec can't decode byte 0xab`)** —
+  Upstream firmware PR #121 added `smartBattery*` string fields to
+  `/api/version` that pass raw bytes from the robot's smart-battery
+  memory through the firmware's `jsonEscape()` (it only escapes bytes
+  below 0x20). When the pack reports a non-UTF-8 byte, aiohttp's
+  `response.json()` raised `UnicodeDecodeError` and the config entry
+  failed setup. Responses are now decoded with `errors="replace"`
+  before being parsed as JSON so one bad glyph can't take the
+  integration down.
+
+### Added
+- **Battery diagnostics from firmware PR #121** — three new diagnostic
+  sensors backed by the new `/api/analog` endpoint (battery voltage,
+  current, external voltage) and two backed by `/api/warranty`
+  (battery cycles, cumulative cleaning time). The existing
+  `Battery temperature` sensor was repointed from the now-removed
+  `/api/charger#battTempC` to `/api/analog#batteryTemperatureC`
+  (a finer-grained float in °C). A `New battery` button (disabled by
+  default) calls `POST /api/battery/new` to reset the fuel-gauge
+  calibration after a pack swap.
+
 ## 1.9
 
 ### Fixed

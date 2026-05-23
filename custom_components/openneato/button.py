@@ -81,6 +81,17 @@ BUTTON_DESCRIPTIONS: tuple[OpenNeatoButtonEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         press_fn=lambda api: api.clear_errors(),
     ),
+    OpenNeatoButtonEntityDescription(
+        # Resets the battery fuel-gauge calibration after a pack swap.
+        # Disabled by default — user must opt in to avoid accidental resets.
+        key="new_battery",
+        translation_key="new_battery",
+        name="New battery",
+        icon="mdi:battery-sync-outline",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+        press_fn=lambda api: api.new_battery(),
+    ),
 )
 
 
