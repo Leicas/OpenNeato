@@ -137,6 +137,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/sensors:
+    get:
+      tags:
+        - Sensors
+      summary: Get digital sensor data (dustbin, bumpers, wheel lift, DC jack)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigitalSensorData"
+        "504":
+          description: robot timeout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/state:
     get:
       tags:
@@ -1015,6 +1033,50 @@ components:
         - cumulativeBatteryCycles
         - cumulativeCleaningTimeSeconds
         - validationCode
+    DigitalSensorData:
+      type: object
+      properties:
+        dcJackIn:
+          type: boolean
+          description: True when the external DC barrel jack is plugged in
+        dustbinIn:
+          type: boolean
+          description: True when the dustbin is seated
+        leftWheelExtended:
+          type: boolean
+          description: True when the left drive wheel is lifted off the ground
+        rightWheelExtended:
+          type: boolean
+          description: True when the right drive wheel is lifted off the ground
+        lSideBit:
+          type: boolean
+          description: Left side bumper triggered
+        lFrontBit:
+          type: boolean
+          description: Left front bumper triggered
+        lLdsBit:
+          type: boolean
+          description: Left LDS guard bumper triggered
+        rSideBit:
+          type: boolean
+          description: Right side bumper triggered
+        rFrontBit:
+          type: boolean
+          description: Right front bumper triggered
+        rLdsBit:
+          type: boolean
+          description: Right LDS guard bumper triggered
+      required:
+        - dcJackIn
+        - dustbinIn
+        - leftWheelExtended
+        - rightWheelExtended
+        - lSideBit
+        - lFrontBit
+        - lLdsBit
+        - rSideBit
+        - rFrontBit
+        - rLdsBit
     MotorData:
       type: object
       properties:
