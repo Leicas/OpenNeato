@@ -40,6 +40,33 @@ TEXT_DESCRIPTIONS: tuple[OpenNeatoTextEntityDescription, ...] = (
         native_max=15,
         pattern=r"^(\d{1,3}\.){3}\d{1,3}$|^$",
     ),
+    OpenNeatoTextEntityDescription(
+        key="ntfy_topic",
+        translation_key="ntfy_topic",
+        name="Notification topic",
+        section="settings",
+        settings_field="ntfyTopic",
+        icon="mdi:bell-cog",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoTextEntityDescription(
+        key="ntfy_server",
+        translation_key="ntfy_server",
+        name="Notification server",
+        section="settings",
+        settings_field="ntfyServer",
+        icon="mdi:server",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoTextEntityDescription(
+        key="ntfy_token",
+        translation_key="ntfy_token",
+        name="Notification token",
+        section="settings",
+        settings_field="ntfyToken",
+        icon="mdi:key",
+        entity_category=EntityCategory.CONFIG,
+    ),
 )
 
 

@@ -1,5 +1,7 @@
 .pio
 .cache
+__pycache__/
+*.pyc
 compile_commands.json
 firmware/compile_commands.json
 firmware/src/web_assets.h

@@ -132,6 +132,16 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
         entity_category=EntityCategory.CONFIG,
     ),
     OpenNeatoSwitchEntityDescription(
+        key="notify_on_start",
+        translation_key="notify_on_start",
+        name="Notify on clean start",
+        section="settings",
+        field="ntfyOnStart",
+        settings_field="ntfyOnStart",
+        icon="mdi:bell-outline",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
         key="notify_on_done",
         translation_key="notify_on_done",
         name="Notify on clean done",
@@ -169,6 +179,16 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
         field="ntfyOnDocking",
         settings_field="ntfyOnDocking",
         icon="mdi:bell-plus",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    OpenNeatoSwitchEntityDescription(
+        key="ap_fallback_on_disconnect",
+        translation_key="ap_fallback_on_disconnect",
+        name="WiFi AP fallback",
+        section="settings",
+        field="apFallbackOnDisconnect",
+        settings_field="apFallbackOnDisconnect",
+        icon="mdi:wifi-strength-alert-outline",
         entity_category=EntityCategory.CONFIG,
     ),
     OpenNeatoSwitchEntityDescription(

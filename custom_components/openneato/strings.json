@@ -71,10 +71,12 @@
       "warning_sounds": { "name": "Warning sounds" },
       "stealth_led": { "name": "Stealth LED" },
       "notifications_enabled": { "name": "Notifications" },
+      "notify_on_start": { "name": "Notify on clean start" },
       "notify_on_done": { "name": "Notify on clean done" },
       "notify_on_error": { "name": "Notify on error" },
       "notify_on_alert": { "name": "Notify on alert" },
       "notify_on_docking": { "name": "Notify on docking" },
+      "ap_fallback_on_disconnect": { "name": "WiFi AP fallback" },
       "remote_syslog": { "name": "Remote syslog" }
     },
     "button": {
@@ -100,7 +102,10 @@
       "navigation_mode": { "name": "Navigation mode" }
     },
     "text": {
-      "syslog_ip": { "name": "Syslog server IP" }
+      "syslog_ip": { "name": "Syslog server IP" },
+      "ntfy_topic": { "name": "Notification topic" },
+      "ntfy_server": { "name": "Notification server" },
+      "ntfy_token": { "name": "Notification token" }
     }
   }
 }
