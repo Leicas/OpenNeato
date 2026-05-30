@@ -1,89 +1,138 @@
-name: Build and Release
+name: Release
+
+# Automated releases driven by semantic-release. On every push to main, the
+# `version` job analyzes Conventional Commits since the last v* tag and, if a
+# release is warranted, creates and pushes a vX.Y.Z tag (no GitHub release yet
+# — see below). Bump mapping lives in .releaserc.json:
+#   fix:/perf:        -> patch      feat:/enhance:  -> minor
+#   BREAKING CHANGE   -> major      build/chore/ci/docs/refactor/style/test -> none
+#
+# The release is then published by ONE of two downstream jobs, chosen by which
+# files changed since the previous tag (semantic-release itself never creates
+# the GitHub release, so exactly one of these owns it):
+#   - release-ha:   custom_components/ only -> fast tag + GitHub release, no
+#                   build (HACS bundles the integration straight from the tag).
+#   - release-full: anything else -> build frontend + firmware (all boards) +
+#                   flash tool, published via GoReleaser with firmware packs.
+#
+# Manual fallback: trigger via workflow_dispatch to force a semantic-release
+# run (it is a no-op when there are no releasable commits). For a hand-tuned
+# HA-only release use release-ha.yml; this file owns the automated path.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag (e.g., v1.0)'
-        required: true
-        type: string
-      release_notes:
-        description: 'Release notes content (markdown supported)'
-        required: true
-        type: string
-      prerelease:
-        description: 'Mark as pre-release'
-        required: false
-        type: boolean
-        default: false
-      draft:
-        description: 'Create as draft release'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  prepare:
-    name: Prepare Release
+  version:
+    name: Determine version
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-
+      published: ${{ steps.semantic.outputs.new_release_published }}
+      version: ${{ steps.semantic.outputs.new_release_version }}
+      ha_only: ${{ steps.scope.outputs.ha_only }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Create and push release tag
+      # Capture the previous tag BEFORE semantic-release creates a new one, so
+      # the scope check below can diff against it.
+      - name: Find previous tag
+        id: prev
+        run: echo "tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
+
+      - name: Semantic release (analyze + tag)
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            conventional-changelog-conventionalcommits@7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Decide which publish path applies. If only custom_components/ moved
+      # since the previous tag, the lightweight HA path can ship it without a
+      # firmware build. No previous tag (or nothing to diff) -> full build.
+      - name: Classify change scope
+        id: scope
+        if: steps.semantic.outputs.new_release_published == 'true'
         run: |
-          RELEASE_TAG="${{ github.event.inputs.release_tag }}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if ! git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Creating new tag: $RELEASE_TAG"
-            git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
-            git push origin "$RELEASE_TAG"
+          PREV='${{ steps.prev.outputs.tag }}'
+          if [ -z "$PREV" ]; then
+            echo "No previous tag; using full build."
+            echo "ha_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$PREV"..HEAD | grep -v '^custom_components/' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "Only custom_components/ changed since $PREV -> HA-only release."
+            echo "ha_only=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Tag $RELEASE_TAG already exists"
+            echo "Files outside custom_components/ changed since $PREV -> full build."
+            echo "ha_only=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          RELEASE_TAG="${{ github.event.inputs.release_tag }}"
-          VERSION=${RELEASE_TAG#v}
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Setting version to: $VERSION"
-
       - name: Save release notes
-        run: |
-          cat << 'EOF' > release_notes.md
-          ${{ github.event.inputs.release_notes }}
-          EOF
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          NOTES: ${{ steps.semantic.outputs.new_release_notes }}
+        run: printf '%s' "$NOTES" > release_notes.md
 
-      - name: Upload release notes artifact
+      - name: Upload release notes
+        if: steps.semantic.outputs.new_release_published == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: release-notes
           path: release_notes.md
 
-  release:
-    name: Build and Release
-    runs-on: macos-latest
-    needs: prepare
-
+  release-ha:
+    name: Publish (HA only)
+    runs-on: ubuntu-latest
+    needs: version
+    if: needs.version.outputs.published == 'true' && needs.version.outputs.ha_only == 'true'
     steps:
-      - name: Checkout code
+      - name: Checkout tag
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.release_tag }}
+          ref: v${{ needs.version.outputs.version }}
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/release
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ needs.version.outputs.version }}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/release/release_notes.md
+
+  release-full:
+    name: Publish (full build)
+    runs-on: macos-latest
+    needs: version
+    if: needs.version.outputs.published == 'true' && needs.version.outputs.ha_only == 'false'
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: v${{ needs.version.outputs.version }}
 
       # --- Frontend ---
 
@@ -124,7 +173,7 @@ jobs:
 
       - name: Build firmware and package release artifacts
         env:
-          FIRMWARE_VERSION: ${{ needs.prepare.outputs.version }}
+          FIRMWARE_VERSION: ${{ needs.version.outputs.version }}
         run: |
           # Build all *-release environments; post-build hook packages
           # firmware artifacts into each env's build dir for GoReleaser
@@ -150,16 +199,6 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: >-
-            release --clean
-            --release-notes=/tmp/release/release_notes.md
-            ${{ github.event.inputs.draft == 'true' && '--draft' || '' }}
+          args: release --clean --release-notes=/tmp/release/release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Mark as pre-release
-        if: ${{ github.event.inputs.prerelease == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release edit "${{ github.event.inputs.release_tag }}" --prerelease

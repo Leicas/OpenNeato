@@ -1,135 +1,60 @@
-# Manual Release Process Guide
+# Release Process
 
-This document describes the step-by-step manual release process for OpenNeato using AI assistance to analyze commits, generate release notes, and trigger the GitHub Actions workflow via opencode (with `gh` CLI integration).
+Releases are **automated with [semantic-release](https://semantic-release.gitbook.io/)**. You no longer hand-pick a version or write release notes — merging Conventional-Commit changes to `main` does it.
 
-## Overview
+## How it works
 
-The manual release process involves:
+On every push to `main`, `.github/workflows/release.yml` runs:
 
-1. **AI-driven commit analysis** - Analyze commit history since last release
-2. **AI-generated release notes** following strict formatting conventions
-3. **Preview and review** - release notes shown before any actions taken
-4. **Human review and approval** for quality control
-5. **Workflow dispatch** - trigger GitHub Actions via `gh` CLI
-6. **Automated build and release** - workflow builds frontend, firmware, flash tool and publishes GitHub Release
+1. **`version` job** (Ubuntu) — semantic-release reads every commit since the last `v*` tag and decides the next version from the commit types (see mapping below). If a release is warranted it creates and pushes a `vX.Y.Z` tag and generates the release notes. If nothing user-facing changed, it is a no-op and the workflow ends.
+2. **Publish** — exactly one downstream job creates the GitHub release, chosen by *which files changed* since the previous tag:
+   - **`release-ha`** — only `custom_components/` changed → fast tag + GitHub release, **no build** (HACS bundles the integration straight from the tag, so no firmware/frontend/flash artifacts are needed).
+   - **`release-full`** — anything else changed → builds the frontend, firmware for **all** `*-release` board environments, and the cross-platform flash tool, then publishes via **GoReleaser** with the firmware packs and `openapi.yaml` attached.
 
-## Prerequisites
+semantic-release itself never creates the GitHub *release* (it only pushes the tag), so there is no double-publish — whichever publish job runs owns the release.
 
-- [opencode](https://opencode.ai/) installed
-- [GitHub CLI (`gh`)](https://cli.github.com) installed and authenticated (`gh auth login`)
-- Understanding of conventional commit patterns
-- Familiarity with major.minor versioning (no patch versions)
+## Version bump mapping
 
-## AI-Assisted Release Process
+Configured in `.releaserc.json` (Conventional Commits preset). Versioning is standard `major.minor.patch` semver.
 
-Use this prompt in opencode to handle the entire release process:
+| Commit type | Bump | In release notes |
+|-------------|------|------------------|
+| `fix:`, `perf:` | patch | Bug Fixes / Improvements |
+| `feat:`, `enhance:` | minor | New Features / Improvements |
+| `BREAKING CHANGE:` footer or `!` | major | Breaking Changes |
+| `chore:`, `docs:`, `ci:`, `build:`, `refactor:`, `style:`, `test:` | none | hidden |
 
-### Master Release Prompt
-
-```
-I need to create a new release for OpenNeato. Please:
-
-STEP 1: ANALYZE COMMITS
-- Use `gh` CLI or available tools to get the latest release tag
-- Fetch all commits between that tag and current HEAD
-- Analyze each commit for user-facing changes
-
-STEP 2: GENERATE RELEASE NOTES
-Create structured release notes with this EXACT format:
-
-### Breaking Changes
-[Only if breaking changes exist - triggers major version]
-- Description focusing on user impact (abc1234)
-
-### New Features
-- Feature description emphasizing user benefit (abc1234)
-
-### Improvements  
-- Improvement description with user impact (abc1234)
-
-### Bug Fixes
-- Fix description focusing on resolved user issue (abc1234)
-
-REQUIREMENTS:
-- Focus ONLY on user-facing changes and impact
-- EXCLUDE: docs, build, ci, chore, refactor, test commits  
-- Use active voice, present tense
-- Include commit short hashes (GitHub renders as links)
-- Version logic: major.minor format only (no patch)
-  - MINOR version (1.0 → 1.1): New features, bug fixes, improvements
-  - MAJOR version (1.1 → 2.0): Breaking changes detected
-- Show this preview BEFORE any actions
-
-STEP 3: SHOW PREVIEW
-Display the generated release notes and ask for approval before proceeding.
-
-STEP 4: TRIGGER WORKFLOW (after approval)
-Use `gh workflow run` to trigger the "Build and Release" workflow:
-
-```bash
-gh workflow run release.yml \
-  -f release_tag="v[VERSION]" \
-  -f release_notes="[generated content]" \
-  -f draft=true \
-  -f prerelease=false
-```
-
-Please start with Step 1 - analyze the commits and show me the preview.
-```
-
-## How It Works
-
-opencode will:
-1. **Analyze commits** since last release via `gh` CLI
-2. **Generate release notes** with proper formatting and categorization  
-3. **Show preview** and ask for approval
-4. **Trigger GitHub Actions workflow** with the release notes
-5. The workflow **builds frontend** (npm), **builds firmware** (PlatformIO), then **GoReleaser** builds cross-platform flash tool binaries and publishes the GitHub Release with firmware packs attached
-
-## Features
-
-- **Automatic filtering** of technical commits (docs, tests, CI, etc.)
-- **User-focused** release notes with clear impact descriptions
-- **Smart versioning** - minor for features/fixes, major for breaking changes
-- **Preview before action** - human approval required
-- **Full build pipeline** - frontend, firmware, and flash tool all built in one workflow
+So a release is cut only when at least one `feat`/`enhance`/`fix`/`perf` (or a breaking change) has landed since the last tag. Write commit messages accordingly — the changelog quality is now a direct function of commit message quality.
 
 ## Prereleases
 
-Prereleases let you build and publish full release artifacts from a PR branch for testing before merging.
+Unchanged — comment `/prerelease` on a PR (collaborators only) or run `gh workflow run prerelease.yml -r <branch>`. See `prerelease.yml`. This builds full artifacts from a PR branch for testing before merge and does not interact with semantic-release.
 
-### Triggering
+## Manual fallbacks
 
-**From the PR page:** Comment `/prerelease` on the PR. Only repository collaborators (OWNER, MEMBER, COLLABORATOR) can trigger this.
+Both manual workflows remain available via **Actions → Run workflow** (`workflow_dispatch`):
 
-**From the CLI:**
+- **`release.yml`** — running it manually just forces a semantic-release check (no-op if there are no releasable commits).
+- **`release-ha.yml`** — hand-tuned HA-only release with custom tag + notes; it validates that only `custom_components/` changed since the last tag.
+
+## One-time migration: seed a semver tag
+
+semantic-release determines the current version from git tags that are **valid semver** and match `vX.Y.Z`. The historical tags here are mostly two-part (`v1.9`, `v1.11`), which are **not** valid semver, so semantic-release will ignore them and would otherwise restart numbering far below the current release.
+
+Before the first automated release, seed a valid-semver tag at the current latest release commit so versioning continues forward:
+
 ```bash
-gh workflow run prerelease.yml -r <branch-name>
+# point a 3-part tag at the same commit as the current latest release (v1.11)
+git tag -a v1.11.0 "$(git rev-list -n1 v1.11)" -m "Seed semver baseline for semantic-release"
+git push origin v1.11.0
 ```
 
-### How it works
-
-1. Resolves the PR number and head commit from the branch
-2. Computes a tag based on the latest release: `v<base>-pr<number>.<sha>` (e.g. `v0.1-pr42.abc1234`)
-3. Deletes any previous prerelease for the same PR (tag + release)
-4. Builds frontend, firmware, and flash tool
-5. Publishes a GitHub prerelease via GoReleaser
-6. Posts a comment on the PR with the release link (when triggered via `/prerelease`)
-
-### Notes
-
-- No CI gate — trigger whenever you want a test build
-- Previous prereleases for the same PR are automatically cleaned up
-- The base version comes from the latest non-prerelease GitHub release (falls back to `v0.0`)
+After that, the next `feat`/`enhance` merge yields `v1.12.0`, the next `fix` yields `v1.11.1`, and a breaking change yields `v2.0.0`. The old two-part tags can stay; they are simply ignored.
 
 ## Troubleshooting
 
-- **gh CLI issues**: Run `gh auth status` to verify authentication
-- **Workflow dispatch failed**: Check repository permissions for workflow dispatch
-- **Invalid release notes**: Review format requirements and regenerate
-- **PlatformIO build fails**: Ensure `c3-release` environment builds locally first
-- **Frontend build fails**: Run `npm run build` in `frontend/` locally to verify
-
----
-
-*Use the master prompt above to start your next release.*
+- **No release was cut after merging** — check the commit types; only `feat`/`enhance`/`fix`/`perf`/breaking trigger one. Inspect the `version` job log for the semantic-release analysis.
+- **Version went backwards / restarted low** — the seed tag (above) was not created. Add `vX.Y.Z` at the latest release commit and re-run.
+- **Full build ran for a HA-only change (or vice-versa)** — check the `Classify change scope` step in the `version` job; it diffs `<prev-tag>..HEAD` against `custom_components/`.
+- **GoReleaser fails on dirty tree** — the firmware/frontend build must leave a clean working tree (web_assets.h regeneration is deterministic). Verify `npm run build` locally produces no diff at the tag.
+- **PlatformIO build fails** — ensure the `*-release` environments build locally first (`pio run -e c3-release`).
