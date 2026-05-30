@@ -231,19 +231,30 @@ class OpenNeatoApiClient:
             async with timeout(TIMEOUT):
                 async with self._session.get(url) as response:
                     response.raise_for_status()
-                    raw = await response.content.read(MAX_HISTORY_RESPONSE_BYTES + 1)
-                    if len(raw) > MAX_HISTORY_RESPONSE_BYTES:
-                        raise OpenNeatoApiError(
-                            f"Session {filename} exceeds size cap "
-                            f"({MAX_HISTORY_RESPONSE_BYTES} bytes)"
-                        )
+                    # The firmware serves this endpoint as an HTTP chunked
+                    # transfer with no Content-Length (beginChunkedResponse
+                    # in web_server.cpp). On a chunked aiohttp response,
+                    # content.read(n) returns as soon as ANY buffered data is
+                    # available — it does NOT block until n bytes or EOF — so
+                    # a single bounded read silently truncates the JSONL to
+                    # the first chunk, producing a PARTIAL map. Drain the full
+                    # stream to EOF (matching the frontend's res.text()),
+                    # enforcing the size cap incrementally as we accumulate.
+                    buf = bytearray()
+                    async for chunk in response.content.iter_chunked(65536):
+                        buf.extend(chunk)
+                        if len(buf) > MAX_HISTORY_RESPONSE_BYTES:
+                            raise OpenNeatoApiError(
+                                f"Session {filename} exceeds size cap "
+                                f"({MAX_HISTORY_RESPONSE_BYTES} bytes)"
+                            )
                     # Firmware emits UTF-8 JSONL; hardcode rather than
                     # call response.get_encoding(), which raises in
                     # modern aiohttp when content was streamed via
-                    # response.content.read() (the streaming path
-                    # doesn't populate the response's _body buffer
-                    # that get_encoding's chardet fallback needs).
-                    return raw.decode("utf-8", errors="replace")
+                    # response.content (the streaming path doesn't
+                    # populate the response's _body buffer that
+                    # get_encoding's chardet fallback needs).
+                    return bytes(buf).decode("utf-8", errors="replace")
         except aiohttp.ClientConnectionError as err:
             raise OpenNeatoConnectionError(
                 f"Unable to connect to OpenNeato at {self._host}: {err}"
