@@ -114,7 +114,10 @@ def render_lidar_scan(
 
     # ── Helpers ──────────────────────────────────────────────────────
     def to_canvas(angle_deg: float, dist: float) -> tuple[float, float]:
-        rad = math.radians(90 - angle_deg)
+        # Match the frontend reference (lidar-map.tsx): rad = (90 + angle).
+        # Using (90 - angle) here flips the cos sign and mirrors the scan
+        # horizontally relative to the web dashboard.
+        rad = math.radians(90 + angle_deg)
         return (cx + dist * scale * math.cos(rad), cy - dist * scale * math.sin(rad))
 
     def opacity(age: int) -> float:

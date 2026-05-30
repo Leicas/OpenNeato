@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import math
 import re
 from typing import Any
@@ -42,6 +43,8 @@ from .const import (
     MOTION_TAIL_FRAMES,
     MOTION_TOTAL_MS,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ── JSONL parsing (ported from history-data.ts) ─────────────────────
@@ -90,13 +93,23 @@ def parse_session_jsonl(raw: str) -> dict[str, Any]:
     poses: list[dict[str, float]] = []
     recharges: list[tuple[float, float]] = []
 
-    for line in lines:
+    for idx, line in enumerate(lines):
         try:
             obj = json.loads(line)
         except json.JSONDecodeError:
             repaired = _try_repair_pose(line)
             if repaired:
                 poses.append(repaired)
+            elif idx == len(lines) - 1:
+                # A final line that parses as neither JSON nor a repairable
+                # pose is the classic signature of a truncated download (the
+                # stream was cut mid-line). Surface it so a silently-partial
+                # map is observable rather than rendered without warning.
+                _LOGGER.warning(
+                    "Final history line failed to parse (%d chars); "
+                    "session data may be truncated, map will be partial",
+                    len(line),
+                )
             continue
 
         obj_type = obj.get("type")
