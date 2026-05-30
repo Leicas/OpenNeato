@@ -55,8 +55,11 @@ jobs:
         id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
+          # v8 matches the conventional-changelog-writer bundled with
+          # semantic-release 24; v7 throws "Date.prototype.toString called on
+          # incompatible receiver" during note generation.
           extra_plugins: |
-            conventional-changelog-conventionalcommits@7
+            conventional-changelog-conventionalcommits@8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
