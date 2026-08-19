@@ -21,6 +21,9 @@ bool FirmwareManager::validateChip(uint8_t *data, size_t len) {
             {0x02, CHIP_ESP32S2},
             {0x05, CHIP_ESP32C3},
             {0x09, CHIP_ESP32S3},
+            // CHIP_ESP32C6 (13) spelled numerically: the espressif32 7.0.1
+            // core used by the non-C6 envs predates the enum constant.
+            {0x0D, 13},
     };
     auto binChipId = static_cast<uint8_t>(data[12]);
     const ChipMap *match = nullptr;
