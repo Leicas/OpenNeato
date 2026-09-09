@@ -220,6 +220,9 @@ class OpenNeatoReplayCard extends HTMLElement {
         this._session = null;
         this._selectedName = null;
         this._loading = false;
+        this._sessionsLoading = false;
+        this._selectedRecording = false;
+        this._lastSessionRefresh = 0;
         this._error = null;
         this._floorplanImg = null;
         this._floorplanKey = null;
@@ -285,7 +288,11 @@ class OpenNeatoReplayCard extends HTMLElement {
     set hass(hass) {
         const first = this._hass === null;
         this._hass = hass;
-        if (first) this._loadSessions();
+        const now = Date.now();
+        if (first || now - this._lastSessionRefresh >= 5000) {
+            this._lastSessionRefresh = now;
+            this._loadSessions();
+        }
     }
 
     connectedCallback() {
@@ -665,27 +672,37 @@ class OpenNeatoReplayCard extends HTMLElement {
     /* ---- data loading ---- */
 
     async _loadSessions() {
+        if (this._sessionsLoading || !this._hass) return;
+        this._sessionsLoading = true;
         try {
             const res = await this._hass.callWS({
                 type: "openneato/sessions",
                 ...(this._config.entry_id ? { entry_id: this._config.entry_id } : {}),
             });
             this._entryId = res.entry_id;
-            // Only completed sessions are replayable end to end.
-            this._sessions = (res.sessions || []).filter((s) => !s.recording);
+            this._sessions = res.sessions || [];
             if (this._sessions.length === 0) {
-                this._fail("No completed cleaning sessions yet");
+                this._fail("No cleaning sessions yet");
                 return;
             }
             this._renderPicker();
             this._delBtn.disabled = false;
-            const wanted =
-                this._selectedName && this._sessions.some((s) => s.name === this._selectedName)
-                    ? this._selectedName
-                    : this._sessions[0].name;
-            await this._selectSession(wanted);
+            const fixedSession = this._config.session && this._config.session !== "latest";
+            const active = fixedSession ? null : this._sessions.find((session) => session.recording);
+            const wanted = active
+                ? active.name
+                : this._selectedName && this._sessions.some((session) => session.name === this._selectedName)
+                  ? this._selectedName
+                  : this._sessions[0].name;
+            const selected = this._sessions.find((session) => session.name === wanted);
+            const recording = Boolean(selected?.recording);
+            if (!this._session || wanted !== this._selectedName || recording || recording !== this._selectedRecording) {
+                await this._selectSession(wanted);
+            }
         } catch (err) {
-            this._fail(`Could not list sessions: ${err.message || err}`);
+            if (!this._session) this._fail(`Could not list sessions: ${err.message || err}`);
+        } finally {
+            this._sessionsLoading = false;
         }
     }
 
@@ -727,7 +744,7 @@ class OpenNeatoReplayCard extends HTMLElement {
                 const area = s.summary && s.summary.areaCovered;
                 const label = `${formatDate(start)} — ${modeLabel(s.session && s.session.mode)}${
                     area ? ` · ${area} m²` : ""
-                }`;
+                }${s.recording ? " · Live" : ""}`;
                 return `<option value="${s.name}">${label}</option>`;
             })
             .join("");
@@ -749,6 +766,7 @@ class OpenNeatoReplayCard extends HTMLElement {
                 ...(this._entryId ? { entry_id: this._entryId } : {}),
             });
             this._session = new Session(raw);
+            this._selectedRecording = Boolean(this._sessions.find((session) => session.name === name)?.recording);
             this._tf = { panX: 0, panY: 0, zoom: 1 };
             this._cov.sig = "";
             await this._loadFloorplan(raw.floorplan);

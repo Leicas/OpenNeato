@@ -121,6 +121,7 @@ A single device with the following entity groups:
   fan speed presets (Eco/Auto/Intense), error reporting. Works with all the standard vacuum cards.
 - **Map card** — [`openneato-replay-card`](custom_components/openneato/www/openneato-replay-card.js), a
   canvas Lovelace card that draws the accumulated LIDAR floorplan and replays a cleaning session over it,
+  including the currently recording session as a live map,
   with pan, zoom and a timeline scrubber. It reads the `openneato/session` and `openneato/sessions`
   websocket commands directly, so there is no server-side rendering and no image polling. It replaces the
   former `LIDAR map` and `Cleaning replay` camera entities, which are gone.
