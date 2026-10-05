@@ -151,6 +151,11 @@ class LidarMapRunner:
     # ── sampling ────────────────────────────────────────────────────
 
     async def _async_tick(self, _now=None) -> None:
+        if self._session_name is None:
+            # History is on a slower cadence than state, so the recording
+            # entry may not have been listed yet when _start() ran. Backfill
+            # it here so the alignment is stored against the right file.
+            self._session_name = (self._recording_session() or {}).get("name")
         if self._busy:
             return
         state = ((self.coordinator.data or {}).get("state") or {}).get("uiState", "")

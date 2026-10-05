@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     EntityCategory,
+    UnitOfArea,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfLength,
@@ -323,7 +324,11 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
         name="Last clean area",
         section="history",
         field="",
-        native_unit_of_measurement="m\u00b2",
+        # The AREA device class lets HA convert to ft\u00b2 on US-customary
+        # installs and offer the unit dropdown (issue #16). The native unit
+        # string is unchanged, so no entity-registry migration is needed.
+        device_class=SensorDeviceClass.AREA,
+        native_unit_of_measurement=UnitOfArea.SQUARE_METERS,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:texture-box",
         value_fn=lambda data: _summary_value(data, "areaCovered"),

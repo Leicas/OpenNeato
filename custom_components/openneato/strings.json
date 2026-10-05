@@ -392,5 +392,11 @@
       "path_must_be_absolute": "The floorplan image path must be absolute (start with /).",
       "path_not_found": "No file at that path on the Home Assistant machine. Check the path and that the file is readable."
     }
+  },
+  "issues": {
+    "unsupported_firmware": {
+      "title": "Unsupported OpenNeato firmware",
+      "description": "The bridge at {host} reports firmware {version} from {repository}. This integration is built for the Leicas/OpenNeato fork firmware ({min_version} or newer); upstream or older firmware may miss endpoints, and heavy polling can make the ESP32 unresponsive. Flash the fork firmware from https://github.com/Leicas/OpenNeato/releases."
+    }
   }
 }

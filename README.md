@@ -121,10 +121,11 @@ A single device with the following entity groups:
   fan speed presets (Eco/Auto/Intense), error reporting. Works with all the standard vacuum cards.
 - **Map card** — [`openneato-replay-card`](custom_components/openneato/www/openneato-replay-card.js), a
   canvas Lovelace card that draws the accumulated LIDAR floorplan and replays a cleaning session over it,
-  including the currently recording session as a live map,
-  with pan, zoom and a timeline scrubber. It reads the `openneato/session` and `openneato/sessions`
-  websocket commands directly, so there is no server-side rendering and no image polling. It replaces the
-  former `LIDAR map` and `Cleaning replay` camera entities, which are gone.
+  with pan, zoom and a timeline scrubber. A clean that is in progress shows as a live map — the card follows
+  the robot every few seconds, with a ● Live chip in the controls — and turns into a normal replay the moment
+  it finishes. It reads the `openneato/session` and `openneato/sessions` websocket commands directly, so
+  there is no server-side rendering and no image polling. It replaces the former `LIDAR map` and
+  `Cleaning replay` camera entities, which are gone.
 - **Sensors** — battery level/voltage/current/temperature, battery cycle count, cumulative cleaning time,
   WiFi RSSI, free heap, storage used, uptime, motor RPMs, error code/message, plus "last clean" stats
   (duration, area covered, distance, battery used, mode, end time) pulled from the on-device history.
@@ -150,6 +151,37 @@ sensor states) are tagged so they cluster cleanly under HA's Diagnostic section.
   under *Settings → Dashboards → Resources* as a JavaScript module, then add a manual card with
   `type: custom:openneato-replay-card`. The walls come from the integration's own LIDAR mapper, which
   accumulates an occupancy grid across cleanings — the plan sharpens with each run.
+- **Card options** — all optional; `type: custom:openneato-replay-card` alone gives the defaults.
+
+  | Option | Default | What it does |
+  |---|---|---|
+  | `title` | `Cleaning replay` | Header text. Set to `""` to drop it and put the session picker first. |
+  | `entry_id` | *(first entry)* | Which OpenNeato config entry to read when there is more than one robot. |
+  | `session` | `latest` | `latest` follows the newest session (and switches to a clean as it starts); a filename pins the card to that one session. |
+  | `height` | `360` | Map height in px, or `fill` to take whatever room the column gives. |
+  | `speed` | `8` | Playback rate in session-seconds per real second. |
+  | `autoplay` | `false` | Start playing from the beginning as soon as a session loads. Ignored for a session that is still recording — the card follows it live instead. |
+  | `fit` | `stable` | `stable` frames the cleaned area on a 1 m grid so the view stops shifting between cleanings; `plan` always keeps the whole floorplan in view; `session` is the tightest fit but moves from run to run. |
+  | `rotation` | `auto` | `auto` straightens the map against its walls; a number in degrees pins the view. |
+  | `floorplan` | `true` | Draw the accumulated LIDAR floorplan under the session. |
+  | `floorplan_opacity` | `1` | Opacity of the floorplan, `0`–`1`. |
+  | `grid` | `true` | The Neato-app look: half-metre grid lines, and floorplan, coverage and trail drawn as a lattice of square tiles. `false` gives a flat map — no lines, no tiles, a smooth plan with a smooth swept area and a rounded track. |
+  | `grid_lines` | *follows `grid`* | Only the half-metre lines. |
+  | `tiled_plan` | *follows `grid`* | Only the floorplan tiling. |
+  | `tiled_coverage` | *follows `grid`* | Only the coverage and trail tiling. |
+  | `trail` | `true` | Fading track behind the robot. `false` shows cleaned / not cleaned only. |
+  | `units` | `auto` | `auto` follows the Home Assistant unit system (`ft`/`ft²` on US customary, `m`/`m²` otherwise); `metric` or `imperial` overrides it. |
+  | `show_picker` | `true` | Session dropdown and delete button. Hiding it puts the date, mode and area back into the stats row. |
+  | `show_stats` | `true` | Distance, duration, battery and recharges beside the picker. |
+
+  Example — a flat, imperial card pinned to the live/latest session:
+
+  ```yaml
+  type: custom:openneato-replay-card
+  grid: false
+  units: imperial
+  height: fill
+  ```
 - **Reading the diagnostics** — two field names are misleading and the integration corrects for them:
   `errorCode` returns **200** (`UI_ALERT_INVALID`) when nothing is wrong, so the *Error code* sensor
   reports *unknown* instead; and `chargerMAH` / `dischargeMAH` are **milliamps, not milliamp-hours**
@@ -169,6 +201,10 @@ sensor states) are tagged so they cluster cleanly under HA's Diagnostic section.
 Full per-version notes live in [`custom_components/openneato/CHANGELOG.md`](custom_components/openneato/CHANGELOG.md).
 Highlights:
 
+- **1.20** — live map: a clean in progress plays on the replay card as it happens, with a `● Live` chip
+  and a growing timeline; `grid: false` now really gives a flat map (plus `grid_lines`, `tiled_plan`,
+  `tiled_coverage` for the in-between looks); `units: auto | metric | imperial` with the card following
+  Home Assistant's unit system; *Last clean area* gets an area device class so it converts to ft².
 - **1.19** — `skip_next_clean` switch, `next_scheduled_clean` sensor, and `auto_restart` switch covering
   the upstream skip-next-clean / next-schedule / daily-restart firmware features; delete button on the
   replay card.

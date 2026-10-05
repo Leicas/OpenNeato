@@ -323,7 +323,7 @@ void WebServer::registerFirmwareRoutes() {
                 {"hostname", settingsMgr.get().hostname, FIELD_STRING},
                 {"supported", isSupportedModel(neato.getModelName()) ? "true" : "false", FIELD_BOOL},
                 {"identifying", neato.isIdentifying() ? "true" : "false", FIELD_BOOL},
-                {"repositoryUrl", "https://github.com/renjfk/OpenNeato", FIELD_STRING},
+                {"repositoryUrl", "https://github.com/Leicas/OpenNeato", FIELD_STRING},
                 {"license", "MIT", FIELD_STRING},
         };
         request->send(200, "application/json", fieldsToJson(fields));

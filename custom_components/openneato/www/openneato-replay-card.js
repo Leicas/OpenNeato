@@ -11,7 +11,7 @@
  * (openneato/sessions, openneato/session) — the browser only draws.
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 
 // Breathing room around the fitted map, in CSS pixels. Kept small: the fit
 // already leaves slack wherever the run is not the shape of the card, and
@@ -53,6 +53,19 @@ const SPEED_STEPS = [1, 2, 4, 8, 16, 32, 64];
 const FIT_QUANTUM_M = 1;
 // The same idea when a floorplan already anchors the frame — see _viewBounds.
 const FIT_QUANTUM_ANCHORED_M = 0.25;
+// Polling. One timer ticks every POLL_TICK_MS and decides what is due. The
+// session list is served from Home Assistant's own coordinator cache, so
+// re-reading it costs the robot nothing; a live session download does reach
+// the ESP32 (the integration caps it server-side), so that one is slower and
+// only runs while the selected session is being recorded.
+const POLL_TICK_MS = 5000;
+const SESSIONS_REFRESH_MS = 10000;
+const LIVE_REFRESH_MS = 15000;
+// A live view that has not managed a refresh for this long is flagged stale.
+const LIVE_STALE_MS = 60000;
+// Same factors as frontend/src/distance-units.ts.
+const METERS_TO_FEET = 3.28084;
+const SQM_TO_SQFT = 10.7639;
 const DEFAULTS = {
     speed: 8,
     // "auto" follows the wall-derived angle a generated plan reports, so the
@@ -62,9 +75,19 @@ const DEFAULTS = {
     autoplay: false,
     floorplan: true,
     floorplan_opacity: 1,
-    // Rule the plan with the fine grid the Neato app draws over its floor.
-    // Set false for a flat plan.
+    // The Neato-app look: half-metre lines, the plan quantised onto the
+    // lattice, coverage and trail as square tiles. false gives a flat map —
+    // no lines, smooth plan, smooth swept area and a rounded track.
     grid: true,
+    // Per-layer overrides of `grid`; unset follows it. `tiled_coverage`
+    // covers the trail too: it is painted on the same lattice as the
+    // coverage so the two never read as different drawings.
+    grid_lines: undefined,
+    tiled_plan: undefined,
+    tiled_coverage: undefined,
+    // "auto" follows Home Assistant's unit system; "metric" or "imperial"
+    // overrides it.
+    units: "auto",
     // Fading track of squares behind the robot. Set false for cleaned/not
     // cleaned only.
     trail: true,
@@ -107,6 +130,57 @@ function formatDate(epoch) {
 
 function modeLabel(mode) {
     return { house: "House Clean", spot: "Spot Clean", manual: "Manual Clean" }[mode] || mode || "Clean";
+}
+
+// "metric" | "imperial" from the card option, else from Home Assistant's
+// unit system. `area` is the exact unit the user chose on recent cores;
+// `length` ("km" | "mi") is the fallback every version has. Anything else
+// in the option is treated as "auto" — a typo must not blank the card.
+function resolveUnits(config, hass) {
+    const u = config && config.units;
+    if (u === "metric" || u === "imperial") return u;
+    const us = (hass && hass.config && hass.config.unit_system) || {};
+    if (us.area === "ft²" || us.area === "ft^2") return "imperial";
+    if (us.area) return "metric";
+    return us.length === "mi" ? "imperial" : "metric";
+}
+
+function formatNumber(value, locale, digits) {
+    try {
+        return new Intl.NumberFormat(locale || undefined, {
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits,
+        }).format(value);
+    } catch {
+        return value.toFixed(digits);
+    }
+}
+
+// Metres to one decimal, feet as whole numbers: a foot is three times finer
+// and a decimal on it would claim centimetre accuracy the robot does not
+// have. Non-breaking space before the unit so a label never wraps there.
+function formatArea(m2, units, locale) {
+    const n = Number(m2);
+    if (m2 === undefined || m2 === null || Number.isNaN(n)) return "";
+    return units === "imperial"
+        ? `${formatNumber(n * SQM_TO_SQFT, locale, 0)}\u00a0ft²`
+        : `${formatNumber(n, locale, 1)}\u00a0m²`;
+}
+
+function formatDistance(m, units, locale) {
+    const n = Number(m);
+    if (m === undefined || m === null || Number.isNaN(n)) return "";
+    return units === "imperial"
+        ? `${formatNumber(n * METERS_TO_FEET, locale, 0)}\u00a0ft`
+        : `${formatNumber(n, locale, 1)}\u00a0m`;
+}
+
+// HA websocket errors carry `code` and `message`; match the code and fall
+// back to the backend's wording in case a proxy drops it.
+function isEmptySessionError(err) {
+    if (!err) return false;
+    if (err.code === "empty_session") return true;
+    return /no pose data/i.test(String(err.message || ""));
 }
 
 // Shortest-arc interpolation between two headings in degrees.
@@ -221,11 +295,38 @@ class OpenNeatoReplayCard extends HTMLElement {
         this._selectedName = null;
         this._loading = false;
         this._sessionsLoading = false;
-        this._selectedRecording = false;
-        this._lastSessionRefresh = 0;
+        // Outcome of the last fetch for `_selectedName`: null while nothing
+        // has been tried, then "ok" | "empty" | "error" | "missing" (a pinned
+        // session that is not on the robot yet). A failed completed
+        // session is not retried by the list tick; a live one is retried on
+        // the live cadence.
+        this._loadState = null;
         this._error = null;
         this._floorplanImg = null;
         this._floorplanKey = null;
+
+        // Which layers get the lattice treatment; resolved in setConfig.
+        this._look = { lines: true, plan: true, tiles: true };
+        this._units = "metric";
+        this._pickerSig = null;
+
+        // Live session state. `_live`: the selected session is still being
+        // recorded. `_follow`: the playhead rides the newest frame. The user
+        // pins a manual pick with `_userPicked`; a new clean lifts it.
+        this._live = false;
+        this._follow = true;
+        this._userPicked = false;
+        this._seenLive = null;
+        this._finalDue = false;
+        this._liveLoading = false;
+        this._lastListAt = 0;
+        this._lastLiveAt = 0;
+        this._lastLiveOk = 0;
+        this._liveSince = 0;
+        this._pollTimer = null;
+        this._durTimer = null;
+        this._quarterLock = null;
+        this._onVisibilityBound = () => this._onVisibility();
 
         // Playback state. `_time` is the source of truth and is mutated by
         // the rAF loop directly — putting it in a re-render cycle is what
@@ -258,6 +359,12 @@ class OpenNeatoReplayCard extends HTMLElement {
         this._speed = Number(this._config.speed) > 0 ? Number(this._config.speed) : DEFAULTS.speed;
         this._selectedName =
             this._config.session && this._config.session !== "latest" ? this._config.session : null;
+        const master = this._config.grid ?? DEFAULTS.grid;
+        this._look = {
+            lines: this._config.grid_lines ?? master,
+            plan: this._config.tiled_plan ?? master,
+            tiles: this._config.tiled_coverage ?? master,
+        };
         this._buildDom();
     }
 
@@ -285,14 +392,21 @@ class OpenNeatoReplayCard extends HTMLElement {
         return Math.ceil((Number.isFinite(h) ? h : DEFAULTS.height) / 50) + 1;
     }
 
+    // Home Assistant calls this on every state change. It only stores the
+    // object and re-reads the unit system; polling is on a timer of its own.
     set hass(hass) {
         const first = this._hass === null;
         this._hass = hass;
-        const now = Date.now();
-        if (first || now - this._lastSessionRefresh >= 5000) {
-            this._lastSessionRefresh = now;
-            this._loadSessions();
+        const units = resolveUnits(this._config, hass);
+        if (units !== this._units) {
+            this._units = units;
+            this._renderPicker();
+            this._renderStats();
         }
+        if (first) this._loadSessions();
+        // connectedCallback starts the timer for a card in the tree; an
+        // editor preview that never gets attached must not poll forever.
+        if (this.isConnected) this._ensurePoll();
     }
 
     connectedCallback() {
@@ -300,12 +414,17 @@ class OpenNeatoReplayCard extends HTMLElement {
         // have existed yet; do it again now that it certainly does.
         if (this._config && this._config.height === "fill") this._stretchWrapper();
         if (this._canvas) this._observeResize();
+        document.addEventListener("visibilitychange", this._onVisibilityBound);
+        this._ensurePoll();
+        if (this._live) this._startDurationTicker();
         this._dirty = true;
         this._scheduleRender();
     }
 
     disconnectedCallback() {
         this._stopLoop();
+        this._stopPoll();
+        document.removeEventListener("visibilitychange", this._onVisibilityBound);
         if (this._resizeObserver) this._resizeObserver.disconnect();
     }
 
@@ -322,6 +441,11 @@ class OpenNeatoReplayCard extends HTMLElement {
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
+                }
+                /* Several elements below set their own display, which would
+                   otherwise beat the hidden attribute. */
+                [hidden] {
+                    display: none !important;
                 }
                 /* One row: title (only if configured), then the session
                    picker, then the stats. The stats scroll inside their own
@@ -432,15 +556,22 @@ class OpenNeatoReplayCard extends HTMLElement {
                     position: absolute;
                     inset: 0;
                     display: flex;
+                    flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    color: var(--secondary-text-color);
+                    gap: 4px;
+                    color: var(--primary-text-color);
                     font-size: 0.9rem;
                     text-align: center;
                     padding: 16px;
+                    white-space: pre-line;
                     pointer-events: none;
                 }
-                .overlay[hidden] { display: none; }
+                /* Second line: what to do about it. */
+                .overlay .hint {
+                    color: var(--secondary-text-color);
+                    font-size: 0.8rem;
+                }
                 .controls {
                     display: flex;
                     align-items: center;
@@ -470,6 +601,48 @@ class OpenNeatoReplayCard extends HTMLElement {
                     color: var(--secondary-text-color);
                     border: 1px solid var(--divider-color);
                     min-width: 38px;
+                }
+                /* Live chip: filled while following the newest frame, outlined
+                   as a "Go live" button once the user has scrubbed back. */
+                button.live {
+                    /* The theme's error red is only ~3.9:1 against white;
+                       darkened a fifth it clears 4.5:1 for the filled chip
+                       and the outlined ink alike. */
+                    --live: var(--error-color, #db4437);
+                    --live: color-mix(in srgb, var(--error-color, #db4437) 80%, #000);
+                    border-radius: 10px;
+                    padding: 3px 8px;
+                    font: inherit;
+                    font-size: 0.75rem;
+                    line-height: 1.4;
+                    white-space: nowrap;
+                    color: var(--live);
+                    border: 1px solid var(--live);
+                }
+                button.live.on {
+                    background: var(--live);
+                    color: #fff;
+                    cursor: default;
+                }
+                button.live.on:hover {
+                    background: var(--live);
+                }
+                button.live .dot {
+                    margin-right: 4px;
+                    animation: live-pulse 2s ease-in-out infinite;
+                }
+                button.live.stale {
+                    opacity: 0.6;
+                }
+                button.live.stale .dot {
+                    animation: none;
+                }
+                @keyframes live-pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.4; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    button.live .dot { animation: none; }
                 }
                 .clock {
                     font-variant-numeric: tabular-nums;
@@ -512,8 +685,8 @@ class OpenNeatoReplayCard extends HTMLElement {
             <ha-card>
                 <div class="head">
                     <div class="title">Cleaning replay</div>
-                    <select class="picker"></select>
-                    <button class="del" title="Delete this session" disabled>
+                    <select class="picker" aria-label="Cleaning session"></select>
+                    <button class="del" title="Delete this session" aria-label="Delete this session" disabled>
                         <svg viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                     </button>
                     <div class="stats"></div>
@@ -533,6 +706,7 @@ class OpenNeatoReplayCard extends HTMLElement {
                     <span class="clock elapsed">0:00</span>
                     <input type="range" class="scrub" min="0" max="1" step="0.05" value="0" disabled>
                     <span class="clock total">0:00</span>
+                    <button class="live" hidden></button>
                 </div>
             </ha-card>
         `;
@@ -551,6 +725,7 @@ class OpenNeatoReplayCard extends HTMLElement {
         this._elapsedEl = root.querySelector(".elapsed");
         this._totalEl = root.querySelector(".total");
         this._scrub = root.querySelector(".scrub");
+        this._liveBtn = root.querySelector(".live");
 
         // `height: fill` lets the map grow to whatever room the column gives
         // it, instead of pinning a pixel count that has to be re-guessed every
@@ -575,15 +750,31 @@ class OpenNeatoReplayCard extends HTMLElement {
             root.querySelector(".title").textContent = this._config.title;
         }
 
-        this._picker.addEventListener("change", () => this._selectSession(this._picker.value));
+        this._picker.addEventListener("change", () => {
+            // A manual pick is pinned: list refreshes must not pull the user
+            // off it onto a clean that is already running.
+            this._userPicked = true;
+            this._selectSession(this._picker.value);
+        });
         this._delBtn.addEventListener("click", () => this._deleteSelected());
         this._playBtn.addEventListener("click", () => this._togglePlay());
         this._restartBtn.addEventListener("click", () => this._restart());
         this._speedBtn.addEventListener("click", () => this._cycleSpeed());
+        this._liveBtn.addEventListener("click", () => {
+            if (!this._follow) this._goLive();
+        });
         this._showSpeed();
+        // Grabbing the thumb already means "stop following", before any
+        // value has changed — otherwise a refresh could yank it away.
+        this._scrub.addEventListener("pointerdown", () => {
+            this._follow = false;
+            this._renderChip();
+        });
         this._scrub.addEventListener("input", () => {
             this._pause();
+            this._follow = false;
             this._seek(Number(this._scrub.value));
+            this._renderChip();
         });
 
         this._bindGestures();
@@ -669,11 +860,65 @@ class OpenNeatoReplayCard extends HTMLElement {
         });
     }
 
+    /* ---- polling ---- */
+
+    _ensurePoll() {
+        if (this._pollTimer) return;
+        this._pollTimer = setInterval(() => this._tick(), POLL_TICK_MS);
+    }
+
+    _stopPoll() {
+        if (this._pollTimer) clearInterval(this._pollTimer);
+        this._pollTimer = null;
+        this._stopDurationTicker();
+    }
+
+    // Both polls pause while the dashboard tab is hidden; _onVisibility
+    // catches up the moment it is shown again.
+    _tick() {
+        if (!this._hass || document.hidden) return;
+        const now = Date.now();
+        if (now - this._lastListAt >= SESSIONS_REFRESH_MS) this._loadSessions();
+        const wantsLive = this._live || this._finalDue;
+        const due = this._finalDue || now - this._lastLiveAt >= LIVE_REFRESH_MS;
+        if (wantsLive && due && this._selectedName && !this._loading && !this._liveLoading) {
+            this._refreshLive();
+        }
+        if (this._live) this._renderChip(); // picks up the stale state
+    }
+
+    _onVisibility() {
+        if (document.hidden) return;
+        this._lastListAt = 0;
+        this._lastLiveAt = 0;
+        this._tick();
+    }
+
+    // The live Duration stat counts up between refreshes so it does not
+    // stall for fifteen seconds at a time.
+    _startDurationTicker() {
+        if (this._durTimer) return;
+        this._durTimer = setInterval(() => {
+            if (this._live && !document.hidden) this._renderStats();
+        }, 1000);
+    }
+
+    _stopDurationTicker() {
+        if (this._durTimer) clearInterval(this._durTimer);
+        this._durTimer = null;
+    }
+
     /* ---- data loading ---- */
+
+    _locale() {
+        const hass = this._hass;
+        return (hass && hass.locale && hass.locale.language) || navigator.language;
+    }
 
     async _loadSessions() {
         if (this._sessionsLoading || !this._hass) return;
         this._sessionsLoading = true;
+        this._lastListAt = Date.now();
         try {
             const res = await this._hass.callWS({
                 type: "openneato/sessions",
@@ -681,34 +926,93 @@ class OpenNeatoReplayCard extends HTMLElement {
             });
             this._entryId = res.entry_id;
             this._sessions = res.sessions || [];
+            this._renderPicker();
             if (this._sessions.length === 0) {
-                this._fail("No cleaning sessions yet");
+                this._clearSelection();
+                this._fail("No cleaning sessions yet\nStart a clean and it will show up here.");
                 return;
             }
-            this._renderPicker();
-            this._delBtn.disabled = false;
-            const fixedSession = this._config.session && this._config.session !== "latest";
-            const active = fixedSession ? null : this._sessions.find((session) => session.recording);
-            const wanted = active
-                ? active.name
-                : this._selectedName && this._sessions.some((session) => session.name === this._selectedName)
-                  ? this._selectedName
-                  : this._sessions[0].name;
-            const selected = this._sessions.find((session) => session.name === wanted);
-            const recording = Boolean(selected?.recording);
-            if (!this._session || wanted !== this._selectedName || recording || recording !== this._selectedRecording) {
-                await this._selectSession(wanted);
-            }
+            await this._reconcileSelection();
         } catch (err) {
-            if (!this._session) this._fail(`Could not list sessions: ${err.message || err}`);
+            if (this._session) {
+                // Whatever is on screen stays; the next tick tries again.
+                console.warn("openneato-replay-card: session list unavailable", err);
+            } else {
+                this._fail(`Could not list sessions\n${err.message || err}`);
+            }
         } finally {
             this._sessionsLoading = false;
         }
     }
 
+    _clearSelection() {
+        this._selectedName = null;
+        this._session = null;
+        this._loadState = null;
+        this._finalDue = false;
+        this._setLive(false);
+    }
+
+    // Decide what the card shows after a list refresh, and notice the
+    // selected session starting or finishing its recording.
+    async _reconcileSelection() {
+        const listed = (name) => Boolean(name) && this._sessions.some((s) => s.name === name);
+        const live = this._sessions.find((s) => s.recording);
+        const liveName = live ? live.name : null;
+        // A *new* clean lifts a manual pick. `session: latest` promises to
+        // switch to a clean as it starts; the pin only ever meant "leave me
+        // on what I chose while this one runs". Caveat: a list that briefly
+        // drops the recording entry and gets it back would lift the pin
+        // spuriously; rare, since the coordinator carries last-known history
+        // forward instead of serving a gap.
+        if (liveName && liveName !== this._seenLive) this._userPicked = false;
+        this._seenLive = liveName;
+
+        const pinned = this._config.session && this._config.session !== "latest";
+        if (pinned && !listed(this._config.session)) {
+            // Say so rather than quietly showing some other session; the
+            // list keeps polling, so the card picks it up when the file
+            // appears.
+            if (this._loadState !== "missing") {
+                this._clearSelection();
+                this._selectedName = this._config.session;
+                this._loadState = "missing";
+                this._fail(`Session not found\n${this._config.session} is not on the robot.`);
+            }
+            this._syncDelete();
+            return;
+        }
+        let wanted;
+        if (pinned) {
+            wanted = this._config.session;
+        } else if (liveName && !this._userPicked) {
+            wanted = liveName;
+        } else if (listed(this._selectedName)) {
+            wanted = this._selectedName;
+        } else {
+            wanted = this._sessions[0].name;
+        }
+
+        const nowRecording = Boolean(this._sessions.find((s) => s.name === wanted)?.recording);
+        const untried = this._loadState === null || this._loadState === "missing";
+        if (wanted !== this._selectedName || (!this._session && untried)) {
+            await this._selectSession(wanted);
+        } else if (this._live && !nowRecording) {
+            // Finished. One more fetch brings the summary — quietly, so the
+            // map, pan/zoom and playhead stay where they are — and live mode
+            // ends: the chip goes, delete comes back, polling stops.
+            this._finalDue = true;
+            this._setLive(false);
+            await this._refreshLive();
+        } else if (!this._live && nowRecording && this._loadState !== null) {
+            this._setLive(true);
+        }
+        this._syncDelete();
+    }
+
     async _deleteSelected() {
         const name = this._selectedName;
-        if (!name || this._loading) return;
+        if (!name || this._loading || this._live) return;
 
         // Label the confirmation with what the user actually sees in the
         // picker, not the raw filename.
@@ -726,66 +1030,181 @@ class OpenNeatoReplayCard extends HTMLElement {
                 ...(this._entryId ? { entry_id: this._entryId } : {}),
             });
         } catch (err) {
-            this._delBtn.disabled = false;
-            this._setOverlay(`Could not delete: ${err.message || err}`);
+            if (err && err.code === "recording") {
+                // It started recording between two list ticks. Refresh the
+                // list now; the button follows the live flag from there.
+                this._flash("Still recording — try again when the clean finishes");
+                this._lastListAt = 0;
+                this._loadSessions();
+            } else {
+                this._flash(`Could not delete: ${err.message || err}`);
+                this._syncDelete();
+            }
             return;
         }
 
         // Fall back to whichever session is newest once this one is gone.
-        this._selectedName = null;
-        this._session = null;
+        this._clearSelection();
+        this._lastListAt = 0;
         await this._loadSessions();
     }
 
-    _renderPicker() {
-        this._picker.innerHTML = this._sessions
-            .map((s) => {
-                const start = (s.session && s.session.time) || Number(String(s.name).split(".")[0]);
-                const area = s.summary && s.summary.areaCovered;
-                const label = `${formatDate(start)} — ${modeLabel(s.session && s.session.mode)}${
-                    area ? ` · ${area} m²` : ""
-                }${s.recording ? " · Live" : ""}`;
-                return `<option value="${s.name}">${label}</option>`;
-            })
-            .join("");
+    _sessionLabel(s) {
+        const start = (s.session && s.session.time) || Number(String(s.name).split(".")[0]);
+        const area = s.summary && s.summary.areaCovered;
+        let label = `${formatDate(start)} — ${modeLabel(s.session && s.session.mode)}`;
+        // No area while recording: the summary is written when the clean
+        // ends, and the word says what the picker cannot style.
+        if (s.recording) label += " · Live";
+        else if (area) label += ` · ${formatArea(area, this._units, this._locale())}`;
+        return label;
     }
 
+    // Rebuilt only when the labels change. Rewriting the options on every
+    // refresh closed the dropdown under the user and, for a moment, pointed
+    // the delete confirmation at the wrong session.
+    _renderPicker() {
+        if (!this._picker) return;
+        const rows = this._sessions.map((s) => [s.name, this._sessionLabel(s)]);
+        const sig = `${rows.map(([name, label]) => `${name}|${label}`).join("\n")}|${this._units}`;
+        if (sig === this._pickerSig) return;
+        this._pickerSig = sig;
+        this._picker.innerHTML = rows.map(([name, label]) => `<option value="${name}">${label}</option>`).join("");
+        if (this._selectedName) this._picker.value = this._selectedName;
+    }
+
+    _fetchSession(name) {
+        return this._hass.callWS({
+            type: "openneato/session",
+            name,
+            ...(this._entryId ? { entry_id: this._entryId } : {}),
+        });
+    }
+
+    // A user-initiated (or first) selection: the one path that clears the
+    // view and shows "Loading session…".
     async _selectSession(name) {
         if (!name || this._loading) return;
         this._selectedName = name;
         this._picker.value = name;
         this._loading = true;
+        this._loadState = null;
+        this._finalDue = false;
         this._pause();
         this._session = null;
+        this._follow = true;
+        this._tf = { panX: 0, panY: 0, zoom: 1 };
+        this._setLive(Boolean(this._sessions.find((s) => s.name === name)?.recording));
+        this._enableControls(false);
         this._setOverlay("Loading session…");
 
         try {
-            const raw = await this._hass.callWS({
-                type: "openneato/session",
-                name,
-                ...(this._entryId ? { entry_id: this._entryId } : {}),
-            });
-            this._session = new Session(raw);
-            this._selectedRecording = Boolean(this._sessions.find((session) => session.name === name)?.recording);
-            this._tf = { panX: 0, panY: 0, zoom: 1 };
-            this._cov.sig = "";
-            await this._loadFloorplan(raw.floorplan);
-            this._renderStats();
-            this._setOverlay(null);
-            this._enableControls(true);
-
-            // Rest on the completed map, like the web player: pressing play
-            // rewinds and replays from the beginning.
-            this._scrub.max = String(this._session.duration);
-            this._totalEl.textContent = formatClock(this._session.duration);
-            this._seek(this._session.duration);
-
-            if (this._config.autoplay) this._restart(true);
+            const raw = await this._fetchSession(name);
+            if (name !== this._selectedName) return;
+            await this._applySession(raw, name, true);
         } catch (err) {
-            this._fail(err.message || String(err));
+            if (name === this._selectedName) this._sessionError(err);
         } finally {
             this._loading = false;
         }
+    }
+
+    // Quiet re-fetch of the selected session: swaps the data under the view
+    // without touching pan/zoom, the playhead or the overlay. Used on the
+    // live cadence and for the one fetch after a recording completes.
+    async _refreshLive() {
+        if (this._liveLoading || this._loading || !this._hass || !this._selectedName) return;
+        this._liveLoading = true;
+        this._lastLiveAt = Date.now();
+        const name = this._selectedName;
+        // Only the attempt that was started *as* the completion fetch may
+        // retire the flag: if one is already in flight when the recording
+        // ends, the early return above leaves `_finalDue` set and the next
+        // tick performs it.
+        const wasFinal = this._finalDue;
+        try {
+            const raw = await this._fetchSession(name);
+            if (name !== this._selectedName) return;
+            // First data for a session that was waiting on it is a first
+            // load: frame it, rest on the newest frame.
+            await this._applySession(raw, name, !this._session);
+        } catch (err) {
+            if (name !== this._selectedName) return;
+            if (this._session) {
+                // Keep what is on screen; the chip turns stale after a minute.
+                console.warn("openneato-replay-card: live refresh failed", err);
+            } else {
+                this._sessionError(err);
+            }
+        } finally {
+            if (wasFinal) this._finalDue = false;
+            this._liveLoading = false;
+        }
+    }
+
+    async _applySession(raw, name, reset) {
+        const session = new Session(raw);
+        // Same plan URL short-circuits; a changed plan loads before the swap
+        // so the old picture stays up until everything new is in hand.
+        await this._loadFloorplan(raw.floorplan);
+        // The selection may have moved on while the plan loaded.
+        if (name !== this._selectedName) return;
+        this._session = session;
+        this._loadState = "ok";
+        this._lastLiveOk = Date.now();
+        this._liveSince = this._lastLiveOk;
+        // The session payload says whether it is still recording when the
+        // backend is new enough; otherwise the list's flag stands.
+        if (typeof raw.recording === "boolean" && !this._finalDue) this._setLive(raw.recording);
+        // Layers rebuild from the new arrays on the next frame. The view
+        // transform is left alone, so pan and zoom survive a refresh.
+        this._cov.sig = "";
+        this._trk.sig = "";
+        if (reset) {
+            this._tf = { panX: 0, panY: 0, zoom: 1 };
+            this._quarterLock = null;
+            this._follow = true;
+        }
+        this._scrub.max = String(session.duration);
+        this._totalEl.textContent = formatClock(session.duration);
+        this._enableControls(true);
+        this._setOverlay(null);
+        if (reset) {
+            // Rest on the completed map, like the web player: pressing play
+            // rewinds and replays from the beginning. A live session rests on
+            // its newest frame, which is the same place.
+            this._seek(session.duration);
+            if (this._config.autoplay && !this._live) this._restart(true);
+        } else if (this._follow) {
+            this._seek(session.duration);
+        } else {
+            // The user scrubbed back: leave the playhead where they put it.
+            this._seek(Math.min(this._time, session.duration));
+        }
+        this._syncDelete();
+        this._renderStats();
+        this._renderChip();
+        this._dirty = true;
+        this._scheduleRender();
+    }
+
+    _sessionError(err) {
+        const msg = err && err.message ? err.message : String(err);
+        if (isEmptySessionError(err)) {
+            this._loadState = "empty";
+            if (this._live) {
+                // The file exists but holds no pose yet. Wait for the first
+                // one on the live cadence, with no "Loading…" in between.
+                this._fail("Cleaning started — waiting for the first map data…");
+            } else {
+                this._fail("This session has no map data\nThe robot recorded no positions during this clean.");
+            }
+        } else {
+            this._loadState = "error";
+            this._fail(`Could not load this session\n${msg}`);
+        }
+        this._syncDelete();
+        this._renderChip();
     }
 
     async _loadFloorplan(fp) {
@@ -821,31 +1240,142 @@ class OpenNeatoReplayCard extends HTMLElement {
     }
 
     _renderStats() {
-        if (!this._config.show_stats || !this._session) return;
+        if (!this._statsEl || !this._config.show_stats || !this._session) return;
         const s = this._session.summary || {};
         const info = this._session.session || {};
+        const units = this._units;
+        const locale = this._locale();
         const bits = [];
         // Date, mode and area are all in the picker's own label
-        // ("19/08 11:32 — House Clean · 27.25 m²"), so repeating them beside
+        // ("19/08 11:32 — House Clean · 27.3 m²"), so repeating them beside
         // it just spends the row saying the same thing twice. They come back
         // when the picker is hidden and nothing else would show them.
         if (!this._config.show_picker) {
             if (info.time) bits.push(`<span><b>${formatDate(info.time)}</b></span>`);
             bits.push(`<span>${modeLabel(info.mode)}</span>`);
-            if (s.areaCovered) bits.push(`<span>Area <b>${s.areaCovered} m²</b></span>`);
+            if (!this._live && s.areaCovered) {
+                bits.push(`<span>Area <b>${formatArea(s.areaCovered, units, locale)}</b></span>`);
+            }
         }
-        if (s.distanceTraveled) bits.push(`<span>Distance <b>${s.distanceTraveled} m</b></span>`);
-        if (s.duration) bits.push(`<span>Duration <b>${formatClock(s.duration)}</b></span>`);
-        if (s.batteryStart !== undefined && s.batteryEnd !== undefined) {
-            bits.push(`<span>Battery <b>${s.batteryStart}% → ${s.batteryEnd}%</b></span>`);
+        if (this._live) {
+            // Only what is known while recording — the summary (area,
+            // distance, end battery) is written when the clean ends.
+            const since = (Date.now() - this._liveSince) / 1000;
+            bits.push(`<span>Duration <b>${formatClock(this._session.duration + since)}</b></span>`);
+            if (info.battery !== undefined) bits.push(`<span>Battery <b>${info.battery}%</b></span>`);
+            const recharges = this._session.recharges.length;
+            if (recharges > 0) bits.push(`<span>Recharges <b>${recharges}</b></span>`);
+        } else {
+            if (s.distanceTraveled) {
+                bits.push(`<span>Distance <b>${formatDistance(s.distanceTraveled, units, locale)}</b></span>`);
+            }
+            const duration = s.duration || this._session.duration;
+            if (duration) bits.push(`<span>Duration <b>${formatClock(duration)}</b></span>`);
+            if (s.batteryStart !== undefined && s.batteryEnd !== undefined) {
+                bits.push(`<span>Battery <b>${s.batteryStart}% → ${s.batteryEnd}%</b></span>`);
+            }
+            if (s.recharges) bits.push(`<span>Recharges <b>${s.recharges}</b></span>`);
         }
-        if (s.recharges) bits.push(`<span>Recharges <b>${s.recharges}</b></span>`);
         this._statsEl.innerHTML = bits.join("");
     }
 
+    /* ---- live state ---- */
+
+    _setLive(on) {
+        if (this._live !== on) {
+            this._live = on;
+            if (on) {
+                this._lastLiveOk = Date.now();
+                this._startDurationTicker();
+            } else {
+                this._stopDurationTicker();
+                // Growing bounds froze the quarter turn; decide it again,
+                // once, on the finished map.
+                this._quarterLock = null;
+            }
+        }
+        this._syncDelete();
+        this._renderChip();
+    }
+
+    _syncDelete() {
+        if (!this._delBtn) return;
+        this._delBtn.disabled = !this._selectedName || this._live;
+        const title = this._live ? "Can't delete a session that is still recording" : "Delete this session";
+        this._delBtn.title = title;
+        this._delBtn.setAttribute("aria-label", title);
+    }
+
+    // The one live indicator, in the controls row. Shown only while the
+    // selected session is recording *and* something is on screen.
+    _renderChip() {
+        const chip = this._liveBtn;
+        if (!chip) return;
+        const show = this._live && Boolean(this._session);
+        chip.hidden = !show;
+        if (!show) {
+            this._chipKey = null;
+            return;
+        }
+        const quiet = Date.now() - this._lastLiveOk;
+        const stale = quiet >= LIVE_STALE_MS;
+        const key = this._follow ? (stale ? "stale" : "on") : "off";
+        if (key !== this._chipKey) {
+            // Only rewrite the markup on a state change, or the pulse would
+            // restart on every tick.
+            this._chipKey = key;
+            if (key === "off") {
+                chip.className = "live";
+                chip.textContent = "Go live";
+                chip.removeAttribute("aria-disabled");
+            } else {
+                chip.className = stale ? "live on stale" : "live on";
+                chip.innerHTML = `<span class="dot" aria-hidden="true">●</span>${stale ? "Live · stale" : "Live"}`;
+                chip.setAttribute("aria-disabled", "true");
+            }
+        }
+        if (key === "off") chip.title = "Jump to the newest map data";
+        else if (stale) chip.title = `No update for ${Math.round(quiet / 1000)} s`;
+        else chip.title = "Showing the newest map data";
+    }
+
+    _goLive() {
+        if (!this._session) return;
+        this._pause();
+        this._follow = true;
+        this._seek(this._session.duration);
+        this._renderChip();
+    }
+
+    /* ---- overlay ---- */
+
+    // First line is the state; an optional second line (after "\n") says
+    // what to do about it.
     _setOverlay(text) {
-        this._overlay.textContent = text || "";
+        this._overlayText = text || null;
         this._overlay.hidden = !text;
+        this._overlay.textContent = "";
+        if (!text) return;
+        const [head, ...rest] = String(text).split("\n");
+        const line = document.createElement("div");
+        line.textContent = head;
+        this._overlay.appendChild(line);
+        if (rest.length > 0) {
+            const hint = document.createElement("div");
+            hint.className = "hint";
+            hint.textContent = rest.join("\n");
+            this._overlay.appendChild(hint);
+        }
+    }
+
+    // A transient message over a map that stays on screen; clears itself
+    // unless something else has replaced it meanwhile.
+    _flash(text) {
+        this._setOverlay(text);
+        clearTimeout(this._flashTimer);
+        this._flashTimer = setTimeout(() => {
+            if (this._session && this._overlayText === text) this._setOverlay(null);
+        }, 4000);
     }
 
     _fail(message) {
@@ -870,8 +1400,11 @@ class OpenNeatoReplayCard extends HTMLElement {
             return;
         }
         // Playing from the resting end state rewinds first, so the button
-        // always does the obvious thing.
+        // always does the obvious thing. On a live session that means
+        // leaving the newest frame behind for the replay.
         if (this._time >= this._session.duration) this._seek(0);
+        this._follow = false;
+        this._renderChip();
         this._play();
     }
 
@@ -907,6 +1440,8 @@ class OpenNeatoReplayCard extends HTMLElement {
     }
 
     _restart(autoplay = false) {
+        this._follow = false;
+        this._renderChip();
         this._seek(0);
         if (autoplay) this._play();
         else this._pause();
@@ -938,13 +1473,23 @@ class OpenNeatoReplayCard extends HTMLElement {
                 const dt = Math.max(0, Math.min((now - this._lastFrame) / 1000, MAX_FRAME_DT));
                 this._lastFrame = now;
                 const next = this._time + dt * this._speed;
-                if (next >= this._session.duration) {
+                if (next < this._session.duration) {
+                    this._time = next;
+                    this._dirty = true;
+                } else if (this._live) {
+                    // Caught up with the recording: rest on the newest frame
+                    // and follow it from here — each refresh moves the
+                    // playhead on, so there is nothing left to play.
+                    this._time = this._session.duration;
+                    this._follow = true;
+                    this._pause();
+                    this._renderChip();
+                    this._dirty = true;
+                } else {
                     this._time = this._session.duration;
                     this._pause();
-                } else {
-                    this._time = next;
+                    this._dirty = true;
                 }
-                this._dirty = true;
             }
             if (this._dirty) {
                 this._dirty = false;
@@ -958,7 +1503,7 @@ class OpenNeatoReplayCard extends HTMLElement {
     _stopLoop() {
         if (this._raf !== null) cancelAnimationFrame(this._raf);
         this._raf = null;
-        this._playing = false;
+        this._pause();
     }
 
     _scheduleRender() {
@@ -1152,12 +1697,21 @@ class OpenNeatoReplayCard extends HTMLElement {
     // guess from the run's aspect alone, solve both orientations and keep the
     // one that actually zooms in more. The margin keeps a near-square run
     // from flipping back and forth as the window is resized.
+    //
+    // While a session is live its bounds grow, and a growing box can flip
+    // the aspect ratio mid-clean — the map would turn a quarter under the
+    // user. So the decision is frozen for the life of a live session (per
+    // canvas size, so a real resize still re-fits) and taken again, once,
+    // when the recording completes.
     _updateAutoQuarter(displayW, displayH, bounds) {
         const configured = this._config.rotation;
         if (configured !== "auto" && configured !== undefined) {
             this._autoQuarter = 0;
             return;
         }
+        const lockKey = `${displayW}x${displayH}`;
+        if (this._live && this._quarterLock === lockKey) return;
+        this._quarterLock = this._live ? lockKey : null;
         const worldW = bounds.maxX - bounds.minX;
         const worldH = bounds.maxY - bounds.minY;
         if (!(worldW > 0) || !(worldH > 0)) {
@@ -1262,7 +1816,7 @@ class OpenNeatoReplayCard extends HTMLElement {
         // Grid first, and square to the screen rather than to the world: once
         // the plan is straightened against the walls, a grid still aligned to
         // the robot's frame is the only thing left leaning over.
-        this._drawGrid(ctx, proj, dpr, displayW, displayH, isDark);
+        if (this._look.lines) this._drawGrid(ctx, proj, dpr, displayW, displayH, isDark);
 
         // Coverage first, walls second.
         //
@@ -1300,6 +1854,10 @@ class OpenNeatoReplayCard extends HTMLElement {
     // its own route constantly and a translucent fill laid down twice comes
     // out twice as dark.
     _paintHistory(ctx, proj, dpr, displayW, displayH, tNow, bounds) {
+        if (!this._look.tiles) {
+            this._strokeTrack(ctx, proj, dpr, displayW, displayH, tNow);
+            return;
+        }
         const session = this._session;
         const sig = [
             dpr, displayW, displayH,
@@ -1369,6 +1927,68 @@ class OpenNeatoReplayCard extends HTMLElement {
         ctx.drawImage(layer, 0, 0);
     }
 
+    // Width of the smooth track in the transformed frame: one cell, but never
+    // thinner than 1.5 CSS px on screen.
+    _trackWidth(proj) {
+        const cellM = (this._session && this._session.cellSize) || DEFAULT_CELL_M;
+        return Math.max(1.5 / this._tf.zoom, cellM * proj.scale);
+    }
+
+    // Flat look: the whole route so far as one faint rounded polyline. A
+    // single stroke composites once even where the path crosses itself, so
+    // nothing has to be deduplicated and no offscreen layer is needed; a
+    // one-hour run is under two thousand points, cheap to re-stroke.
+    _strokeTrack(ctx, proj, dpr, displayW, displayH, tNow) {
+        const session = this._session;
+        const n = session.poseCountUpTo(tNow);
+        if (n === 0) return;
+        ctx.save();
+        this._applyTransform(ctx, dpr, displayW, displayH);
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.strokeStyle = TRAIL_COLOR;
+        ctx.globalAlpha = TRAIL_PERSIST_ALPHA;
+        ctx.lineWidth = this._trackWidth(proj);
+        ctx.beginPath();
+        const x0 = proj.toX(session.path[0]);
+        const y0 = proj.toY(session.path[1]);
+        ctx.moveTo(x0, y0);
+        // A lone pose still gets a dot from the round cap.
+        if (n === 1) ctx.lineTo(x0, y0);
+        for (let i = 1; i < n; i++) {
+            ctx.lineTo(proj.toX(session.path[i * 4]), proj.toY(session.path[i * 4 + 1]));
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Flat look: the last TRAIL_SECONDS of the path, one short stroke per
+    // segment fading from the head, drawn oldest first so the head lands on
+    // top. Wider than the track so it sits visibly over the faint trace.
+    _strokeComet(ctx, proj, dpr, displayW, displayH, tNow) {
+        const session = this._session;
+        const n = session.poseCountUpTo(tNow);
+        if (n < 2) return;
+        const oldest = tNow - TRAIL_SECONDS;
+        let start = n - 1;
+        while (start > 0 && session.poseTs(start - 1) >= oldest) start--;
+        ctx.save();
+        this._applyTransform(ctx, dpr, displayW, displayH);
+        ctx.lineCap = "round";
+        ctx.strokeStyle = TRAIL_COLOR;
+        ctx.lineWidth = this._trackWidth(proj) * 1.6;
+        for (let i = start; i < n - 1; i++) {
+            const weight = 1 - (tNow - session.poseTs(i)) / TRAIL_SECONDS;
+            if (weight <= 0) continue;
+            ctx.globalAlpha = weight;
+            ctx.beginPath();
+            ctx.moveTo(proj.toX(session.path[i * 4]), proj.toY(session.path[i * 4 + 1]));
+            ctx.lineTo(proj.toX(session.path[(i + 1) * 4]), proj.toY(session.path[(i + 1) * 4 + 1]));
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     // The robot's recent track, as a comet fading into the permanent trace.
     //
     // A polyline would have been the easy answer and the wrong one: the whole
@@ -1388,6 +2008,10 @@ class OpenNeatoReplayCard extends HTMLElement {
     // it turns, so without this a pause would stack dozens of translucent
     // fills on one square and burn it darker than the head of the comet.
     _drawTrail(ctx, proj, dpr, displayW, displayH, tNow) {
+        if (!this._look.tiles) {
+            this._strokeComet(ctx, proj, dpr, displayW, displayH, tNow);
+            return;
+        }
         const session = this._session;
         const n = session.poseCountUpTo(tNow);
         if (n === 0) return;
@@ -1564,7 +2188,7 @@ class OpenNeatoReplayCard extends HTMLElement {
         const alpha = Number(this._config.floorplan_opacity ?? 1);
 
         // Screened: the layer is already in screen pixels, so blit it flat.
-        if ((this._config.grid ?? DEFAULTS.grid) && dpr) {
+        if (this._look.plan && dpr) {
             const layer = this._planLayer(img, fp, proj, dpr, displayW, displayH);
             ctx.save();
             ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1655,14 +2279,19 @@ class OpenNeatoReplayCard extends HTMLElement {
     // it only ever grows as the playhead advances, it is drawn once into an
     // offscreen layer and appended to frame by frame; a seek backwards or a
     // change of view transform rebuilds it from scratch.
+    //
+    // Flat look (`tiled_coverage: false`): the continuous shape is the layer,
+    // in the coverage colour, and the lattice pass is skipped. Everything
+    // else — cursor, time, the seek-back rebuild — is shared.
     _paintCoverage(ctx, proj, dpr, displayW, displayH, tNow, isDark, bounds) {
         const session = this._session;
+        const tiled = this._look.tiles;
         // The framing is part of the signature: the floorplan loads
         // asynchronously, so the first frame may be drawn on session bounds
         // and the next on plan bounds. Without this the layer would keep the
         // stale projection and the coverage would sit off the path.
         const sig = [
-            dpr, displayW, displayH, isDark,
+            dpr, displayW, displayH, isDark, tiled,
             this._rotationDeg(), this._tf.panX, this._tf.panY, this._tf.zoom,
             session.name,
             bounds.minX, bounds.maxX, bounds.minY, bounds.maxY,
@@ -1688,13 +2317,19 @@ class OpenNeatoReplayCard extends HTMLElement {
             const raw = document.createElement("canvas");
             raw.width = w;
             raw.height = h;
-            layer = document.createElement("canvas");
-            layer.width = w;
-            layer.height = h;
             this._cov.raw = raw;
-            this._cov.rawCtx = raw.getContext("2d", { willReadFrequently: true });
+            this._cov.rawCtx = raw.getContext("2d", { willReadFrequently: tiled });
+            if (tiled) {
+                layer = document.createElement("canvas");
+                layer.width = w;
+                layer.height = h;
+                this._cov.ctx = layer.getContext("2d");
+                this._cov.ctx.fillStyle = COVERAGE_COLOR;
+            } else {
+                layer = raw;
+                this._cov.ctx = null;
+            }
             this._cov.canvas = layer;
-            this._cov.ctx = layer.getContext("2d");
             this._cov.sig = sig;
             this._cov.cursor = 0;
             this._cov.time = -1;
@@ -1702,8 +2337,7 @@ class OpenNeatoReplayCard extends HTMLElement {
             // Recapture it here, or the next frame reuses the matrix of the
             // view we just replaced.
             this._cov.matrix = this._cov.rawCtx.getTransform();
-            this._cov.rawCtx.fillStyle = "#000";
-            this._cov.ctx.fillStyle = COVERAGE_COLOR;
+            this._cov.rawCtx.fillStyle = tiled ? "#000" : COVERAGE_COLOR;
         }
 
         const lctx = this._cov.ctx;
@@ -1715,7 +2349,7 @@ class OpenNeatoReplayCard extends HTMLElement {
             rctx.setTransform(1, 0, 0, 1, 0, 0);
             rctx.clearRect(0, 0, layer.width, layer.height);
             rctx.restore();
-            lctx.clearRect(0, 0, layer.width, layer.height);
+            if (lctx) lctx.clearRect(0, 0, layer.width, layer.height);
             this._cov.cursor = 0;
         }
 
@@ -1728,7 +2362,12 @@ class OpenNeatoReplayCard extends HTMLElement {
         this._cov.matrix = matrix;
         const cells = session.coverage;
         const cellPx = session.cellSize * proj.scale;
-        const half = cellPx / 2;
+        // Flat cells get half a device pixel on each side, so neighbours
+        // overlap instead of leaving anti-aliased hairline seams between
+        // them; the result is one solid swept area with soft outer edges.
+        const grow = tiled ? 0 : 1 / (dpr * this._tf.zoom);
+        const half = cellPx / 2 + grow / 2;
+        const side = cellPx + grow;
         const reach = (cellPx * this._tf.zoom * dpr) / 2 + period;
         let i = this._cov.cursor;
         const n = session.cellCount;
@@ -1741,7 +2380,7 @@ class OpenNeatoReplayCard extends HTMLElement {
             const wy = cells[i * 3 + 1] * session.cellSize;
             const cxp = proj.toX(wx);
             const cyp = proj.toY(wy);
-            rctx.fillRect(cxp - half, cyp - half, cellPx, cellPx);
+            rctx.fillRect(cxp - half, cyp - half, side, side);
             const p = matrix.transformPoint(new DOMPoint(cxp, cyp));
             if (p.x - reach < x0) x0 = p.x - reach;
             if (p.y - reach < y0) y0 = p.y - reach;
@@ -1749,7 +2388,7 @@ class OpenNeatoReplayCard extends HTMLElement {
             if (p.y + reach > y1) y1 = p.y + reach;
             i++;
         }
-        if (i > this._cov.cursor) {
+        if (tiled && i > this._cov.cursor) {
             this._resolveToLattice(rctx, lctx, layer, period, size, x0, y0, x1, y1);
         }
         this._cov.cursor = i;
@@ -1768,7 +2407,8 @@ class OpenNeatoReplayCard extends HTMLElement {
         ctx.fillStyle = "rgba(52, 199, 89, 0.9)";
         ctx.fill();
 
-        const atEnd = this._time >= session.duration;
+        // A live session's newest frame is the robot, not a finish line.
+        const atEnd = !this._live && this._time >= session.duration;
         if (!atEnd && head) {
             this._drawRobot(ctx, proj.toX(head.x), proj.toY(head.y), head.t);
             return;
@@ -1846,14 +2486,19 @@ class OpenNeatoReplayCard extends HTMLElement {
     _syncControls() {
         const duration = this._session.duration;
         this._elapsedEl.textContent = formatClock(this._time);
-        // Don't fight the user while they drag the scrubber.
-        if (document.activeElement !== this._scrub || this._playing) {
+        // Don't fight the user while they drag the scrubber. Focus inside a
+        // shadow root is only visible from that root — document.activeElement
+        // reports the host.
+        if (this.shadowRoot.activeElement !== this._scrub || this._playing) {
             this._scrub.value = String(this._time);
         }
         const played = duration > 0 ? (this._time / duration) * 100 : 0;
         this._scrub.style.setProperty("--played", `${played}%`);
-        if (this._trackFor !== this._session.name) {
-            this._trackFor = this._session.name;
+        // Keyed on the duration as well: a live session grows, and the
+        // recharge marks have to move with it.
+        const trackKey = `${this._session.name}|${duration}`;
+        if (this._trackFor !== trackKey) {
+            this._trackFor = trackKey;
             this._scrub.style.setProperty("--track", this._buildTrack(duration));
         }
     }
