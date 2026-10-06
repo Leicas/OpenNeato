@@ -1,6 +1,7 @@
 #include "firmware_manager.h"
 #include "data_logger.h"
 #include <esp_chip_info.h>
+#include <esp_idf_version.h>
 
 FirmwareManager::FirmwareManager(DataLogger& logger) : LoopTask(250), dataLogger(logger) {}
 
@@ -21,6 +22,12 @@ bool FirmwareManager::validateChip(uint8_t *data, size_t len) {
             {0x02, CHIP_ESP32S2},
             {0x05, CHIP_ESP32C3},
             {0x09, CHIP_ESP32S3},
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            // C6 and H2 only exist in esp_chip_model_t from IDF 5 (pioarduino);
+            // the classic espressif32 platform ships IDF 4.4 without them.
+            {0x0D, CHIP_ESP32C6},
+            {0x10, CHIP_ESP32H2},
+#endif
     };
     auto binChipId = static_cast<uint8_t>(data[12]);
     const ChipMap *match = nullptr;
