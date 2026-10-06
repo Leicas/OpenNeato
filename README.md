@@ -239,11 +239,11 @@ Neato Botvac D3 through D7. D8/D9/D10 are NOT supported (different board, passwo
 
 ### Requirements
 
-- ESP32-C3, ESP32-S3, or original ESP32 board with **4 MB flash** (any dev board with USB and exposed GPIOs)
+- ESP32-C3, ESP32-C6, ESP32-S3, or original ESP32 board with **4 MB flash** (any dev board with USB and exposed GPIOs)
 
 ### Quick Start
 
-1. Download the latest release from the [Releases](https://github.com/renjfk/OpenNeato/releases) page
+1. Download the latest release from the [Releases](https://github.com/Leicas/OpenNeato/releases) page
 2. Flash the ESP32 using the flash tool (auto-detects your chip type):
    ```bash
    openneato-flash
@@ -253,6 +253,17 @@ Neato Botvac D3 through D7. D8/D9/D10 are NOT supported (different board, passwo
 5. Open the web UI at `http://neato.local` or the IP shown in the serial monitor
 
 For detailed instructions and troubleshooting, see the [User Guide](docs/user-guide.md).
+
+> **⚠️ ESP32-C6 / ESP32-H2 owners: one USB flash is required before OTA works.**
+> Fork firmware **v1.11 through v1.13.0** (May–October 2026), and upstream renjfk firmware built after
+> 2026-04-25, reject every over-the-air image on a C6 or H2 with
+> `Firmware chip mismatch: unknown chip ID in image` — from the web UI and from `curl` alike.
+> Upstream commit `7f341cc` ("Fix OTA rejecting valid images on original ESP32") replaced the direct
+> chip-ID comparison with a translation table that only listed ESP32, S2, C3 and S3, so C6 and H2 images
+> became "unknown". Fixed in **v1.13.1** ([#19](https://github.com/Leicas/OpenNeato/pull/19)). Because the
+> check runs in the firmware *receiving* the update, a bridge on an affected version cannot be rescued
+> over the air: flash v1.13.1 or newer once over USB (`openneato-flash`, or
+> `pio run -e c6-release -t upload`), after which OTA updates work normally again.
 
 ### Building from Source
 
