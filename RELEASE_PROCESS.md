@@ -11,6 +11,8 @@ On every push to `main`, `.github/workflows/release.yml` runs:
    - **`release-ha`** — only `custom_components/` changed → fast tag + GitHub release, **no build** (HACS bundles the integration straight from the tag, so no firmware/frontend/flash artifacts are needed).
    - **`release-full`** — anything else changed → builds the frontend, firmware for **all** `*-release` board environments, and the cross-platform flash tool, then publishes via **GoReleaser** with the firmware packs and `openapi.yaml` attached.
 
+Before tagging, semantic-release stamps the new version into `custom_components/openneato/manifest.json` (`@semantic-release/exec`) and commits it to `main` as `chore(release): X.Y.Z [skip ci]` (`@semantic-release/git`); the tag points at that commit, so the HA integration always reports the same version as the release. **Never edit the manifest version by hand** — it is overwritten on the next release.
+
 semantic-release itself never creates the GitHub *release* (it only pushes the tag), so there is no double-publish — whichever publish job runs owns the release.
 
 ## Version bump mapping

@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.20.0
+> From 1.13.0 on, the integration version in `manifest.json` is stamped by semantic-release and equals
+> the repository release tag (`v1.13.0`, `v1.13.1`, …). The 1.17–1.19 entries below belong to the
+> integration's earlier, hand-numbered series and were never GitHub releases.
+
+## 1.13.0 (announced as 1.20.0)
 
 ### Added
 

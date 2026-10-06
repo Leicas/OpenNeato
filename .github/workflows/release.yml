@@ -51,6 +51,11 @@ jobs:
         id: prev
         run: echo "tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
 
+      # The exec plugin stamps the new version into
+      # custom_components/openneato/manifest.json and the git plugin commits it
+      # ("chore(release): X.Y.Z [skip ci]") before the tag is created, so the
+      # HA integration always reports the same version as the release tag.
+      # Never bump manifest.json by hand.
       - name: Semantic release (analyze + tag)
         id: semantic
         uses: cycjimmy/semantic-release-action@v4
@@ -60,6 +65,8 @@ jobs:
           # incompatible receiver" during note generation.
           extra_plugins: |
             conventional-changelog-conventionalcommits@8
+            @semantic-release/exec@7
+            @semantic-release/git@10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
