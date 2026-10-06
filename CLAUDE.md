@@ -106,7 +106,7 @@ GitHub Actions (`ci.yml`) runs on push to main and PRs:
 
 ## Release Process
 
-Automated via **semantic-release** on every push to `main` (`.releaserc.json` + `.github/workflows/release.yml`). Conventional-commit types drive the `major.minor.patch` bump: `fix:`/`perf:` → patch, `feat:`/`enhance:` → minor, `BREAKING CHANGE` → major; `chore`/`docs`/`ci`/`build`/`refactor`/`style`/`test` → no release. The publish path is chosen by scope: `custom_components/`-only changes get a fast tag + GitHub release (HACS bundles from the tag); anything else runs the full firmware (all boards) + flash-tool build via GoReleaser. Prereleases from PRs via `/prerelease` comment. Manual fallbacks: `release.yml` / `release-ha.yml` `workflow_dispatch`. See `RELEASE_PROCESS.md`.
+Automated via **semantic-release** on every push to `main` (`.releaserc.json` + `.github/workflows/release.yml`). Conventional-commit types drive the `major.minor.patch` bump: `fix:`/`perf:` → patch, `feat:`/`enhance:` → minor, `BREAKING CHANGE` → major; `chore`/`docs`/`ci`/`build`/`refactor`/`style`/`test` → no release. The publish path is chosen by scope: `custom_components/`-only changes get a fast tag + GitHub release (HACS bundles from the tag); anything else runs the full firmware (all boards) + flash-tool build via GoReleaser. Prereleases from PRs via `/prerelease` comment. Manual fallbacks: `release.yml` / `release-ha.yml` `workflow_dispatch`. See `RELEASE_PROCESS.md`. The `version` in `custom_components/openneato/manifest.json` is stamped by semantic-release at release time (committed as `chore(release): X.Y.Z [skip ci]`) — never bump it by hand.
 
 ## Issue/Commit Conventions
 
