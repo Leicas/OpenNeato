@@ -728,8 +728,16 @@ function createMockApi(context) {
             return okResponse();
         }
 
-        if (method === "GET" && path === "/repos/renjfk/OpenNeato/releases/latest")
-            return jsonResponse({ tag_name: "v1.0" });
+        if (method === "GET" && path === "/repos/Leicas/OpenNeato/releases") {
+            return jsonResponse([
+                {
+                    tag_name: "v1.0",
+                    draft: false,
+                    prerelease: false,
+                    assets: [{ name: "openneato-esp32-c3-firmware.bin" }],
+                },
+            ]);
+        }
 
         if (method === "GET" && path === "/api/user-settings") {
             return jsonResponse({
@@ -784,7 +792,7 @@ function createMockApi(context) {
                 hostname: "neato-kitchen",
                 supported: !state.unsupported && !state.identifying,
                 identifying: state.identifying,
-                repositoryUrl: "https://github.com/renjfk/OpenNeato",
+                repositoryUrl: "https://github.com/Leicas/OpenNeato",
                 license: "MIT",
             });
         }

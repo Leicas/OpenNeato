@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_integration
 
@@ -20,9 +21,11 @@ from .const import (
     CONF_HOST,
     CONF_MAP_ENABLED,
     DOMAIN,
+    FORK_MIN_VERSION,
     MAP_DEFAULT_ENABLED,
 )
 from .coordinator import OpenNeatoCoordinator
+from .firmware_check import FIRMWARE_UNSUPPORTED, classify_firmware
 from .http import OpenNeatoMapView
 from .lidar_runner import LidarMapRunner
 
@@ -84,6 +87,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         robot_info.get("serialNumber"),
         firmware_info.get("version"),
     )
+
+    # Upstream or pre-fork firmware keeps working (the coordinator drops the
+    # endpoints it 404s on) but gets a repair issue pointing at the fork
+    # build, since that is what the entities and the card are written for.
+    issue_id = f"unsupported_firmware_{entry.entry_id}"
+    if classify_firmware(firmware_info) == FIRMWARE_UNSUPPORTED:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="unsupported_firmware",
+            translation_placeholders={
+                "host": host,
+                "version": str(firmware_info.get("version", "?")),
+                "repository": str(firmware_info.get("repositoryUrl", "?")),
+                "min_version": ".".join(str(part) for part in FORK_MIN_VERSION),
+            },
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
 
     serial = robot_info.get("serialNumber", entry.data.get("serial", "unknown"))
     model = robot_info.get("modelName", entry.data.get("model"))
@@ -175,8 +200,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             stored["mapper"].async_unload()
         # Drop this entry's parsed replay sessions so a reload re-fetches
         # instead of serving a stale map from before a recalibration.
-        cache = hass.data[DOMAIN].get(websocket.CACHE_KEY)
-        if isinstance(cache, dict):
-            for key in [k for k in cache if k[0] == entry.entry_id]:
-                cache.pop(key, None)
+        for cache_key in (websocket.CACHE_KEY, websocket.LIVE_CACHE_KEY):
+            cache = hass.data[DOMAIN].get(cache_key)
+            if isinstance(cache, dict):
+                for key in [k for k in cache if k[0] == entry.entry_id]:
+                    cache.pop(key, None)
     return unload_ok

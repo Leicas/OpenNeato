@@ -9,6 +9,7 @@ stays here on the server and happens exactly once per session.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import voluptuous as vol
@@ -19,8 +20,8 @@ from homeassistant.core import HomeAssistant, callback
 from .const import (
     CONF_MAP_ROTATION_OFFSET,
     DOMAIN,
+    LIVE_SESSION_TTL,
     MAP_DEFAULT_ROTATION_OFFSET,
-
 )
 from .replay import build_replay_session
 
@@ -31,6 +32,12 @@ _LOGGER = logging.getLogger(__name__)
 # from the robot every time.
 CACHE_KEY = "replay_cache"
 _CACHE_MAX = 4
+# A session still being recorded grows, so it cannot sit in the cache above.
+# It does get a short-lived copy: every dashboard with the card open polls
+# the same live session, and without this each one would pull the whole
+# JSONL off the bridge. Entries are (monotonic timestamp, parsed session),
+# keyed like the main cache, and served while younger than LIVE_SESSION_TTL.
+LIVE_CACHE_KEY = "replay_live_cache"
 
 
 @callback
@@ -180,14 +187,30 @@ async def ws_get_session(
         return
     entry_id, data = resolved
     name = msg["name"]
+    coordinator = data["coordinator"]
 
-    cache: dict[tuple[str, str], dict[str, Any]] = hass.data.setdefault(DOMAIN, {}).setdefault(
-        CACHE_KEY, {}
-    )
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    cache: dict[tuple[str, str], dict[str, Any]] = domain_data.setdefault(CACHE_KEY, {})
     cached = cache.get((entry_id, name))
     if cached is not None:
-        connection.send_result(msg["id"], {**cached, "floorplan": _floorplan_payload(hass, entry_id)})
+        connection.send_result(
+            msg["id"],
+            {**cached, "floorplan": _floorplan_payload(hass, entry_id), "recording": False},
+        )
         return
+
+    live_cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = domain_data.setdefault(
+        LIVE_CACHE_KEY, {}
+    )
+    was_recording = _is_recording(coordinator, name)
+    if was_recording:
+        live = live_cache.get((entry_id, name))
+        if live is not None and time.monotonic() - live[0] < LIVE_SESSION_TTL:
+            connection.send_result(
+                msg["id"],
+                {**live[1], "floorplan": _floorplan_payload(hass, entry_id), "recording": True},
+            )
+            return
 
     try:
         raw = await data["api"].get_history_session(name)
@@ -214,13 +237,27 @@ async def ws_get_session(
         connection.send_error(msg["id"], "empty_session", "Session contains no pose data")
         return
 
-    # Only completed sessions are worth caching -- a recording one grows.
-    if not _is_recording(data["coordinator"], name):
-        if len(cache) >= _CACHE_MAX:
-            cache.pop(next(iter(cache)))
-        cache[(entry_id, name)] = parsed
+    # Evaluated now rather than before the fetch: the session may have
+    # completed while we were downloading it, and the flag the card gets
+    # must describe the data it is being handed.
+    recording = _is_recording(coordinator, name)
+    if recording:
+        live_cache[(entry_id, name)] = (time.monotonic(), parsed)
+    else:
+        live_cache.pop((entry_id, name), None)
+        # Only completed sessions are worth keeping -- a recording one grows.
+        # If it completed *during* this download the bytes we hold predate
+        # the firmware closing the file (no summary), so cache nothing: the
+        # card's final fetch re-downloads the closed file.
+        if not was_recording:
+            if len(cache) >= _CACHE_MAX:
+                cache.pop(next(iter(cache)))
+            cache[(entry_id, name)] = parsed
 
-    connection.send_result(msg["id"], {**parsed, "floorplan": _floorplan_payload(hass, entry_id)})
+    connection.send_result(
+        msg["id"],
+        {**parsed, "floorplan": _floorplan_payload(hass, entry_id), "recording": recording},
+    )
 
 
 @websocket_api.websocket_command(
@@ -269,12 +306,15 @@ async def ws_delete_session(
         connection.send_error(msg["id"], "delete_failed", str(err))
         return
 
-    # Drop it from the parsed-session cache so a later request cannot serve
-    # a session the robot no longer has.
-    cache = hass.data.setdefault(DOMAIN, {}).setdefault(CACHE_KEY, {})
-    cache.pop((entry_id, name), None)
+    # Drop it from both session caches so a later request cannot serve a
+    # session the robot no longer has.
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data.setdefault(CACHE_KEY, {}).pop((entry_id, name), None)
+    domain_data.setdefault(LIVE_CACHE_KEY, {}).pop((entry_id, name), None)
 
-    # Refresh so the picker's next listing no longer offers it.
+    # Refresh so the picker's next listing no longer offers it. The
+    # coordinator treats this as a full fetch, so history is re-read now
+    # rather than on its next slow tick.
     await data["coordinator"].async_request_refresh()
 
     _LOGGER.info("Replay: deleted session %s", name)

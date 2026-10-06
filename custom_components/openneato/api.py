@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from asyncio import Task, ensure_future
+from asyncio import Semaphore, Task, ensure_future
 from typing import Any
 
 import aiohttp
@@ -13,7 +13,11 @@ from asyncio import timeout
 
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import MAX_HISTORY_RESPONSE_BYTES, SESSION_NAME_PATTERN
+from .const import (
+    MAX_CONCURRENT_REQUESTS,
+    MAX_HISTORY_RESPONSE_BYTES,
+    SESSION_NAME_PATTERN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +31,18 @@ class OpenNeatoConnectionError(HomeAssistantError):
 
 
 class OpenNeatoApiError(HomeAssistantError):
-    """Error to indicate a non-connection API failure."""
+    """Error to indicate a non-connection API failure.
+
+    `status` carries the HTTP status when the failure came from the bridge's
+    response (None for client-side refusals such as an unsafe filename), so
+    the coordinator can tell "endpoint missing on this firmware" (404) from
+    a transient failure.
+    """
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        """Initialize with a message and optional HTTP status."""
+        super().__init__(message)
+        self.status = status
 
 
 async def _read_json(response: aiohttp.ClientResponse) -> Any:
@@ -62,6 +77,12 @@ class OpenNeatoApiClient:
         # de-duplicates true concurrency, not stale caching (important for
         # in-progress "recording" sessions whose data keeps growing).
         self._history_inflight: dict[str, Task] = {}
+        # Caps requests in flight against the bridge. The ESP32 serves
+        # everything off one blocking serial link, and a dozen concurrent
+        # GETs were enough to make it unreachable (issue #13). Waiting for
+        # a slot sits outside the per-request timeout so queueing never
+        # counts against the 30 s the bridge is given to answer.
+        self._sem = Semaphore(MAX_CONCURRENT_REQUESTS)
 
     @property
     def base_url(self) -> str:
@@ -78,14 +99,15 @@ class OpenNeatoApiClient:
         url = f"{self._base_url}{path}"
         _LOGGER.debug("GET %s", url)
         try:
-            async with timeout(TIMEOUT):
-                async with self._session.get(url) as response:
-                    _LOGGER.debug(
-                        "GET %s -> %s (%s)",
-                        path, response.status, response.content_type,
-                    )
-                    response.raise_for_status()
-                    return await _read_json(response)
+            async with self._sem:
+                async with timeout(TIMEOUT):
+                    async with self._session.get(url) as response:
+                        _LOGGER.debug(
+                            "GET %s -> %s (%s)",
+                            path, response.status, response.content_type,
+                        )
+                        response.raise_for_status()
+                        return await _read_json(response)
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on GET %s: %s", path, err)
             raise OpenNeatoConnectionError(
@@ -94,7 +116,8 @@ class OpenNeatoApiClient:
         except aiohttp.ClientResponseError as err:
             _LOGGER.warning("HTTP %s on GET %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
-                f"API error from {path}: {err.status} {err.message}"
+                f"API error from {path}: {err.status} {err.message}",
+                status=err.status,
             ) from err
         except TimeoutError as err:
             _LOGGER.warning("Timeout on GET %s (limit %ss)", path, TIMEOUT)
@@ -109,17 +132,18 @@ class OpenNeatoApiClient:
         url = f"{self._base_url}{path}"
         _LOGGER.debug("POST %s params=%s", url, params)
         try:
-            async with timeout(TIMEOUT):
-                async with self._session.post(url, params=params) as response:
-                    _LOGGER.debug(
-                        "POST %s -> %s (%s)",
-                        path, response.status, response.content_type,
-                    )
-                    response.raise_for_status()
-                    content_type = response.content_type or ""
-                    if "json" in content_type:
-                        return await _read_json(response)
-                    return await response.text()
+            async with self._sem:
+                async with timeout(TIMEOUT):
+                    async with self._session.post(url, params=params) as response:
+                        _LOGGER.debug(
+                            "POST %s -> %s (%s)",
+                            path, response.status, response.content_type,
+                        )
+                        response.raise_for_status()
+                        content_type = response.content_type or ""
+                        if "json" in content_type:
+                            return await _read_json(response)
+                        return await response.text()
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on POST %s: %s", path, err)
             raise OpenNeatoConnectionError(
@@ -128,7 +152,8 @@ class OpenNeatoApiClient:
         except aiohttp.ClientResponseError as err:
             _LOGGER.warning("HTTP %s on POST %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
-                f"API error from POST {path}: {err.status} {err.message}"
+                f"API error from POST {path}: {err.status} {err.message}",
+                status=err.status,
             ) from err
         except TimeoutError as err:
             _LOGGER.warning("Timeout on POST %s (limit %ss)", path, TIMEOUT)
@@ -151,10 +176,11 @@ class OpenNeatoApiClient:
         url = f"{self._base_url}/api/history/{filename}"
         _LOGGER.debug("DELETE %s", url)
         try:
-            async with timeout(TIMEOUT):
-                async with self._session.delete(url) as response:
-                    _LOGGER.debug("DELETE %s -> %s", url, response.status)
-                    response.raise_for_status()
+            async with self._sem:
+                async with timeout(TIMEOUT):
+                    async with self._session.delete(url) as response:
+                        _LOGGER.debug("DELETE %s -> %s", url, response.status)
+                        response.raise_for_status()
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error deleting %s: %s", filename, err)
             raise OpenNeatoConnectionError(
@@ -164,7 +190,8 @@ class OpenNeatoApiClient:
             _LOGGER.warning("HTTP %s deleting %s: %s", err.status, filename, err.message)
             raise OpenNeatoApiError(
                 f"API error deleting /api/history/{filename}: "
-                f"{err.status} {err.message}"
+                f"{err.status} {err.message}",
+                status=err.status,
             ) from err
         except TimeoutError as err:
             _LOGGER.warning("Timeout deleting %s (limit %ss)", filename, TIMEOUT)
@@ -177,14 +204,15 @@ class OpenNeatoApiClient:
         url = f"{self._base_url}{path}"
         _LOGGER.debug("PUT %s body=%s", url, json_data)
         try:
-            async with timeout(TIMEOUT):
-                async with self._session.put(url, json=json_data) as response:
-                    _LOGGER.debug(
-                        "PUT %s -> %s (%s)",
-                        path, response.status, response.content_type,
-                    )
-                    response.raise_for_status()
-                    return await _read_json(response)
+            async with self._sem:
+                async with timeout(TIMEOUT):
+                    async with self._session.put(url, json=json_data) as response:
+                        _LOGGER.debug(
+                            "PUT %s -> %s (%s)",
+                            path, response.status, response.content_type,
+                        )
+                        response.raise_for_status()
+                        return await _read_json(response)
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on PUT %s: %s", path, err)
             raise OpenNeatoConnectionError(
@@ -193,7 +221,8 @@ class OpenNeatoApiClient:
         except aiohttp.ClientResponseError as err:
             _LOGGER.warning("HTTP %s on PUT %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
-                f"API error from PUT {path}: {err.status} {err.message}"
+                f"API error from PUT {path}: {err.status} {err.message}",
+                status=err.status,
             ) from err
         except TimeoutError as err:
             _LOGGER.warning("Timeout on PUT %s (limit %ss)", path, TIMEOUT)
@@ -206,17 +235,18 @@ class OpenNeatoApiClient:
         url = f"{self._base_url}{path}"
         _LOGGER.debug("DELETE %s", url)
         try:
-            async with timeout(TIMEOUT):
-                async with self._session.delete(url) as response:
-                    _LOGGER.debug(
-                        "DELETE %s -> %s (%s)",
-                        path, response.status, response.content_type,
-                    )
-                    response.raise_for_status()
-                    content_type = response.content_type or ""
-                    if "json" in content_type:
-                        return await _read_json(response)
-                    return await response.text()
+            async with self._sem:
+                async with timeout(TIMEOUT):
+                    async with self._session.delete(url) as response:
+                        _LOGGER.debug(
+                            "DELETE %s -> %s (%s)",
+                            path, response.status, response.content_type,
+                        )
+                        response.raise_for_status()
+                        content_type = response.content_type or ""
+                        if "json" in content_type:
+                            return await _read_json(response)
+                        return await response.text()
         except aiohttp.ClientConnectionError as err:
             _LOGGER.warning("Connection error on DELETE %s: %s", path, err)
             raise OpenNeatoConnectionError(
@@ -225,7 +255,8 @@ class OpenNeatoApiClient:
         except aiohttp.ClientResponseError as err:
             _LOGGER.warning("HTTP %s on DELETE %s: %s", err.status, path, err.message)
             raise OpenNeatoApiError(
-                f"API error from DELETE {path}: {err.status} {err.message}"
+                f"API error from DELETE {path}: {err.status} {err.message}",
+                status=err.status,
             ) from err
         except TimeoutError as err:
             _LOGGER.warning("Timeout on DELETE %s (limit %ss)", path, TIMEOUT)
@@ -335,40 +366,42 @@ class OpenNeatoApiClient:
         url = f"{self._base_url}/api/history/{filename}"
         _LOGGER.debug("GET %s", url)
         try:
-            async with timeout(TIMEOUT):
-                async with self._session.get(url) as response:
-                    response.raise_for_status()
-                    # The firmware serves this endpoint as an HTTP chunked
-                    # transfer with no Content-Length (beginChunkedResponse
-                    # in web_server.cpp). On a chunked aiohttp response,
-                    # content.read(n) returns as soon as ANY buffered data is
-                    # available — it does NOT block until n bytes or EOF — so
-                    # a single bounded read silently truncates the JSONL to
-                    # the first chunk, producing a PARTIAL map. Drain the full
-                    # stream to EOF (matching the frontend's res.text()),
-                    # enforcing the size cap incrementally as we accumulate.
-                    buf = bytearray()
-                    async for chunk in response.content.iter_chunked(65536):
-                        buf.extend(chunk)
-                        if len(buf) > MAX_HISTORY_RESPONSE_BYTES:
-                            raise OpenNeatoApiError(
-                                f"Session {filename} exceeds size cap "
-                                f"({MAX_HISTORY_RESPONSE_BYTES} bytes)"
-                            )
-                    # Firmware emits UTF-8 JSONL; hardcode rather than
-                    # call response.get_encoding(), which raises in
-                    # modern aiohttp when content was streamed via
-                    # response.content (the streaming path doesn't
-                    # populate the response's _body buffer that
-                    # get_encoding's chardet fallback needs).
-                    return bytes(buf).decode("utf-8", errors="replace")
+            async with self._sem:
+                async with timeout(TIMEOUT):
+                    async with self._session.get(url) as response:
+                        response.raise_for_status()
+                        # The firmware serves this endpoint as an HTTP chunked
+                        # transfer with no Content-Length (beginChunkedResponse
+                        # in web_server.cpp). On a chunked aiohttp response,
+                        # content.read(n) returns as soon as ANY buffered data is
+                        # available — it does NOT block until n bytes or EOF — so
+                        # a single bounded read silently truncates the JSONL to
+                        # the first chunk, producing a PARTIAL map. Drain the full
+                        # stream to EOF (matching the frontend's res.text()),
+                        # enforcing the size cap incrementally as we accumulate.
+                        buf = bytearray()
+                        async for chunk in response.content.iter_chunked(65536):
+                            buf.extend(chunk)
+                            if len(buf) > MAX_HISTORY_RESPONSE_BYTES:
+                                raise OpenNeatoApiError(
+                                    f"Session {filename} exceeds size cap "
+                                    f"({MAX_HISTORY_RESPONSE_BYTES} bytes)"
+                                )
+                        # Firmware emits UTF-8 JSONL; hardcode rather than
+                        # call response.get_encoding(), which raises in
+                        # modern aiohttp when content was streamed via
+                        # response.content (the streaming path doesn't
+                        # populate the response's _body buffer that
+                        # get_encoding's chardet fallback needs).
+                        return bytes(buf).decode("utf-8", errors="replace")
         except aiohttp.ClientConnectionError as err:
             raise OpenNeatoConnectionError(
                 f"Unable to connect to OpenNeato at {self._host}: {err}"
             ) from err
         except aiohttp.ClientResponseError as err:
             raise OpenNeatoApiError(
-                f"API error from /api/history/{filename}: {err.status} {err.message}"
+                f"API error from /api/history/{filename}: {err.status} {err.message}",
+                status=err.status,
             ) from err
         except TimeoutError as err:
             _LOGGER.warning(

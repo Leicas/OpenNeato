@@ -1,6 +1,93 @@
 # Changelog
 
-## 1.19.0
+## 1.20.0
+
+### Added
+
+* **Live sessions on the replay card.** A clean that is in progress plays on
+the card as it happens. The picker lists it with a `· Live` suffix, a `● Live`
+chip in the controls row says the view is following the robot, and the map is
+refreshed every 15 s with a silent swap: the new poses and coverage are
+appended, the scrubber's end grows, and pan, zoom and the floorplan are left
+exactly where they were. Scrubbing back or pressing Play turns the chip into
+`Go live`; clicking it jumps back to the newest frame. With `session: latest`
+(the default) the card switches to a clean as it starts unless you have picked
+a session yourself. The moment the robot docks the card fetches the session
+once more, the chip goes away, the summary (area, distance, battery, recharges)
+appears and polling stops.
+  * `openneato/session` results now carry `recording: true|false`, evaluated
+    when the result is sent, so the card can tell a growing session from a
+    finished one without a second round trip.
+  * A recording session is downloaded from the bridge at most once every 10 s
+    however many dashboards have the card open; the parsed copy is served to
+    the others until it ages out. The list poll (`openneato/sessions`) is
+    answered from the coordinator's data and costs the ESP32 nothing.
+* **`units` card option** — `auto` (default) follows the Home Assistant unit
+system, `metric` or `imperial` overrides it (#16). Imperial shows whole feet
+and square feet (`293 ft²`, `149 ft`); metric keeps one decimal.
+* **`grid_lines`, `tiled_plan`, `tiled_coverage` card options** — the three
+pieces of the Neato-app look, each defaulting to whatever `grid` says, for the
+"tiles yes, lines no" case.
+* **Firmware compatibility repair issue.** The integration now classifies the
+firmware it connects to. Upstream renjfk builds (two-part `0.x` versions) and
+anything older than fork `1.11.1` keep working, but raise a repair issue that
+names the host, the reported version and the repository and points at the
+fork releases. A dev build (`0.0`, `0.0-<hash>`) is trusted. Connection
+failures still raise "not ready" as before.
+
+### Fixed
+
+* **Home Assistant polling could make the ESP32 unreachable (#13).** The
+coordinator fired twelve concurrent requests every 5 s at a bridge that
+answers everything off one blocking serial link. Requests are now capped at
+two in flight, and the endpoints are split into cadences: `state`, `charger`,
+`error` and `sensors` every 5 s; `user_settings`, `system`, `settings`,
+`motors`, `history`, `analog`, `warranty` and `schedule_next` once a minute.
+While the robot is cleaning, paused or docking — or a session file is still
+being written — `history` and `motors` go out every 15 s so the live map and
+the last-clean sensors keep up, and `history` is fetched once more the moment
+the robot goes active or idle. Idle load drops from 2.4 to roughly 0.9
+requests per second with at most two outstanding. Every section stays present
+in the coordinator data on every cycle (unpolled ones carry forward), so no
+entity changes.
+  * Writing an entity (switch, number, select, text, time, vacuum) or deleting
+    a session still forces a full re-read straight away.
+  * An endpoint the firmware answers 404 for is logged once and not polled
+    again until the integration reloads, instead of failing every cycle.
+* **`Last clean area` ignored the unit system (#16).** It now carries the
+`area` device class, so Home Assistant converts it to ft² on US-customary
+installs and offers the unit dropdown. The native unit is unchanged, so
+long-term statistics are unaffected. The card's picker label and stats row
+follow the unit system too (see `units` above).
+* **`grid: false` still drew the grid (#17).** The option's own comment said
+"Set false for a flat plan", but it only switched the floorplan to its smooth
+image; the half-metre lines and the tiled coverage and trail stayed. It now
+does what it promised: no lines, a smooth plan, a solid swept area and a
+rounded track.
+* **The live map flashed `Loading session…` and reset pan and zoom every
+5 s.** The first live-map cut re-selected the recording session on every list
+tick. Refreshes are now the silent swap described above, the picker is only
+rebuilt when its contents change (so the dropdown no longer closes under the
+cursor and the delete confirmation names the right session), and a session
+you picked by hand stays picked.
+* **Delete was offered on a session still being recorded.** The backend
+always refused; the button is now disabled while the selected session is
+live, with a tooltip saying why.
+
+### Changed
+
+* **Settings changed outside Home Assistant take up to a minute to show.**
+A consequence of the polling split: the settings, system and battery
+sections are read once a minute at idle. Changes made through Home
+Assistant's own entities are unaffected — they force a full refresh.
+* **Metric area and distance on the card show one decimal** (`27.25 m²` →
+`27.3 m²`). The firmware's second decimal was never meaningful: area is
+counted in whole 5 cm cells.
+* `/api/firmware/version` on the fork firmware now reports
+`https://github.com/Leicas/OpenNeato` as its `repositoryUrl` (it still said
+`renjfk`), and the web UI's update check lists the fork's releases and picks
+the newest one that ships firmware binaries, so it fires again (#15).
+`manifest.json` points its documentation link at the fork as well.
 
 ### Added
 

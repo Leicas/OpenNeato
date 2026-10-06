@@ -14,7 +14,7 @@ import { HistoryItemView } from "./history/item";
 import { HistoryListView } from "./history/list";
 
 const RECOVERY_GUIDE_URL =
-    "https://github.com/renjfk/OpenNeato/blob/main/docs/user-guide.md#recovering-corrupted-cleaning-history";
+    "https://github.com/Leicas/OpenNeato/blob/main/docs/user-guide.md#recovering-corrupted-cleaning-history";
 
 interface HistoryViewProps {
     distanceUnit: DistanceUnit;

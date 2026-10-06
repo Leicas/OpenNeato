@@ -6,6 +6,37 @@ DOMAIN = "openneato"
 CONF_HOST = "host"
 DEFAULT_POLL_INTERVAL = 5  # seconds
 
+# ── Polling budget (issue #13) ──────────────────────────────────────
+# The ESP32 bridge serves every request off one blocking serial link to the
+# robot. Twelve concurrent GETs every 5 s were enough to make it unreachable,
+# so requests are capped in flight and split into cadences: a few fast keys
+# that drive the vacuum entity, and the rest once a minute. While the robot is
+# out cleaning (or a session is still being recorded) history and motors are
+# polled on a middle cadence so the live map and the summary sensors keep up.
+MAX_CONCURRENT_REQUESTS = 2
+FAST_POLL_KEYS = ("state", "charger", "error", "sensors")
+SLOW_POLL_KEYS = (
+    "user_settings", "system", "settings", "motors",
+    "history", "analog", "warranty", "schedule_next",
+)
+SLOW_POLL_EVERY = 12  # cycles x DEFAULT_POLL_INTERVAL = 60 s
+LIVE_POLL_KEYS = ("history", "motors")
+LIVE_POLL_EVERY = 3  # cycles = 15 s, while the robot is active or a session is recording
+ACTIVE_UISTATE_SUBSTRINGS = (
+    "CLEANINGRUNNING", "MANUALCLEANING", "CLEANINGPAUSED", "CLEANINGSUSPENDED", "DOCKING",
+)
+
+# ── Firmware compatibility ──────────────────────────────────────────
+# Oldest fork firmware this integration is written against. Upstream renjfk
+# builds report two-part 0.x versions and lack several endpoints; they are
+# flagged with a repair issue rather than refused (see firmware_check.py).
+FORK_MIN_VERSION = (1, 11, 1)
+
+# ── Replay card live session ────────────────────────────────────────
+# A recording session is re-downloaded from the bridge at most once per TTL,
+# however many dashboards have the card open.
+LIVE_SESSION_TTL = 10  # seconds
+
 # ── Floorplan background (history map camera) ──────────────────────────────
 # When configured, the history/motion map renders a user-supplied house
 # floorplan image as the background instead of the dark solid color. The
@@ -31,15 +62,6 @@ UISTATE_SUBSTRINGS: list[tuple[str, VacuumActivity]] = [
 FAN_SPEEDS = ["eco", "normal", "intense"]
 
 # ── LIDAR map camera ────────────────────────────────────────────────
-LIDAR_POLL_INTERVAL = 2  # seconds, only while robot is active
-
-# ── History (cleaning session) map polling ──────────────────────────
-# Re-rendering the in-progress session means re-downloading the whole
-# growing JSONL each time -- the firmware serves no range/tail API. At
-# the LIDAR cadence a ~1h clean would pull ~80 KB roughly 1800 times
-# over the ESP32's blocking serial bridge, which starves the rest of
-# the API. 30 s still tracks the robot closely enough for a map.
-HISTORY_POLL_INTERVAL = 30  # seconds, only while a clean is running
 LIDAR_IMAGE_SIZE = 480  # pixels (square)
 LIDAR_MAX_RANGE_MM = 5000  # display radius
 LIDAR_MAX_DIST_MM = 6000  # reject readings above this
