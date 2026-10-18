@@ -23,6 +23,13 @@ services:
     #   - "80:80"
     #   - "443:443"
     #   - "3443:3443"
+    # Vacuula builds the map-upload URL it hands to the robot from the address of
+    # host.docker.internal, falling back to the host's outbound IP. On a host with
+    # several interfaces (or when a LAN DNS catch-all swallows nip.io names) that
+    # fallback can be an address the robot cannot reach, and persistent-map uploads
+    # then retry forever. Pin it to the IP the robot connects to:
+    # extra_hosts:
+    #   - "host.docker.internal:192.168.1.10"
     environment:
       - GEN4_PORT=3443
       - VACUULA_PORT=80

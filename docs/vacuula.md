@@ -108,6 +108,12 @@ received archive, so send it again with `force=1` if that is what you want.
 - **Console noise.** Vacuula's scripts echo their log lines to the robot's debug UART at every boot. The bridge's
   response parser keys on the Ctrl-Z terminator and resynchronises on mismatches, so expect an occasional failed
   poll right after the robot boots rather than a broken bridge.
+- **Maps never arriving.** After an exploration the robot asks the server for an upload job and posts the map to
+  the address the server names, which Vacuula derives from `host.docker.internal` or, failing that, from the host's
+  outbound IP. On a multi-homed host that fallback can be an address the robot cannot reach, and the server log
+  then shows `POST /maps/upload_jobs` repeating every minute with no `POST /` after it. Pin the address with
+  `extra_hosts` in the compose file (see `tools/vacuula/docker-compose.yml`); the robot resolves the resulting
+  `vacuula-local-<ip>.nip.io` name through the hosts entry the install script wrote.
 - **Internet dependencies.** The robot still reaches `pool.ntp.org` for time and checks `8.8.8.8` for
   connectivity; see Vacuula's FAQ.
 - **A robot that will not join.** If the robot reaches "joining WiFi" and then goes quiet with its WiFi
