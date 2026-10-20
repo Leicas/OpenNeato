@@ -35,6 +35,17 @@ FORK_MIN_VERSION = (1, 11, 1)
 # a placeholder because Home Assistant does not allow URLs inside translations.
 FORK_RELEASES_URL = "https://github.com/Leicas/OpenNeato/releases"
 
+# ── Firmware update entity ──────────────────────────────────────────
+# The release list, not releases/latest: integration-only releases carry no
+# firmware, so "latest" may point at one (see firmware_release.py).
+FIRMWARE_RELEASES_API = "https://api.github.com/repos/Leicas/OpenNeato/releases?per_page=10"
+# Unauthenticated GitHub API calls are limited to 60 an hour per address.
+FIRMWARE_CHECK_INTERVAL = 6 * 60 * 60  # seconds
+# After the upload the bridge reboots into the new image; this is how long
+# the update entity waits for it to answer with the new version.
+FIRMWARE_REBOOT_TIMEOUT = 120  # seconds
+FIRMWARE_REBOOT_POLL = 5  # seconds
+
 # ── Replay card live session ────────────────────────────────────────
 # A recording session is re-downloaded from the bridge at most once per TTL,
 # however many dashboards have the card open.

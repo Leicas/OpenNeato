@@ -22,6 +22,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = 30  # seconds — ESP32 can be slow when serial queue is busy
+# Sending and flashing a 1.4 MB image over the bridge's Wi-Fi takes far
+# longer than an ordinary request.
+FIRMWARE_UPLOAD_TIMEOUT = 300  # seconds
 
 _SESSION_NAME_RE = re.compile(SESSION_NAME_PATTERN)
 
@@ -293,6 +296,45 @@ class OpenNeatoApiClient:
     async def get_firmware_version(self) -> dict[str, Any]:
         """Get firmware version info (chip, model, etc.)."""
         return await self._get("/api/firmware/version")
+
+    async def upload_firmware(self, firmware: bytes, filename: str, md5: str) -> None:
+        """Flash a firmware image the way the bridge's web UI does.
+
+        One multipart POST to /api/firmware/update?hash=<md5>: the bridge
+        checks the image's chip and MD5 while writing it to the spare OTA
+        slot, answers once it is complete, then reboots into it.
+        """
+        path = "/api/firmware/update"
+        form = aiohttp.FormData()
+        form.add_field(
+            "file", firmware, filename=filename, content_type="application/octet-stream"
+        )
+        try:
+            async with self._sem:
+                async with timeout(FIRMWARE_UPLOAD_TIMEOUT):
+                    async with self._session.post(
+                        f"{self._base_url}{path}", params={"hash": md5}, data=form
+                    ) as response:
+                        if response.status >= 400:
+                            # The bridge explains a refusal (chip or MD5
+                            # mismatch) in a JSON {"error": ...} body.
+                            body = await response.text()
+                            try:
+                                reason = json.loads(body).get("error", body)
+                            except (ValueError, AttributeError):
+                                reason = body
+                            raise OpenNeatoApiError(
+                                f"The bridge refused the firmware: {reason}",
+                                status=response.status,
+                            )
+        except aiohttp.ClientConnectionError as err:
+            raise OpenNeatoConnectionError(
+                f"Unable to connect to OpenNeato at {self._host}: {err}"
+            ) from err
+        except TimeoutError as err:
+            raise OpenNeatoConnectionError(
+                f"Timeout uploading firmware to OpenNeato at {self._host}"
+            ) from err
 
     async def get_robot_version(self) -> dict[str, Any]:
         """Get robot version info (serial, model name, etc.)."""

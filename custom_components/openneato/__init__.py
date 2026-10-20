@@ -25,6 +25,7 @@ from .const import (
     MAP_DEFAULT_ENABLED,
 )
 from .coordinator import OpenNeatoCoordinator
+from .entity import async_register_devices, build_devices
 from .firmware_check import FIRMWARE_UNSUPPORTED, classify_firmware
 from .http import OpenNeatoMapView
 from .lidar_runner import LidarMapRunner
@@ -53,6 +54,7 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
     Platform.TEXT,
     Platform.TIME,
+    Platform.UPDATE,
 ]
 
 
@@ -121,9 +123,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ir.async_delete_issue(hass, DOMAIN, issue_id)
 
     serial = robot_info.get("serialNumber", entry.data.get("serial", "unknown"))
-    model = robot_info.get("modelName", entry.data.get("model"))
-    sw_version = robot_info.get("softwareVersion", entry.data.get("software_version"))
-    fw_version = firmware_info.get("version", entry.data.get("firmware_version"))
+    # What the config flow stored fills in anything the bridge did not report.
+    devices = build_devices(
+        serial,
+        {
+            "modelName": entry.data.get("model"),
+            "softwareVersion": entry.data.get("software_version"),
+            **robot_info,
+        },
+        {"version": entry.data.get("firmware_version"), **firmware_info},
+        host,
+    )
+    async_register_devices(hass, entry, devices)
 
     coordinator = OpenNeatoCoordinator(hass, api)
     await coordinator.async_config_entry_first_refresh()
@@ -144,9 +155,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "mapper": mapper,
         "serial": serial,
-        "model": model,
-        "sw_version": sw_version,
-        "fw_version": fw_version,
+        "devices": devices,
+        "firmware_info": firmware_info,
         "host": host,
     }
 
