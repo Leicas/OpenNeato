@@ -9,6 +9,7 @@ from homeassistant.components.number import NumberEntity, NumberEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -31,6 +32,7 @@ class OpenNeatoNumberEntityDescription(NumberEntityDescription):
 NUMBER_DESCRIPTIONS: tuple[OpenNeatoNumberEntityDescription, ...] = (
     OpenNeatoNumberEntityDescription(
         key="brush_rpm_setting",
+        entity_registry_enabled_default=False,
         translation_key="brush_rpm_setting",
         name="Brush RPM",
         section="settings",
@@ -45,6 +47,7 @@ NUMBER_DESCRIPTIONS: tuple[OpenNeatoNumberEntityDescription, ...] = (
     ),
     OpenNeatoNumberEntityDescription(
         key="vacuum_speed_setting",
+        entity_registry_enabled_default=False,
         translation_key="vacuum_speed_setting",
         name="Vacuum speed",
         section="settings",
@@ -59,6 +62,7 @@ NUMBER_DESCRIPTIONS: tuple[OpenNeatoNumberEntityDescription, ...] = (
     ),
     OpenNeatoNumberEntityDescription(
         key="side_brush_power_setting",
+        entity_registry_enabled_default=False,
         translation_key="side_brush_power_setting",
         name="Side brush power",
         section="settings",
@@ -73,6 +77,7 @@ NUMBER_DESCRIPTIONS: tuple[OpenNeatoNumberEntityDescription, ...] = (
     ),
     OpenNeatoNumberEntityDescription(
         key="stall_threshold_setting",
+        entity_registry_enabled_default=False,
         translation_key="stall_threshold_setting",
         name="Stall threshold",
         section="settings",
@@ -99,19 +104,13 @@ class OpenNeatoNumber(OpenNeatoEntity, NumberEntity):
         serial: str,
         description: OpenNeatoNumberEntityDescription,
         api: OpenNeatoApiClient,
-        model: str | None = None,
-        sw_version: str | None = None,
-        fw_version: str | None = None,
-        host: str | None = None,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the number entity."""
         super().__init__(
             coordinator,
             serial,
-            model=model,
-            sw_version=sw_version,
-            fw_version=fw_version,
-            host=host,
+            device_info,
         )
         self.entity_description = description
         self._attr_unique_id = f"{serial}_{description.key}"
@@ -145,10 +144,7 @@ async def async_setup_entry(
     """Set up OpenNeato number entities from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     serial = data["serial"]
-    model = data["model"]
-    sw_version = data["sw_version"]
-    fw_version = data["fw_version"]
-    host = data["host"]
+    devices = data["devices"]
     api = data["api"]
     coordinator = data["coordinator"]
 
@@ -160,10 +156,7 @@ async def async_setup_entry(
                 serial,
                 description,
                 api,
-                model=model,
-                sw_version=sw_version,
-                fw_version=fw_version,
-                host=host,
+                devices.robot,
             )
         )
 

@@ -10,12 +10,13 @@ from homeassistant.components.switch import SwitchEntity, SwitchEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import OpenNeatoApiClient
 from .const import DOMAIN
-from .entity import OpenNeatoEntity
+from .entity import OpenNeatoEntity, device_for
 from .schedule import SCHED_DAYS, SCHED_SLOTS, slot_fields
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class OpenNeatoSwitchEntityDescription(SwitchEntityDescription):
     settings_field: str | None = None
     # For switches with a dedicated API method (e.g. wall follower)
     api_method: str | None = None
+    # The bridge's own setting or reading: shown on the bridge's device.
+    bridge: bool = False
 
 
 SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
@@ -124,6 +127,7 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     # ── Notification switches (from ESP32 settings) ───────────────────
     OpenNeatoSwitchEntityDescription(
         key="notifications_enabled",
+        bridge=True,
         translation_key="notifications_enabled",
         name="Notifications",
         section="settings",
@@ -134,6 +138,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="notify_on_start",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="notify_on_start",
         name="Notify on clean start",
         section="settings",
@@ -144,6 +150,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="notify_on_done",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="notify_on_done",
         name="Notify on clean done",
         section="settings",
@@ -154,6 +162,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="notify_on_error",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="notify_on_error",
         name="Notify on error",
         section="settings",
@@ -164,6 +174,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="notify_on_alert",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="notify_on_alert",
         name="Notify on alert",
         section="settings",
@@ -174,6 +186,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="notify_on_docking",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="notify_on_docking",
         name="Notify on docking",
         section="settings",
@@ -184,6 +198,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="ap_fallback_on_disconnect",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="ap_fallback_on_disconnect",
         name="WiFi AP fallback",
         section="settings",
@@ -194,6 +210,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="remote_syslog",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="remote_syslog",
         name="Remote syslog",
         section="settings",
@@ -204,6 +222,8 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
     ),
     OpenNeatoSwitchEntityDescription(
         key="auto_restart",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="auto_restart",
         name="Daily auto restart",
         section="settings",
@@ -225,6 +245,7 @@ SWITCH_DESCRIPTIONS: tuple[OpenNeatoSwitchEntityDescription, ...] = (
         field=slot_fields(day_index, slot)["on"],
         settings_field=slot_fields(day_index, slot)["on"],
         icon="mdi:calendar-check",
+        entity_registry_enabled_default=False,
         entity_category=EntityCategory.CONFIG,
     )
     for day_index, day_key, day_name in SCHED_DAYS
@@ -243,19 +264,13 @@ class OpenNeatoSwitch(OpenNeatoEntity, SwitchEntity):
         serial: str,
         description: OpenNeatoSwitchEntityDescription,
         api: OpenNeatoApiClient,
-        model: str | None = None,
-        sw_version: str | None = None,
-        fw_version: str | None = None,
-        host: str | None = None,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the switch."""
         super().__init__(
             coordinator,
             serial,
-            model=model,
-            sw_version=sw_version,
-            fw_version=fw_version,
-            host=host,
+            device_info,
         )
         self.entity_description = description
         self._attr_unique_id = f"{serial}_{description.key}"
@@ -309,19 +324,13 @@ class OpenNeatoSkipNextCleanSwitch(OpenNeatoEntity, SwitchEntity):
         coordinator: DataUpdateCoordinator,
         serial: str,
         api: OpenNeatoApiClient,
-        model: str | None = None,
-        sw_version: str | None = None,
-        fw_version: str | None = None,
-        host: str | None = None,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the switch."""
         super().__init__(
             coordinator,
             serial,
-            model=model,
-            sw_version=sw_version,
-            fw_version=fw_version,
-            host=host,
+            device_info,
         )
         self._attr_unique_id = f"{serial}_skip_next_clean"
         self._api = api
@@ -364,10 +373,7 @@ async def async_setup_entry(
     """Set up OpenNeato switches from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     serial = data["serial"]
-    model = data["model"]
-    sw_version = data["sw_version"]
-    fw_version = data["fw_version"]
-    host = data["host"]
+    devices = data["devices"]
     api = data["api"]
     coordinator = data["coordinator"]
 
@@ -379,10 +385,7 @@ async def async_setup_entry(
                 serial,
                 description,
                 api,
-                model=model,
-                sw_version=sw_version,
-                fw_version=fw_version,
-                host=host,
+                device_for(devices, description),
             )
         )
 
@@ -391,10 +394,7 @@ async def async_setup_entry(
             coordinator,
             serial,
             api,
-            model=model,
-            sw_version=sw_version,
-            fw_version=fw_version,
-            host=host,
+            devices.robot,
         )
     )
 

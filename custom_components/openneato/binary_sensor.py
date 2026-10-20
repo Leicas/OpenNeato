@@ -12,11 +12,12 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
-from .entity import OpenNeatoEntity
+from .entity import OpenNeatoEntity, device_for
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,6 +26,8 @@ class OpenNeatoBinarySensorEntityDescription(BinarySensorEntityDescription):
 
     section: str = ""
     field: str = ""
+    # The bridge's own setting or reading: shown on the bridge's device.
+    bridge: bool = False
 
 
 BINARY_SENSOR_DESCRIPTIONS: tuple[OpenNeatoBinarySensorEntityDescription, ...] = (
@@ -84,6 +87,8 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[OpenNeatoBinarySensorEntityDescription, ...] =
     # ── System ──────────────────────────────────────────────────────────
     OpenNeatoBinarySensorEntityDescription(
         key="system_ntp_synced",
+        bridge=True,
+        entity_registry_enabled_default=False,
         translation_key="ntp_synced",
         name="NTP synced",
         section="system",
@@ -103,6 +108,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[OpenNeatoBinarySensorEntityDescription, ...] =
     ),
     OpenNeatoBinarySensorEntityDescription(
         key="sensors_left_wheel_extended",
+        entity_registry_enabled_default=False,
         translation_key="left_wheel_lifted",
         name="Left wheel lifted",
         section="sensors",
@@ -113,6 +119,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[OpenNeatoBinarySensorEntityDescription, ...] =
     ),
     OpenNeatoBinarySensorEntityDescription(
         key="sensors_right_wheel_extended",
+        entity_registry_enabled_default=False,
         translation_key="right_wheel_lifted",
         name="Right wheel lifted",
         section="sensors",
@@ -123,6 +130,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[OpenNeatoBinarySensorEntityDescription, ...] =
     ),
     OpenNeatoBinarySensorEntityDescription(
         key="sensors_dc_jack_in",
+        entity_registry_enabled_default=False,
         translation_key="dock_contact",
         # dcJackIn is the robot's own DC barrel jack, NOT the charging dock:
         # measured False while docked with 18.9 V of external power present.
@@ -174,19 +182,13 @@ class OpenNeatoBinarySensor(OpenNeatoEntity, BinarySensorEntity):
         coordinator: DataUpdateCoordinator,
         serial: str,
         description: OpenNeatoBinarySensorEntityDescription,
-        model: str | None = None,
-        sw_version: str | None = None,
-        fw_version: str | None = None,
-        host: str | None = None,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the binary sensor."""
         super().__init__(
             coordinator,
             serial,
-            model=model,
-            sw_version=sw_version,
-            fw_version=fw_version,
-            host=host,
+            device_info,
         )
         self.entity_description = description
         self._attr_unique_id = f"{serial}_{description.key}"
@@ -218,10 +220,7 @@ async def async_setup_entry(
     """Set up OpenNeato binary sensors from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     serial = data["serial"]
-    model = data["model"]
-    sw_version = data["sw_version"]
-    fw_version = data["fw_version"]
-    host = data["host"]
+    devices = data["devices"]
     coordinator = data["coordinator"]
 
     entities: list[OpenNeatoBinarySensor] = []
@@ -231,10 +230,7 @@ async def async_setup_entry(
                 coordinator,
                 serial,
                 description,
-                model=model,
-                sw_version=sw_version,
-                fw_version=fw_version,
-                host=host,
+                device_for(devices, description),
             )
         )
 
