@@ -8,8 +8,8 @@ import { normalizeError } from "../../utils";
 type UploadStatus = "idle" | "hashing" | "uploading" | "done";
 
 // Checksum verification result after comparing firmware SHA-256 against checksums.txt.
-// "match" = firmware hash found and matches, "mismatch" = found but different,
-// "not-found" = checksums file loaded but firmware filename not in it.
+// "match" = firmware hash is listed, "mismatch" = firmware filename is listed with a different hash,
+// "not-found" = checksums file loaded but neither the hash nor the filename is in it.
 type ChecksumResult = "match" | "mismatch" | "not-found";
 
 // ESP32 image header: byte at offset 12 (extended header) contains chip ID.
@@ -56,10 +56,23 @@ function parseChecksums(text: string): Map<string, string> {
 }
 
 // Verify firmware file SHA-256 against a parsed checksums map.
-function verifyChecksum(checksums: Map<string, string>, firmwareName: string, sha256: string): ChecksumResult {
-    const expected = checksums.get(firmwareName.toLowerCase());
-    if (expected === undefined) return "not-found";
-    return expected === sha256.toLowerCase() ? "match" : "mismatch";
+// Boards that share a chip (generic ESP32-C3 and Seeed XIAO ESP32C3) ship different firmware files,
+// so neither the filename (the OS may rename it) nor the chip names the release file reliably.
+// The hash does: a file whose hash is listed for any firmware binary is that release file.
+// The names only decide between a damaged file ("mismatch") and an unknown one ("not-found").
+function verifyChecksum(
+    checksums: Map<string, string>,
+    firmwareName: string,
+    chip: string | null,
+    sha256: string,
+): ChecksumResult {
+    const hash = sha256.toLowerCase();
+    for (const [name, expected] of checksums) {
+        if (name.endsWith("-firmware.bin") && expected === hash) return "match";
+    }
+    const names = [firmwareName.toLowerCase()];
+    if (chip) names.push(canonicalFirmwareName(chip));
+    return names.some((name) => checksums.has(name)) ? "mismatch" : "not-found";
 }
 
 export function useFirmwareUpload(
@@ -149,14 +162,11 @@ export function useFirmwareUpload(
 
     // Compute SHA-256 of firmware file and check against loaded checksums.
     // Uses pure-JS sha256 - crypto.subtle is unavailable over plain HTTP (non-secure context).
-    // Looks up by canonical release filename derived from the chip ID in the binary header,
-    // so renamed files (e.g. "firmware(1).bin") still match.
+    // Matches by hash, so renamed files (e.g. "firmware(1).bin") and board-specific builds still match.
     const verifyFirmwareFile = useCallback(async (fw: File, checksums: Map<string, string>) => {
         const buf = await fw.arrayBuffer();
         const hash = sha256(buf);
-        const chip = parseChipFromBin(buf);
-        const lookupName = chip ? canonicalFirmwareName(chip) : fw.name;
-        setChecksumResult(verifyChecksum(checksums, lookupName, hash));
+        setChecksumResult(verifyChecksum(checksums, fw.name, parseChipFromBin(buf), hash));
     }, []);
 
     const selectChecksumFile = useCallback(
