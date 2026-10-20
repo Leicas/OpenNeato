@@ -23,12 +23,13 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .coordinator import latest_completed_session
 from .const import DOMAIN
-from .entity import OpenNeatoEntity
+from .entity import OpenNeatoEntity, device_for
 
 
 def _latest_summary(history: Any) -> dict[str, Any] | None:
@@ -61,6 +62,8 @@ class OpenNeatoSensorEntityDescription(SensorEntityDescription):
     section: str = ""
     field: str = ""
     value_fn: Any = None
+    # The bridge's own setting or reading: shown on the bridge's device.
+    bridge: bool = False
 
 
 SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
@@ -222,6 +225,7 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
     # ── System ──────────────────────────────────────────────────────────
     OpenNeatoSensorEntityDescription(
         key="system_rssi",
+        bridge=True,
         translation_key="wifi_signal",
         name="WiFi signal",
         section="system",
@@ -232,6 +236,7 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
     ),
     OpenNeatoSensorEntityDescription(
         key="system_uptime",
+        bridge=True,
         translation_key="uptime",
         name="Uptime",
         section="system",
@@ -243,6 +248,7 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
     ),
     OpenNeatoSensorEntityDescription(
         key="system_heap",
+        bridge=True,
         translation_key="free_heap",
         name="Free heap",
         section="system",
@@ -254,6 +260,7 @@ SENSOR_DESCRIPTIONS: tuple[OpenNeatoSensorEntityDescription, ...] = (
     ),
     OpenNeatoSensorEntityDescription(
         key="system_fs_used",
+        bridge=True,
         translation_key="storage_used",
         name="Storage used",
         section="system",
@@ -411,19 +418,13 @@ class OpenNeatoSensor(OpenNeatoEntity, SensorEntity):
         coordinator: DataUpdateCoordinator,
         serial: str,
         description: OpenNeatoSensorEntityDescription,
-        model: str | None = None,
-        sw_version: str | None = None,
-        fw_version: str | None = None,
-        host: str | None = None,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(
             coordinator,
             serial,
-            model=model,
-            sw_version=sw_version,
-            fw_version=fw_version,
-            host=host,
+            device_info,
         )
         self.entity_description = description
         self._attr_unique_id = f"{serial}_{description.key}"
@@ -455,10 +456,7 @@ async def async_setup_entry(
     """Set up OpenNeato sensors from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     serial = data["serial"]
-    model = data["model"]
-    sw_version = data["sw_version"]
-    fw_version = data["fw_version"]
-    host = data["host"]
+    devices = data["devices"]
     coordinator = data["coordinator"]
 
     entities: list[OpenNeatoSensor] = []
@@ -468,10 +466,7 @@ async def async_setup_entry(
                 coordinator,
                 serial,
                 description,
-                model=model,
-                sw_version=sw_version,
-                fw_version=fw_version,
-                host=host,
+                device_for(devices, description),
             )
         )
 
