@@ -56,6 +56,26 @@
 #error "Unsupported chip — add pin definitions for this target"
 #endif
 
+// Board name and maker, reported by /api/firmware/version so clients can name the bridge hardware.
+// Each board section in platformio.ini builds for one board; generic builds name Espressif's
+// development board for that chip (the PlatformIO board they target).
+#if defined(OPENNEATO_BOARD_XIAO_ESP32C3)
+#define BOARD_NAME "XIAO ESP32C3"
+#define BOARD_MAKER "Seeed Studio"
+#elif CONFIG_IDF_TARGET_ESP32
+#define BOARD_NAME "ESP32-DevKitC"
+#define BOARD_MAKER "Espressif"
+#elif CONFIG_IDF_TARGET_ESP32C3
+#define BOARD_NAME "ESP32-C3-DevKitM-1"
+#define BOARD_MAKER "Espressif"
+#elif CONFIG_IDF_TARGET_ESP32C6
+#define BOARD_NAME "ESP32-C6-DevKitC-1"
+#define BOARD_MAKER "Espressif"
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define BOARD_NAME "ESP32-S3-DevKitC-1"
+#define BOARD_MAKER "Espressif"
+#endif
+
 // Actual UART pins are stored in NVS and configurable via settings API.
 #define NEATO_BAUD_RATE 115200
 // Must hold a whole GetLDSScan response, not most of one. Measured on a

@@ -5,6 +5,18 @@
 
 FirmwareManager::FirmwareManager(DataLogger& logger) : LoopTask(250), dataLogger(logger) {}
 
+// Same rule as resolve_release_name() in scripts/env_config.py, which names the release files:
+// OPENNEATO_RELEASE_ID when the board defines one, otherwise the lowercase chip model.
+String FirmwareManager::getBoardId() const {
+#ifdef OPENNEATO_RELEASE_ID
+    String id = OPENNEATO_RELEASE_ID;
+#else
+    String id = CHIP_MODEL;
+#endif
+    id.toLowerCase();
+    return id;
+}
+
 // ESP32 image extended header byte 12 contains the chip ID (ESP_CHIP_ID_*),
 // which is a different enum from esp_chip_info_t::model (esp_chip_model_t).
 // They happen to match for C3 (5) and S3 (9), but not for the original ESP32

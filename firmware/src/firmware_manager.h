@@ -16,6 +16,11 @@ public:
     // Version info
     const char *getFirmwareVersion() const { return FIRMWARE_VERSION; }
     const char *getChipModel() const { return CHIP_MODEL; }
+    // Board ID: names this build's release file, openneato-<id>-firmware.bin. Boards that share a chip
+    // ship different files (e.g. "esp32-c3" and "seeed-xiao-esp32c3"), so the chip alone cannot pick one.
+    String getBoardId() const;
+    const char *getBoardName() const { return BOARD_NAME; }
+    const char *getBoardMaker() const { return BOARD_MAKER; }
 
     // Update lifecycle
     bool beginUpdate(const String& md5Hash = "");

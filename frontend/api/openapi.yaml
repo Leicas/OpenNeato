@@ -1913,6 +1913,20 @@ components:
         chip:
           type: string
           description: ESP32 chip model (e.g. "ESP32-C3")
+        board:
+          type: string
+          description: >-
+            Board ID. Names this build's release file, openneato-<board>-firmware.bin (e.g. "esp32-c3",
+            "seeed-xiao-esp32c3"). Boards that share a chip ship different files. Older firmware does not report it.
+        boardName:
+          type: string
+          description: Board name (e.g. "XIAO ESP32C3"). Older firmware does not report it.
+        boardMaker:
+          type: string
+          description: Board maker (e.g. "Seeed Studio"). Older firmware does not report it.
+        mac:
+          type: string
+          description: Wi-Fi station MAC address (e.g. "AA:BB:CC:DD:EE:FF"). Older firmware does not report it.
         model:
           type: string
           description: Robot model name (e.g. "Botvac D7", empty until identified)
