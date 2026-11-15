@@ -1,0 +1,66 @@
+# Install as /config/packages/neato_navigation.yaml with
+# homeassistant: packages: !include_dir_named packages in configuration.yaml.
+# HA and the navigation service share host networking in this deployment.
+rest:
+  - resource: http://127.0.0.1:8765/api/status.json
+    scan_interval: 30
+    timeout: 10
+    sensor:
+      - name: Neato navigation
+        unique_id: neato_navigation_analysis
+        value_template: "{{ value_json.state }}"
+        json_attributes:
+          - event_id
+          - image_run_id
+          - run_id
+          - cycle_status
+          - ended_at
+          - notifications_allowed
+          - registration_confidence
+          - report_url
+
+input_text:
+  neato_navigation_last_notification:
+    name: Neato dernier événement notifié
+    max: 255
+
+shell_command:
+  neato_navigation_sync: python3 /config/neato_navigation_publisher.py
+  neato_navigation_test_notification: python3 /config/neato_navigation_publisher.py --test
+
+automation:
+  - id: neato_navigation_images_and_notifications
+    alias: "Neato : carte des passages et notification de fin"
+    description: "Copie locale des images et notification dédupliquée ; aucune commande au robot."
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id: sensor.neato_navigation
+    actions:
+      - action: shell_command.neato_navigation_sync
+        response_variable: publication
+      - variables:
+          result: "{{ publication.stdout | from_json({}) }}"
+      - if:
+          - condition: template
+            value_template: "{{ publication.returncode == 0 and result.get('delivered_event_id', '') != '' }}"
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.neato_navigation_last_notification
+            data:
+              value: "{{ result.delivered_event_id }}"
+      - if:
+          - condition: template
+            value_template: "{{ publication.returncode != 0 }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: neato_navigation_publication_error
+              title: "Neato : publication de la carte à vérifier"
+              message: "La synchronisation des images ou la notification n'a pas été confirmée. Aucun nettoyage n'a été déclenché."

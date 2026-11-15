@@ -1,6 +1,7 @@
 .pio
 .cache
 __pycache__/
+.venv-navigation/
 *.pyc
 compile_commands.json
 firmware/compile_commands.json

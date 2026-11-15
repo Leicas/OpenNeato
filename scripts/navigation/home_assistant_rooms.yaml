@@ -1,0 +1,160 @@
+# Template only. Render with rooms.py and a private config outside this repository.
+# Loading/reloading this package creates manual controls; it starts no cleaning.
+rest_command:
+  vacuula_robot_maps:
+    url: __MAPS_URL__
+    method: GET
+    timeout: 10
+
+script:
+  aspirateur_zone_native:
+    alias: "Aspirateur : pièce avec carte"
+    description: "Vérifie le robot, la carte active et la pièce avant de demander un départ ciblé."
+    mode: single
+    fields:
+      zone:
+        name: Pièce
+        required: true
+        selector:
+          select:
+            options:
+              - value: cuisine
+                label: Cuisine
+              - value: chambre
+                label: Chambre
+              - value: entree
+                label: Entrée
+    sequence:
+      - variables:
+          selected_map: __MAP_ID__
+          known_zones:
+            cuisine:
+              name: Cuisine
+              boundary_id: __BOUNDARY_CUISINE__
+            chambre:
+              name: Chambre
+              boundary_id: __BOUNDARY_CHAMBRE__
+            entree:
+              name: Entrée
+              boundary_id: __BOUNDARY_ENTREE__
+          retour: {}
+          maps_response: {}
+          zones_response: {}
+          launch: {}
+      - if:
+          - condition: template
+            value_template: "{{ zone not in known_zones }}"
+        then:
+          - stop: "Pièce inconnue : aucun nettoyage lancé."
+            error: true
+      - variables:
+          selected_boundary: "{{ known_zones[zone].boundary_id }}"
+          selected_name: "{{ known_zones[zone].name }}"
+      - action: rest_command.vacuula_robot_command
+        continue_on_error: true
+        data:
+          command:
+            cmd: getRobotState
+        response_variable: retour
+      - variables:
+          robot: >-
+            {{ retour.content if retour is mapping and retour.get('status') == 200
+               and retour.get('content') is mapping and retour.content.get('result') == 'ok' else {} }}
+      - if:
+          - condition: template
+            value_template: >-
+              {{ not (robot.get('state') == 1 and robot.get('action') == 0
+                 and robot.get('details', {}).get('isDocked')
+                 and robot.get('availableCommands', {}).get('start')
+                 and not robot.get('error') and robot.get('alert') in [none, '']) }}
+        then:
+          - stop: "Robot non prêt sur sa base, indisponible ou en erreur : aucun nettoyage lancé."
+            error: true
+      - action: rest_command.vacuula_robot_maps
+        continue_on_error: true
+        response_variable: maps_response
+      - variables:
+          active_maps: >-
+            {{ maps_response.content | selectattr('enabled', 'eq', true)
+               | selectattr('in_maps_list', 'eq', true) | list
+               if maps_response is mapping and maps_response.get('status') == 200
+               and maps_response.get('content') is sequence
+               and maps_response.content is not string and maps_response.content is not mapping else [] }}
+      - if:
+          - condition: template
+            value_template: "{{ active_maps | count != 1 or active_maps[0].get('id') != selected_map }}"
+        then:
+          - stop: "La carte prévue n'est pas l'unique carte active : aucun nettoyage lancé."
+            error: true
+      - action: rest_command.vacuula_robot_command
+        continue_on_error: true
+        data:
+          command:
+            cmd: getMapBoundaries
+            params:
+              mapId: "{{ selected_map }}"
+        response_variable: zones_response
+      - variables:
+          matching_zones: >-
+            {{ zones_response.content.data.boundaries
+               | selectattr('id', 'eq', selected_boundary)
+               | selectattr('enabled', 'eq', true) | selectattr('type', 'eq', 'polygon') | list
+               if zones_response is mapping and zones_response.get('status') == 200
+               and zones_response.get('content') is mapping and zones_response.content.get('result') == 'ok'
+               and zones_response.content.get('data') is mapping
+               and zones_response.content.data.get('boundaries') is sequence else [] }}
+      - if:
+          - condition: template
+            value_template: "{{ matching_zones | count != 1 }}"
+        then:
+          - stop: "La pièce n'est plus disponible et activée sur cette carte : aucun nettoyage lancé."
+            error: true
+      - action: rest_command.vacuula_robot_command
+        continue_on_error: true
+        data:
+          command:
+            cmd: startCleaning
+            params:
+              category: 4
+              mode: 2
+              navigationMode: 3
+              mapId: "{{ selected_map }}"
+              boundaryId: "{{ selected_boundary }}"
+        response_variable: launch
+      - if:
+          - condition: template
+            value_template: >-
+              {{ not (launch is mapping and launch.get('status') == 200
+                 and launch.get('content') is mapping and launch.content.get('result') == 'ok') }}
+        then:
+          - stop: "Départ refusé. Aucun secours sans carte lancé."
+            error: true
+      - action: persistent_notification.create
+        data:
+          notification_id: aspirateur_zone_native
+          title: "Aspirateur : {{ selected_name }}"
+          message: "Départ accepté avec carte. La fin du cycle et la couverture de la pièce restent à vérifier."
+
+  aspirateur_cuisine_carte:
+    alias: "Aspirateur : Cuisine avec carte"
+    mode: single
+    sequence:
+      - action: script.aspirateur_zone_native
+        data:
+          zone: cuisine
+
+  aspirateur_chambre_carte:
+    alias: "Aspirateur : Chambre avec carte"
+    mode: single
+    sequence:
+      - action: script.aspirateur_zone_native
+        data:
+          zone: chambre
+
+  aspirateur_entree_carte:
+    alias: "Aspirateur : Entrée avec carte"
+    mode: single
+    sequence:
+      - action: script.aspirateur_zone_native
+        data:
+          zone: entree

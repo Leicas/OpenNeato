@@ -1,0 +1,17 @@
+# Example: docker compose -f scripts/navigation/compose.yaml up -d --build
+services:
+  navigation:
+    build:
+      context: ../..
+      dockerfile: scripts/navigation/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      VACUULA_URL: ${VACUULA_URL:-http://192.168.0.139}
+      ANALYSIS_PUBLIC_URL: ${ANALYSIS_PUBLIC_URL:-http://192.168.0.139:8765}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-60}
+    volumes:
+      - navigation-data:/data
+volumes:
+  navigation-data:
