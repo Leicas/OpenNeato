@@ -74,7 +74,8 @@ openssl base64 -d -in "$STAGE/input.b64" -out "$STAGE/input.tar.gz"
 [ "$(wc -c < "$STAGE/permap.bin.part" | awk '{{print $1}}')" = '{len(data)}' ]
 [ "$(openssl dgst -sha256 "$STAGE/permap.bin.part" | awk '{{print $NF}}')" = '{digest}' ]
 mv "$STAGE/permap.bin.part" "$STAGE/permap.bin"
-printf '%s\\n' '[[ram-staging-verified-not-installed]]' '{digest}'
+echo '[[ram-staging-verified-not-installed]]'
+echo '{digest}'
 '''.encode("ascii")
     if len(shell) > UPLOAD_LIMIT:
         raise ValueError(f"Final upload payload {len(shell)} exceeds {UPLOAD_LIMIT} bytes")

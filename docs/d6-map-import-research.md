@@ -539,6 +539,38 @@ was executed during deployment. Existing scripts, schedules, and the e-ink
 dashboard were preserved. Private map/boundary configuration stays outside Git;
 `rooms.py` renders the versioned generic package template.
 
+## Authorized handover trial: hook not installed
+
+An authorized Wi-Fi-only installation attempt was performed using the existing
+bridge and the PC's separate Wi-Fi adapter. The target network was the existing
+`DevWave`; its saved credentials were independently validated by a successful
+PC association. No USB cable or native map replacement was involved.
+
+Two assumptions in the prepared bootstrap were disproved on the actual D6:
+the provisioning API appends `.neatocloud.com` to submitted server prefixes,
+and the available shell cannot execute `printf`. Reusing a literal
+`vacuula.local` in the setup request therefore did not preserve the resulting
+server hostname. Shell syntax checks on a desktop did not establish QNX command
+availability. The initial hook package never produced a success marker.
+
+Recovery explicitly restored and read back the two working server names,
+the pinned startup UTC command, `BEEHIVELINKED=1`, and `APDESIRED=0`, followed by
+sync. The retained old script hash matched the original pin; the hook/tools
+file was absent. Diagnostic output confirmed the planned command-line tools
+were present and stock CopyDumps was a regular file, so the exact initial
+installer guard failure remains unresolved. An automatic cybersecurity safeguard
+stopped the execution agent; hook installation was not retried after that block.
+
+The completed-upload state (`phase=done`) also exposed an error in a private
+recovery helper that delayed TestMode Off while waiting for `idle`. TestMode Off
+was subsequently sent explicitly. PC Wi-Fi and serial polling were restored.
+No CopyDumps maintenance payload or candidate map was executed. A successful
+settings recovery is not a successful hook installation.
+
+Separately, fresh server logs showed a later 180-second heartbeat expiry after
+the robot stopped sending data. The earlier grace-period fix mitigates a tight
+deadline but does not solve the underlying client stall.
+
 The complete `Robot.core.4.5.3-189.05-26-2025-18.03.15` was also copied privately
 with matching remote/local SHA-256:
 `6fb458b007660a50215b7982da8a952521a2d707d25407d6cb9d8dae9b2ca5f1`
